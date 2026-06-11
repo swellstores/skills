@@ -38,6 +38,12 @@ if ($record.status !== req.data.status) { /* react to transition */ }
 
 Throw `SwellError` to abort. Abort is honored only for hooks on **app-own models' own events** (defaults to reject; disable with `hook_reject_error: false`). Standard-model hooks (e.g. `before:product.created`) cannot abort — throws are absorbed into the response's `$function_errors` and the mutation proceeds. To block a standard-collection mutation, declare a custom hook event on an app-own model and gate the standard write through it.
 
+To reject with a structured error body, return `new SwellResponse({ errors: { _: { message: 'Invalid state', code: 'MY_CODE' } } }, { status: 400 })` — the status code and body survive rejection, and SDK callers receive a `SwellError` carrying the original `status` and structured `body`.
+
+## App-field changes in hook data
+
+`before:*` hooks receive app-field updates in nested, slug-keyed `$app` form regardless of the caller's write shape — dotted keys (`{ "$app.my_app.status": "ready" }`) and `$unset` paths normalize to `req.data.$app.my_app.*`. Hook code does not need to handle internal `__app.{canonicalId}` fields.
+
 ## Re-entrancy
 
 Writes from inside a hook re-trigger the same hook chain. Guard with `conditions` on the function or with a sentinel field in `$app[req.appId]` — an unconditional write-back to the same collection stalls the originating request until `hook_timeout` fires.

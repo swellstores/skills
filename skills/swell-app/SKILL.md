@@ -113,11 +113,11 @@ Data models define the database schema in `./models/*.json`, where filename matc
 
 **Decision Guide:**
 
-- [ ] **Extend a standard model** when data logically belongs to an existing entity: review scores on products, loyalty tiers on accounts, fulfillment metadata on orders. Fields merge into the record under `$app.<app_id>.*`. Benefits: seamless admin integration, no new API surface, automatic association with platform workflows.
+- [ ] **Extend a standard model** when data logically belongs to an existing entity: review scores on products, loyalty tiers on accounts, fulfillment metadata on orders. Fields merge into the record under `$app.<app_id>.*` and are queryable on the standard list endpoints (`where` on `$app.<app_id>.<field>` paths, including inside `$and`/`$or`). Benefits: seamless admin integration, no new API surface, automatic association with platform workflows.
 
 - [ ] **Create a new app model** when data requires independent lifecycle, dedicated events, distinct public permissions, or has no natural parent. Reviews, wishlists, vendor profiles fit here. The collection lives at `apps/<app_id>/<collection>` and requires explicit relationship links.
 
-- [ ] **Use a child collection** when data is tightly scoped to a parent and should not exist independently. Declare with `"type": "collection"` containing nested `fields`. Children share the parent's API path.
+- [ ] **Use a child collection** when data is tightly scoped to a parent and should not exist independently. Declare with `"type": "collection"` containing nested `fields`. Children share the parent's API path. Child collections declared in a standard-model extension live at `/<collection>:apps.<app_id>.<name>`, expand into the record under `$app.<app_id>.<name>` (not the record root), fire events under the parent model's event root (`before:product.<name>.created`), and are deleted automatically when the parent record is deleted.
 
 Relationships require two fields: an `objectid` stores the reference; a `link` declares the target and enables expansion.
 
@@ -130,6 +130,8 @@ Relationships require two fields: an `objectid` stores the reference; a `link` d
 
 For app model targets, use FQN: `"model": "apps/<app_id>/vendors"`. For child collections: `"model": "products:variants"` or `"model": "apps/<app_id>/vendors:locations"`.
 
+Link fields declared in a standard-model extension expand via `?expand=$app.<app_id>.<field>`. Link resolution sees both your app's fields and the parent record's native fields (app fields win on name collisions) — but inside an app link's `key` or `params`, `id` always refers to the **parent record's** id, so key links off a dedicated app field (e.g. `channel_id`), never `id`.
+
 Events enable function triggers on record changes. Public permissions control frontend API access. Both are declared in the model JSON. Consult `swell schema model --format=dts` for structure, field options, and condition syntax.
 
 ## Content Models
@@ -138,7 +140,7 @@ Content models configure Admin Dashboard views in `./content/*.json`. They contr
 
 **Decision Guide:**
 
-- [ ] **Augmenting standard models** applies when adding UI for fields on existing platform entities. For standard model extensions, `admin_zone` places fields within existing editor sections (e.g., `"admin_zone": "details"` on products); invalid zone values cause fields to silently disappear, so verify against `swell schema content --format=dts`. Alternatively, declare `tabs` in the edit view to add custom tab panels alongside native tabs. Extensions merge with existing UI rather than replacing it: `edit.tabs` adds alongside native tabs, `list.fields` appends to existing columns, and `list.tabs` introduces additional filtered views. Merchants can reorder or hide these additions in their dashboard preferences.
+- [ ] **Augmenting standard models** applies when adding UI for fields on existing platform entities. For standard model extensions, `admin_zone` places fields within existing editor sections (e.g., `"admin_zone": "details"` on products); invalid zone values cause fields to silently disappear, so verify against `swell schema content --format=dts`. Alternatively, declare `tabs` in the edit view to add custom tab panels alongside native tabs. Extensions merge with existing UI rather than replacing it: `edit.tabs` adds alongside native tabs, `list.fields` appends to existing columns, and `list.tabs` introduces additional filtered views. Tab and view `query.where` may mix your app's extension fields (bare keys, auto-namespaced to `$app.<app_id>.*` by model metadata) with native model fields, recursing into `$and`/`$or`/`$nor`. Merchants can reorder or hide these additions in their dashboard preferences.
 
 - [ ] **Creating app model views** applies to app-defined collections. Include `nav` in the list view to place the collection under a parent section in the sidebar; omitting `nav` positions it at the top level. `nav` possible values are pre-configured and you can not create a new nav section. For app-defined collections, control layout entirely through views—`admin_zone` has no effect.
 
@@ -147,6 +149,8 @@ Content models declare up to three views: `list` (table columns, sort, filters, 
 Fields declared in views inherit properties from matching top-level field definitions by `id`. A view field `{ "id": "rating" }` acquires label, type, and constraints from the top-level `"rating"` entry. Override selectively per view—for instance, a shorter label in list columns versus the full label in edit forms.
 
 Layout uses `field_row` for horizontal arrangement and `field_group` for collapsible sections—both require a `fields` array (omitting it fails validation). Width is controlled via `admin_span` (1–4 on a 4-column grid). Conditions control field visibility using MongoDB-style operators: equality (`"status": "approved"`), negation (`"rewarded": { "$ne": true }`), comparison (`"count": { "$gt": 0 }`), and app settings references (`"$settings.feature.enabled": true`). Multiple conditions are AND-ed.
+
+A field's `readonly` accepts a boolean or a condition expression with the same operators and scopes as `conditions` (record fields, `$settings.*`, other apps' `$app.<app_id>.<field>`) — the field becomes non-editable while the expression matches. This gates dashboard editing only; direct API writes still succeed, so enforce integrity in model rules or app functions. Record-view actions render only when not `hidden` and their `conditions` match the current record (record fields only — no `$settings`); conditions on list-view bulk actions are not evaluated.
 
 The `collection` content type creates inline references to other collections without duplicating data. Declare with `"type": "collection"`, target via `"collection": "products"` (or `"products:variants"` for child collections), and define the join with `"link": { "params": { "account_id": "id" } }`. This renders as a filterable list widget in the edit view.
 
@@ -184,7 +188,7 @@ Note that lookup type can be set to the fields, declared with `"type": "link"` a
 
 ## Functions
 
-Functions implement serverless logic in `./functions/*.ts`. Each file exports a `config` object specifying exactly one trigger (`model`, `route`, or `cron`) and a handler. Run `swell schema function --format=dts` for the authoritative type declarations — that schema is the post-decision shape reference for everything below.
+Functions implement serverless logic in `./functions/*.ts`. Each file exports a `config` object specifying exactly one trigger (`model`, `route`, or `cron`) and a handler; a separate beta `workflow` kind exists behind a per-store feature gate (see trigger selection). Run `swell schema function --format=dts` for the authoritative type declarations — that schema is the post-decision shape reference for everything below.
 
 **Cross-cutting constraints.** Functions time out at 10s by default (configurable via `config.timeout`, 1000–10000 ms; values up to 20000 ms require platform feature enablement). Response bodies above 75 KB are silently dropped — paginate large collections rather than returning them. Model-event functions that fail continuously for ~4 days (2 days if `timeout` >10s; immediately on 404/worker-missing) auto-disable until redeployed via `swell app push`; cron and routes are unaffected. Use `swell inspect functions --app=.` to surface auto-disable status, trigger summary, and last failure date at a glance.
 
@@ -197,6 +201,7 @@ Functions implement serverless logic in `./functions/*.ts`. Each file exports a 
 - **Model schedule** — fires at a future date derived from a record field; re-schedules when the field changes.
 - **Cron** — fixed cron schedule, no record context.
 - **HTTP route** — custom endpoint at the fixed path `/functions/<app_id>/<function_name>`. No URL path parameters (no `/users/:id`-style routing); pass identifiers via query or body. → see `references/functions-routes.md` once chosen.
+- **Workflow (Beta, feature-gated)** — `kind: 'workflow'`: durable multi-step background function with retriable steps and long sleeps. Available only on stores where Swell support has enabled the feature — do not propose workflows unprompted; use only when the user explicitly requests them or the store is confirmed enabled. → see `references/functions-workflows.md` once chosen.
 
 **Model Event Triggers** respond to record changes. Standard events (`created`, `updated`, `deleted`) exist on all models by default. Custom events (e.g. `review.approved`) must be declared in the data model first.
 
@@ -267,7 +272,8 @@ export async function post(req: SwellRequest) {
 Authenticated context for the handler. Common fields across triggers:
 
 - `req.swell` — platform client. App collections auto-scope: `req.swell.get('/reviews')` resolves to `/apps/<app_id>/reviews`. Use `expand` to include linked records.
-- `req.data` — trigger payload. Model events: record fields spread in, plus `$event` metadata `{ id, type, model, app_id, data }`. `$event.data` carries the full snapshot on `created`/`deleted` and **only changed fields** on `updated` — check `'field' in req.data.$event.data` to detect what changed. Custom events carry the subset declared in the model's event `fields`. Cron: empty. Routes: see route reference for body/query precedence.
+- `req.swell.transaction([{ method, url, data }, ...], { retry })` — atomic multi-operation write (`POST /:transaction`, max 10 operations); if any operation fails, the whole transaction rolls back. Errors carry stable codes (`transaction_conflict`, `transaction_throttled`, `transaction_timeout`, `transaction_op_failed`) plus `op_index` identifying the failed operation. Child operations fire no per-record webhooks or app functions — a successful transaction emits one `transaction.committed` event for the bundle.
+- `req.data` — trigger payload. Model events: record fields spread in, plus `$event` metadata `{ id, type, model, app_id, data }`. `$event.data` carries the full snapshot on `created`/`deleted` and **only changed fields** on `updated` — check `'field' in req.data.$event.data` to detect what changed. Custom events carry the subset declared in the model's event `fields`. `$event.delivery` carries per-delivery retry state `{ attempts, date_first_failed }` — `attempts` is `0` on first delivery. Cron: empty. Routes: see route reference for body/query precedence.
 - `req.appId` — current app identifier. Use instead of hardcoding.
 - `req.store` — store metadata including `admin_url`.
 - `req.session` — user session (routes only).
@@ -283,9 +289,11 @@ await req.swell.put(`/products/${id}`, req.appValues({ review_count: 42, average
 
 Extension fields appear in responses under `$app.<app_id>.*` automatically — no explicit `expand` needed. For app-defined collections, write directly at the root.
 
+Writes to `$app` **deep-merge** with the stored subdocument — fields you don't send are preserved. To replace outright, use the `$set` operator: `{ "$app": { "$set": { "my_app": {...} } } }` replaces the whole app subdocument; `{ "$app": { "my_app": { "$set": { "config": {} } } } }` replaces a single field without merging into its prior value.
+
 ### Return values and errors
 
-Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error. Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. Model and cron handlers typically return nothing.
+Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error; on event-triggered functions, add `retry: false` to record the failed delivery without scheduling further retries. Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. Model and cron handlers typically return nothing.
 
 ### Local testing
 
