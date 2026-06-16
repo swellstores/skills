@@ -3,13 +3,13 @@
   "owner": { "name": "Swell Commerce" },
   "metadata": {
     "description": "Swell Commerce skills and tooling",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "swell-app",
       "description": "Helps with Swell Apps development",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./",
       "strict": false,
       "skills": ["./skills/swell-app"]
