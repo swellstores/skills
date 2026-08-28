@@ -10,7 +10,7 @@ export const config: SwellConfig = {
 
 export default async function (req: SwellRequest) {
   const { $event, $record } = req.data;  // $event.hook === 'before'; $record undefined on create
-  if (req.data.rating > 5) throw new SwellError("Out of range", { status: 400 });
+  if (req.data.rating > 5) throw req.reject('rating_invalid', 'Out of range', { status: 400 });
   return { rating: Math.round(req.data.rating) }; // merged into record being saved
 }
 ```
@@ -36,9 +36,21 @@ if ($record.status !== req.data.status) { /* react to transition */ }
 
 ## Rejecting the mutation
 
-Throw `SwellError` to abort. Abort is honored only for hooks on **app-own models' own events** (defaults to reject; disable with `hook_reject_error: false`). Standard-model hooks (e.g. `before:product.created`) cannot abort — throws are absorbed into the response's `$function_errors` and the mutation proceeds. To block a standard-collection mutation, declare a custom hook event on an app-own model and gate the standard write through it.
+To block the write, throw `req.reject(code, message, { status })` from a `before:` hook. This works on **any model** — standard (`before:product.created`) and app-own alike:
 
-To reject with a structured error body, return `new SwellResponse({ errors: { _: { message: 'Invalid state', code: 'MY_CODE' } } }, { status: 400 })` — the status code and body survive rejection, and SDK callers receive a `SwellError` carrying the original `status` and structured `body`.
+```typescript
+export default async function (req: SwellRequest) {
+  if (req.data.rating > 5) {
+    throw req.reject('rating_out_of_range', 'Rating must be 1-5', { status: 400 });
+  }
+}
+```
+
+The API caller receives an error with the hook's `message`, `code`, and `status`. `status` must be 400–499; anything else (or omitted) coerces to 422. `req.reject()` returns a `SwellRejection` (also available as a global class) — it only takes effect when thrown, and only from a `before` phase; rejections from `after:` hooks are stripped and ignored.
+
+Throwing anything else — including `SwellError` — does **not** abort. All other hook errors fail open: the mutation proceeds and the error is reported in the response's `$function_errors`, for app-own models too. (Earlier platform versions rejected app-own model writes on any hook error, tunable via a `hook_reject_error` event property; that property is gone and throw-to-abort no longer exists — migrate those hooks to `req.reject()`.)
+
+Rejection can be disabled platform-side per store as an operational kill switch. When disabled, the mutation proceeds and the rejection is dropped silently — treat a rejection that stops rejecting as a platform-side question, not a code bug.
 
 ## App-field changes in hook data
 
@@ -69,8 +81,7 @@ Custom events used by hooks must be declared in the model first:
         "id": "reviewed",
         "hooks": ["before", "after"],
         "conditions": { /* ... */ },
-        "hook_timeout": 5000,
-        "hook_reject_error": true
+        "hook_timeout": 5000
       }
     ]
   }

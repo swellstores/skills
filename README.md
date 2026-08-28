@@ -36,7 +36,7 @@ npx skills add swellstores/skills
 
 ## What's included
 
-- **`swell-app`** — Build and modify Swell Apps: data models, content views, settings, notifications, webhooks, edge functions, and payment / shipping / tax integration extensions.
+- **`swell-app`** — Build and modify Swell Apps: data models, content views, settings, notifications, webhooks, edge functions, payment / shipping / tax integration extensions, and the version → install → release publishing lifecycle.
 
 This is the first piece of a broader effort to make Swell development AI-native. More skills are in active work.
 

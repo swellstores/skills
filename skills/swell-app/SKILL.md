@@ -12,7 +12,7 @@ A Swell App is a modular extension package for the Swell headless e-commerce pla
 
 The file system acts as a rigid configuration contract. The existence and naming of a file directly determines its runtime behavior, API endpoint, and whether it creates a new resource or modifies an existing one.
 
-- **App Identity.** The `./swell.json` manifest defines the App ID (referenced as `<app_id>` throughout this document), name, type, version, and platform permissions. Apps with `"type": "integration"` and/or `extensions[]` declare platform integration slots — see "Integration Apps & Extensions" below.
+- **App Identity.** The `./swell.json` manifest defines the App ID (referenced as `<app_id>` throughout this document), name, type, version, and platform permissions, plus optional billing (`price`, `price_interval`, `price_trial_days`, `price_external`) and marketing fields used at release time — see `references/app-publishing.md`. Apps with `"type": "integration"` and/or `extensions[]` declare platform integration slots — see "Integration Apps & Extensions" below.
 
 - **Assets.** Static resources such as the dashboard icon are stored in `./assets/`.
 
@@ -61,7 +61,11 @@ All commands accept `--help` for detailed usage. Interactive commands accept `-y
 
 **Validation** — `swell schema {content|function|model|notification|setting|webhook} ./path/file` validates schema-backed manifests. Run `swell schema --help` first and use schema validation for every resource type the installed CLI supports. For resources not supported by `swell schema` in the current CLI, such as `components/` or `swell.json` in this branch, rely on TypeScript/bundling checks and `swell app push` against a test environment.
 
-**Deployment** — `swell app push` deploys all app resources. The platform runs additional validation; errors here indicate issues local validation cannot catch (e.g., references to non-existent collections). Use `--force` to re-deploy unchanged files.
+Known issue: on current CLI releases, JSON-manifest validation fails with `no schema with key or ref "https://json-schema.org/draft/2020-12/schema"` (the CLI's validator predates the platform schemas' JSON Schema draft). Function-file validation (`swell schema function ./file.ts`, AST-based) and `--format=dts` output are unaffected. When you hit this, do not abandon Gate 3: author strictly against the `--format=dts` reference, optionally validate the JSON with a 2020-12-capable validator against `https://json.swell.store/schema-bundle/<type>.bundled.json`, and treat `swell app push` against the test environment as the authoritative check.
+
+**Deployment** — `swell app push` deploys all app resources. The platform runs additional validation; errors here indicate issues local validation cannot catch (e.g., references to non-existent collections). Use `--force` to re-deploy unchanged files. Change detection hashes each top-level file, so edits confined to shared code in `functions/` subdirectories (e.g. `functions/lib/`) leave the importing functions' deployed bundles stale — always `swell app push --force` after subdirectory-only changes. On a brand-new store, push fails with `Test environment is not enabled for this store.` until the test environment is enabled in the store's dashboard settings.
+
+**Publishing** — `swell app version` creates immutable app versions, `swell app install` installs them into store environments, and `swell app release` submits them for App Store publication. Read `references/app-publishing.md` before running any of these — version creation pushes and deploys as a side effect, and install/release have non-obvious prompts and prerequisites.
 
 **Local Development** — `swell app dev` starts a local tunnel in watch mode, connecting to the platform's test environment. Functions execute locally, fired by triggers at the platform side. Console output appears in your terminal. Note: direct localhost calls to route functions skip context initialization (settings, session etc). Use collections and functions calls over the `swell api` commands or integration tests for firing local functions through the platform for a full context initialization.
 
@@ -86,7 +90,7 @@ Pass: You have the schema output and understand the structural requirements for 
 
 ## Gate 3 — Author & Validate
 
-For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. IMPORTANT: Do not hand-author these resources when a scaffold command exists. Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit the resource to implement your requirements. Validate resource with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Iterate until zero errors.
+For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. IMPORTANT: Do not hand-author these resources when a scaffold command exists. Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit the resource to implement your requirements. Validate resource with `swell schema {type} ./path/file` (if it errors on the JSON Schema draft, follow the Validation known issue in Section II). For functions and components, also run `npm run typecheck` when configured. Iterate until zero errors.
 Pass: Local validation passes with zero errors. TypeScript compiles without errors.
 
 ## Gate 4 — Deploy & Verify
@@ -103,7 +107,7 @@ Confirm the resource behaves as designed under realistic conditions. Actions dep
 - Data models: Execute create → read → update → delete cycle via `swell api` or integration test. Test relationship expansion with `?expand=`.
   Pass: Resource produces expected behavior. For testable resources, integration tests in `./test/integration/` pass and provide regression coverage.
 
-Note: Consider formalizing your tests in unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary.
+Note: Consider formalizing your tests in unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary. The current scaffold pins `vitest` 3.x while pulling `@cloudflare/vitest-pool-workers@latest`, which requires vitest 4 — after scaffolding, pin pool-workers to a vitest-3-compatible line (e.g. `0.8.x`) or align both on 4.x before installing. The scaffold's `test/setup-globals.ts` defines `SwellError` and `SwellRejection` globals but not `SwellResponse` — add it there if tests construct responses.
 
 # IV. Resources best practices
 
@@ -197,7 +201,7 @@ Functions implement serverless logic in `./functions/*.ts`. Each file exports a 
 > **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract. Authoring then follows the **Model hook (sync)** path below.
 
 - **Model event (async)** — fires after a record mutation persists. Use for downstream effects: denormalization, fan-out, analytics.
-- **Model hook (sync)** — `before:` / `after:` prefix on a model event runs synchronously inside the originating API request, can read the pre-mutation record, and (in `before` phases) can mutate what gets saved. → see `references/functions-hooks.md` once chosen.
+- **Model hook (sync)** — `before:` / `after:` prefix on a model event runs synchronously inside the originating API request, can read the pre-mutation record, and (in `before` phases) can mutate what gets saved or reject the write via `req.reject()`. → see `references/functions-hooks.md` once chosen.
 - **Model schedule** — fires at a future date derived from a record field; re-schedules when the field changes.
 - **Cron** — fixed cron schedule, no record context.
 - **HTTP route** — custom endpoint at the fixed path `/functions/<app_id>/<function_name>`. No URL path parameters (no `/users/:id`-style routing); pass identifiers via query or body. → see `references/functions-routes.md` once chosen.
@@ -289,11 +293,11 @@ await req.swell.put(`/products/${id}`, req.appValues({ review_count: 42, average
 
 Extension fields appear in responses under `$app.<app_id>.*` automatically — no explicit `expand` needed. For app-defined collections, write directly at the root.
 
-Writes to `$app` **deep-merge** with the stored subdocument — fields you don't send are preserved. To replace outright, use the `$set` operator: `{ "$app": { "$set": { "my_app": {...} } } }` replaces the whole app subdocument; `{ "$app": { "my_app": { "$set": { "config": {} } } } }` replaces a single field without merging into its prior value.
+Writes to `$app` **deep-merge** with the stored subdocument — fields you don't send are preserved. To replace outright, use the `$set` operator: `{ "$app": { "$set": { "my_app": {...} } } }` replaces the whole app subdocument; `{ "$app": { "my_app": { "$set": { "config": {} } } } }` replaces a single field without merging into its prior value. Arrays deep-merge too — elements match by `id` when present and append otherwise, so sending a shorter array never removes stored elements. Always wrap array replacements in `$set`.
 
 ### Return values and errors
 
-Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error; on event-triggered functions, add `retry: false` to record the failed delivery without scheduling further retries. Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. Model and cron handlers typically return nothing.
+Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error; on event-triggered functions, add `retry: false` to record the failed delivery without scheduling further retries. In `before:` hooks, thrown errors do **not** block the mutation — throw `req.reject(code, message, { status })` to reject the write (see `references/functions-hooks.md`). Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. Model and cron handlers typically return nothing.
 
 ### Local testing
 
@@ -303,7 +307,7 @@ Run `swell app dev` as a background process (one app per session) to stream func
 
 Settings define merchant-configurable app behavior in `./settings/*.json`. Values are accessible in functions via `await req.swell.settings()` and in model/content conditions via `$settings`.
 
-Each settings file creates a grouped panel in the App Preferences UI. Structure: `label` (panel heading), `description` (explanatory text), and `fields` (array using content field syntax). Multiple files render as grouped panels. Settings returned by `swell.settings()` are namespaced under the filename (e.g., for `settings/new_section.json`, access values via `new_section.<field>`). `field_group` does not introduce nesting—its child fields are flattened to the parent level. Inspect the deployed record with `swell inspect settings --app=.`; an app's settings files collapse to one platform record at push time.
+Each settings file creates a grouped panel in the App Preferences UI. Structure: `label` (panel heading), `description` (explanatory text), and `fields` (array using content field syntax). Multiple files render as grouped panels. Settings returned by `swell.settings()` are namespaced under the filename (e.g., for `settings/new_section.json`, access values via `new_section.<field>`). `field_group` does not introduce nesting—its child fields are flattened to the parent level. Select-style fields require `options` entries as `{ "value": …, "label": … }` objects — bare strings fail validation. Inspect the deployed record with `swell inspect settings --app=.`; an app's settings files collapse to one platform record at push time.
 
 ## Webhooks
 
