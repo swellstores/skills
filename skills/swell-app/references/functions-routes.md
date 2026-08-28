@@ -58,6 +58,13 @@ export default {
 
 `req.session` carries the authenticated user when present. Storefront routes typically gate on `req.session?.account_id`.
 
+## Calling routes from outside Swell (hosted gateway)
+
+External callers (storefronts, third-party webhooks) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
+
+- **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Use the app's own public key: the key selects the environment (an `app_pk_test_…` key routes to the test environment) and resolves the app slug in the URL. Without it the gateway returns 404 `Function app.<slug>.<name> not found` — a key/slug-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
+- **Query parameters are forwarded only when the request body is empty**, in which case they arrive in `req.data`; with a non-empty body, query parameters are dropped entirely, and `req.query` is never populated through the gateway. For externally-called routes, read inputs from `req.data` / `req.body` and put everything in the body when POSTing.
+
 ## Headers
 
 By default, all incoming headers are forwarded to `req.headers` (a standard `Headers` object). Set `route.headers` to an allow-list to restrict which headers reach the function.
