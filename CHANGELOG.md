@@ -4,6 +4,17 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-08-29
+
+### Added
+- `swell-backend` skill — server-side Backend API integration: authentication and environments, live model discovery (`/:models`), querying (operators, search, expand/include, aggregation, localization/multi-currency reads), write semantics (deep-merge with merge-by-id arrays, update operators, linked collections, batch, transactions), events and webhooks (singular event roots, thin update payloads, retry/auto-disable behavior verified against the platform), and commerce lifecycles (derived statuses, payments/refunds, subscription billing anchors and proration, append-only stock ledger, account credit).
+- `swell-storefront` skill — headless storefronts on the Frontend API with swell-js: client setup and session model (per-request `swell.create()` on servers), the two error modes, catalog/settings/content/localization, cart semantics, the full checkout flow (guest vs. logged-in, shipping rates, account credit behavior, hosted `checkout_url` fallback), payment elements/tokenization/redirect flows and saved cards, subscriptions, and calling app functions.
+
+### Changed
+- Repackaged as a single `swell` plugin bundling all skills (install with `/plugin install swell@swell`; the standalone `swell-app` plugin entry is retired — README documents the migration).
+- `swell-app`: narrowed the trigger description so the three skills route cleanly (it no longer claims every mention of "Swell"); corrected webhook delivery numbers to platform behavior (10s timeout, ~4-day auto-disable window).
+- README repositioned around full-platform coverage.
+
 ## [0.3.0] - 2026-08-28
 
 ### Added
