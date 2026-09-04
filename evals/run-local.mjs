@@ -12,8 +12,13 @@ import { readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'n
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const EVAL_DIR = dirname(fileURLToPath(import.meta.url));
+// Cases run in an empty directory: the agent must answer from the skill, not by
+// grepping the repo it happens to be sitting in.
+const SANDBOX = mkdtempSync(join(tmpdir(), 'swell-eval-'));
 const PLUGIN_DIR = join(EVAL_DIR, '..');
 
 // ---------- args ----------
@@ -29,8 +34,12 @@ const CFG = {
   runs: Number(opt('runs', 0)) || null,       // null = use case.yaml
   arms: opt('arms', 'with'),                   // with | both
   model: opt('model'),
-  judgeModel: opt('judge-model', 'haiku'),
-  maxTurns: opt('max-turns', '6'),
+  // Haiku mis-graded correct answers against these rubrics; sonnet is the floor
+  // for a judge that has to weigh 'leads with X' and 'must not invent Y'.
+  judgeModel: opt('judge-model', 'sonnet'),
+  // Skills load references on demand, which costs turns — too low a budget reads
+  // as a skill failure when the run simply never reached an answer.
+  maxTurns: opt('max-turns', '25'),
   threshold: Number(opt('threshold', '1.0')),
   outDir: opt('out', join(EVAL_DIR, 'results')),
   dryRun: flag('dry-run'),
@@ -105,16 +114,18 @@ function loadCases() {
 function runClaude(prompt, { withPlugin }) {
   return new Promise((resolve, reject) => {
     const a = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', String(CFG.maxTurns)];
-    if (withPlugin) a.push('--plugin-dir', PLUGIN_DIR);
+    // Neutral cwd keeps the agent from treating the repo as its project, but the
+    // skill must still be able to read its own reference files.
+    if (withPlugin) a.push('--plugin-dir', PLUGIN_DIR, '--add-dir', PLUGIN_DIR);
     if (CFG.model) a.push('--model', CFG.model);
-    const proc = spawn('claude', a, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn('claude', a, { stdio: ['pipe', 'pipe', 'pipe'], cwd: SANDBOX });
     let stdout = '', stderr = '';
     proc.stdout.on('data', (d) => (stdout += d));
     proc.stderr.on('data', (d) => (stderr += d));
     proc.on('error', reject);
     proc.on('close', () => {
       const toolUses = [];
-      let result = '', cost = 0, loadedSkills = [];
+      let result = '', cost = 0, loadedSkills = [], lastText = '', subtype = '';
       for (const line of stdout.split('\n')) {
         if (!line.trim()) continue;
         let ev; try { ev = JSON.parse(line); } catch { continue; }
@@ -123,14 +134,19 @@ function runClaude(prompt, { withPlugin }) {
         } else if (ev.type === 'assistant') {
           for (const block of ev.message?.content || []) {
             if (block.type === 'tool_use') toolUses.push({ name: block.name, input: JSON.stringify(block.input) });
+            else if (block.type === 'text' && block.text.trim()) lastText = block.text;
           }
         } else if (ev.type === 'result') {
           result = ev.result || '';
           cost = ev.total_cost_usd || 0;
+          subtype = ev.subtype || '';
         }
       }
       if (!result && stderr) return reject(new Error(stderr.slice(0, 400)));
-      resolve({ result, toolUses, cost, loadedSkills });
+      // A run that exhausts --max-turns emits no `result`; grade its last message
+      // rather than handing the judge an empty string.
+      if (!result && lastText) result = lastText;
+      resolve({ result, toolUses, cost, loadedSkills, subtype });
     });
     proc.stdin.end(prompt);
   });
@@ -214,6 +230,7 @@ for (const c of cases) {
         totalCost += r.cost || 0;
         results.push({ grader: g.file, ...r });
       }
+      if (run.subtype && run.subtype !== 'success') details.push(`run ${i + 1}: ended as ${run.subtype} (raise --max-turns)`);
       const passed = results.filter((r) => r.pass).length;
       scores.push(passed / results.length);
       details.push(...results.filter((r) => !r.pass).map((r) => `run ${i + 1}: ${r.grader} — ${r.detail}`));
