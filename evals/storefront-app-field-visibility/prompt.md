@@ -1,0 +1,1 @@
+Our Swell app extends the standard products model with an `average_rating` field, so it's stored under `$app.<our_app_id>.average_rating`. In our swell-js storefront, `swell.products.get('some-slug')` doesn't return it. How do we read it on the storefront?

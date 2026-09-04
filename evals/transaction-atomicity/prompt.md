@@ -1,0 +1,1 @@
+Our Swell integration posts five write operations to `/:transaction` in one request. If one of those operations fails because a required field is missing, is the whole transaction rolled back? What should our error handling actually do with the response?
