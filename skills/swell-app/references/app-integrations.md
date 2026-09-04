@@ -40,7 +40,7 @@ Minimal manifest:
 }
 ```
 
-Extension config ids use **hyphens** by convention — `my-method`, never `my_method`. An `_` also breaks things: it silently defeats settings-panel resolution (see Settings) and truncates the card-gateway binding. Because the id doubles as an object key in billing payloads, a hyphenated id must be quoted in JS — `billing["my-method"]`, not `billing.my-method`.
+Extension config ids use **hyphens** by convention — `my-method`, never `my_method`. Underscores have historically broken two Admin lookups (settings-panel resolution, and card-gateway binding); both are being fixed, but the convention costs nothing and keeps an app off the question of which Admin version a merchant is running. Because the id doubles as an object key in billing payloads, a hyphenated id must be quoted in JS — `billing["my-method"]`, not `billing.my-method`.
 
 Each extension entry binds into one native flow:
 
@@ -66,7 +66,7 @@ Extension fields (current platform branch):
 Two payment traps in that table:
 
 - **`method` does not rename the method record.** The Admin always writes `methods.<extension.id>` (`methods.card` for card gateways) and reads `method` only to decide card vs. alt. Declaring `{"id": "my-method", "method": "my-method-pay"}` activates `methods.my-method`, but `swell inspect extensions` looks up `methods.my-method-pay` and reports a false `not activated`. Leave `method` unset unless the value is exactly `"card"`.
-- **A card-gateway extension needs `id: "card"` too.** Checkout renders app components with `component.extension === selectedMethod.id`, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs can never render its component. Keep the extension `id` free of underscores: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>` and recovers the pair with `split('_').slice(1)`, so an `_` in the extension id writes a truncated `extension_config_id` and dispatch never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
+- **A card-gateway extension needs `id: "card"` too.** Checkout renders app components with `component.extension === selectedMethod.id`, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs can never render its component. Keep the extension `id` free of underscores here in particular: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>`, and older builds recover the pair by splitting on every `_`, which truncates an underscored extension id into a `extension_config_id` that never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
 
 Per-extension display assets do not render. `gateway_logo_src`/`gateway_icon_src` and the `method_*`/`carrier_*` pairs are their declared home, but the installer matches uploaded image paths against `app.highlights` — a field whose schema is only `id`/`title`/`description`/`image_src` — so `extension_assets[]` is never populated and the Admin falls back to the app-level icon (`logo_src`, else `assets/icon.*`). Ship one app icon; do not rely on these fields or on `gateway`.
 
@@ -89,7 +89,7 @@ A settings config's **name** is the file basename with underscores converted to 
 2. Otherwise the config whose name equals the manifest's `setting`, if `setting` is set.
 3. Otherwise the config whose name equals the extension `id`.
 
-So an extension id containing `_` never matches its like-named file, and the panel degrades to "Navigate to app settings to configure this extension" — silently, and only once a second extension or settings file makes rule 1 stop covering it. Use hyphens in extension ids and settings filenames, or set `setting` to the deployed (hyphenated) name.
+Rules 2 and 3 compare against the **deployed** name. Newer Admin builds normalize both sides before comparing, so `my_method` resolves `my-method`; on older builds the two never match and the panel degrades to "Navigate to app settings to configure this extension" — silently, and only once a second extension or settings file makes rule 1 stop covering it. Name extension ids and settings files in kebab-case and the question never arises; if you inherit an underscored id, set `setting` to the deployed (hyphenated) name explicitly.
 
 ## Design Checklist
 
