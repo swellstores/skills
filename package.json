@@ -1,0 +1,15 @@
+{
+  "name": "swell-skills",
+  "private": true,
+  "description": "Swell Commerce skills for AI coding agents",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "eval": "node evals/run-local.mjs",
+    "eval:list": "node evals/run-local.mjs --dry-run",
+    "eval:routing": "node evals/run-local.mjs --tag routing",
+    "eval:regression": "node evals/run-local.mjs --tag regression"
+  }
+}

@@ -9,9 +9,32 @@ claude plugin eval . --case 'writes-*'
 claude plugin eval . --runs 5 --threshold 0.8
 ```
 
-`claude plugin eval` is currently in **early access**; without it enabled the command exits with
-`` `plugin eval` is currently in early access `` and these files are inert. Nothing here depends on
-that gate being open — the cases are plain YAML/Markdown.
+`claude plugin eval` is currently in **early access**. Until it is enabled, run the same suite with
+the local runner, which drives plain `claude -p` and applies the same graders:
+
+```bash
+npm run eval:list                                  # list what would run, no cost
+npm run eval:routing -- --runs 1 --model sonnet    # trigger accuracy only
+npm run eval:regression -- --arms both             # add a no-plugin baseline
+npm run eval -- --case 'writes-*' --runs 1         # one case
+```
+
+Everything after `--` is passed to the runner (`node evals/run-local.mjs`), so any flag below works
+with any script.
+
+It loads the plugin with `--plugin-dir`, reads the agent's tool calls from `--output-format
+stream-json`, scores `tool_used` and `regex` graders locally, and sends `llm` graders to a judge
+model (`--judge-model`, default haiku). Results land in `evals/results/` and the exit code is 1 if
+any case falls below `--threshold`. Cost is printed per run — budget roughly $0.10–0.25 per case
+per arm on Sonnet.
+
+Two caveats it cannot fix for you:
+
+- **Uninstall other Swell plugins before trusting a baseline.** A globally installed plugin still
+  loads without `--plugin-dir`, so its skills fire in the "without" arm. The runner detects this and
+  warns, but the delta stays meaningless until you run `/plugin uninstall swell-app@swell`.
+- **Pin `--model`.** `claude -p` defaults to a small model that often answers from memory without
+  invoking a skill at all, which reads as a routing failure that says nothing about the skill.
 
 By default the runner adds a **no-plugin baseline arm** and reports the score delta, which is the
 number that matters: it shows what the skills add over the model's own knowledge of Swell. Every
