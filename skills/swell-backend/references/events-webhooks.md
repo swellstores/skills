@@ -25,7 +25,7 @@ Treat webhook payloads as change notices, not state — re-fetch the record by `
 
 `created`/`updated`/`deleted` are the *default* types, not a guarantee — a model that declares its own `events.types` replaces them wholesale. `payments` declares `succeeded`/`failed`/`voided` and no `payment.created`; `coupons:generations` declares only `completed`. Types carrying `hooks` (`payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are extension hook points and never produce event records at all, so no webhook can subscribe to them.
 
-Notable domain events: `cart.abandoned`, `cart.converted`, `order.submitted`/`paid`/`payment_failed`/`refunded`/`delivered`/`canceled`, `payment.succeeded`/`failed`/`voided`, `payment.refund.succeeded`/`failed`, `credit.refund_succeeded`/`refund_failed`, `invoice.payment_succeeded`/`payment_failed`, `product.stock_adjusted`, `coupon.generation.completed`, and the subscription set (`activated`, `canceled`, `paused`, `resumed`, `invoiced`, `paid`, `completed`, `payment_failed`, `payment_expiring`, `trial_will_end`, `trial_ended`).
+Get a model's real event list from `GET /:models/<collection>` (`events.types`) rather than assuming — that is the only source that reflects the store, app-declared events included. The domain events worth knowing exist beyond CRUD: carts emit `abandoned` and `converted`, orders `submitted`/`paid`/`payment_failed`/`refunded`/`delivered`/`canceled`, products `stock_adjusted`, and subscriptions carry the richest set (`activated`, `paused`, `resumed`, `invoiced`, `trial_will_end`, …).
 
 ⚠ The dashboard's webhook event picker still offers `invoice.refund_succeeded` / `invoice.refund_failed`. Those types do not exist — refunds emit `credit.refund_succeeded` / `credit.refund_failed` on the credits model. A webhook subscribed to the invoice form is stored happily and never fires.
 
@@ -66,13 +66,15 @@ Two traps on write:
 - After ~4 days of failures with no success in that window, the webhook is auto-disabled — the platform writes `enabled: false` **and** `auto_disabled: true` together; a warning email goes out on every 10th cumulative failure, at most once a day. Recovery below.
 - No ordering guarantee — deliveries can arrive out of order relative to the mutations that caused them; design handlers to be idempotent and to tolerate stale notices (fetch current state, compare, act).
 
-## Diagnosing a webhook that stopped
+## Diagnosing a webhook that never fired, or stopped
 
-Two records, in this order.
+**Never fired at all — no deliveries, no failures?** Check `enabled` before anything else. A webhook created through the API is stored with `enabled: false` unless the create body set it, so it subscribes correctly and dispatches nothing. Silence with an empty delivery history is that default until proven otherwise; `PUT /:webhooks/{id} { enabled: true }` is the fix. Second most likely: `events` accepts any string, so a misspelled or retired type is stored happily and never matches.
+
+**Fired before and stopped?** Two records, in this order.
 
 **1. The config** — `GET /:webhooks/{id}` holds the failure state; the delivery rows don't.
 
-- `enabled` / `auto_disabled` — `auto_disabled: true` means the platform switched it off. `enabled: false` on its own means a human did.
+- `enabled` / `auto_disabled` — `auto_disabled: true` means the platform switched it off after sustained failures. `enabled: false` with `auto_disabled` unset means either a human disabled it or it was never enabled after an API create.
 - `attempts_failed` — cumulative across *all* events, incremented once per failed delivery, zeroed only by a delivery that succeeds. This is the counter the retry backoff reads.
 - `date_first_failed` — start of the current failure streak; nulled by any success and by re-enabling.
 - `date_last_success` / `date_last_warned` — the disable clock and the alert-email throttle.
