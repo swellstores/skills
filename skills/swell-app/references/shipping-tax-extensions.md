@@ -10,8 +10,10 @@ Three runtime traps no local check catches. Verify all three before claiming a s
 
 | Type | Native record | Fields written by Save | Singleton? |
 |------|---------------|------------------------|------------|
-| Shipping | `carriers.<extId>` | `enabled`, `extension_app_id`, `extension_config_id` (**all three required for dispatch**) | No — multiple shipping carriers coexist |
+| Shipping | `/settings/shipments/carriers/app_<appId>_<extId>` | `enabled`, `extension_app_id`, `extension_config_id` (**all three required for dispatch**) | No — multiple shipping carriers coexist |
 | Tax | top-level `/settings/taxes` (one slot, hence singleton) | `extension_app_id`, `extension_config_id` | **Yes** — toggling another tax extension on auto-replaces this one |
+
+The carrier row id is `app_<appId>_<extId>`, never the bare extension id. `<appId>` is the app's 24-char record id (`app_id` on the install), not the slug; `<extId>` is the manifest extension `id`, unaffected by the manifest `carrier` field. Reading `/settings/shipments/carriers/<extId>` returns nothing and is the standard way to wrongly conclude the merchant never activated. Dispatch itself scans every row in `carriers` and gates on the row's fields, not its id — a row written by hand under another id still fires — but merchant Save only ever writes the `app_<appId>_<extId>` id.
 
 `swell app push` does not write any of these. Until the merchant performs the steps in §Merchant Activation, dispatch silently does not fire.
 
@@ -33,7 +35,7 @@ Shipping:
 {
   "type": "integration",
   "extensions": [
-    { "id": "fedex_rates", "type": "shipping", "carrier": "fedex" }
+    { "id": "fedex-rates", "type": "shipping", "carrier": "fedex" }
   ]
 }
 ```
@@ -44,12 +46,12 @@ Tax:
 {
   "type": "integration",
   "extensions": [
-    { "id": "tax_service", "type": "tax" }
+    { "id": "tax-service", "type": "tax" }
   ]
 }
 ```
 
-`carrier` (shipping, optional) — carrier id used for binding and display; defaults to extension `id`. Set explicitly to bind into a specific named carrier slot rather than introduce a new one.
+`carrier` (shipping, optional) — display/asset key only, defaulting to the extension `id`; it names the carrier logo and icon assets on the app record. It does not affect the bound carrier row id and cannot redirect the binding into a differently named carrier slot.
 
 ## Hook Function Contracts
 
@@ -58,18 +60,22 @@ Both events are platform-owned model hooks. Use explicit `before:`/`after:` phas
 | Function | Event | Recommended phase | model.fields | req.data carries | Return shape |
 |----------|-------|-------------------|--------------|------------------|--------------|
 | Shipping rating | `order.shipping` | `after` (default) | `["shipment_rating"]` | shipping address, items, currency/locale, existing `shipment_rating.services` | `{ shipment_rating: { services: [...] } }` |
-| Tax calc | `order.taxes` | `before` (replace native) or `after` (post-process) | `["items", "taxes"]` | items, currency/locale | `{ items: [{id, taxes: [...]}], taxes: [{id, name, amount}] }` |
+| Tax calc | `order.taxes` | `before` (preferred) | `["items", "taxes"]` | items, currency/locale | `{ items: [{id, taxes: [...]}], taxes: [{id, name, amount}] }` |
 
 Phase choice:
 
-- `after:order.shipping` — default; add or replace services after native rating and webhooks run.
+- `after:order.shipping` — default; add or replace services after native rating and the order webhook run.
 - `before:order.shipping` — rare; mutate inputs before native rating.
-- `before:order.taxes` — replace native tax calculation entirely; the most common phase when bound.
-- `after:order.taxes` — post-process or coexist with native/webhook tax work.
+- Both shipping phases sit behind a shipment-params fingerprint. A save that changes nothing shipping-relevant (address, items, shipment settings) fires neither phase — that is a stale rating, not a broken function.
+- Binding — not phase — is what disables native tax calculation. Once `/settings/taxes.extension_app_id` is set, `applyTaxRules` and the tax integration webhooks are skipped for **both** phases, so an `after:` handler has no native result to coexist with.
+- `before:order.taxes` — runs after existing taxes are cleared and before the order webhook. Prefer this one.
+- `after:order.taxes` — runs after the order webhook. On a recalculation where no tax-relevant field changed the whole routine returns early and neither phase fires — except when a previously failed order webhook is pending retry, where the pass skips `clearTaxes` and `before:` but still fires `after:`. Make `after:` handlers idempotent.
+
+Bind one tax phase, not both — both receive the same extension dispatch, so a two-phase app calls the provider twice per calculation.
 
 For shipping, preserve existing `shipment_rating.services` in `after:` unless intentionally replacing native rating. For tax, return both per-item assignments and order-level totals when the provider supplies them. Keep service/tax `id`s stable — downstream recalculation and display key off them.
 
-A second function in the same app subscribing to the same `event+extension+phase` is logged as a conflict and only one result is used. Split work across phases or combine into one handler.
+A second function in the same app subscribing to the same `event+extension+phase` is logged as a conflict and only one result is used — combine them into one handler.
 
 Verify `req.data` shape against the table by logging it on first invocation via `swell logs --type function --app=.`; remove diagnostic logs before finalizing.
 
@@ -77,7 +83,7 @@ Verify `req.data` shape against the table by logging it on first invocation via 
 
 ```typescript
 export const config: SwellConfig = {
-  extension: "fedex_rates",
+  extension: "fedex-rates",
   description: "Rate shipment",
   model: { events: ["after:order.shipping"], fields: ["shipment_rating"] },
 };
@@ -99,7 +105,7 @@ Service objects need stable `id`, `name`, `price`; optional `description`, `carr
 
 ```typescript
 export const config: SwellConfig = {
-  extension: "tax_service",
+  extension: "tax-service",
   description: "Calculate taxes",
   model: { events: ["before:order.taxes"], fields: ["items", "taxes"] },
 };
@@ -126,7 +132,7 @@ const settings = await req.swell.settings();                       // default
 const settings = await req.swell.settings(`${req.appId}/provider`); // explicit
 ```
 
-Settings deploy and resolve identically to non-extension apps.
+A settings config's name is its file basename with `_` converted to `-`, and the Admin renders an extension's panel from the config whose name equals the manifest `setting`, else the extension `id`. Hyphenate both — an extension id containing `_` can never match its own deployed settings name, and the panel silently degrades to a "navigate to app settings" stub. Full resolution order in `app-integrations.md` § Settings.
 
 ## Merchant Activation
 
@@ -141,7 +147,7 @@ Step 4 writes:
 
 | Type | Persisted by Save |
 |------|-------------------|
-| Shipping | `carriers.<extId>.enabled = true` plus hidden `extension_app_id` and `extension_config_id`. **All three required** for dispatch. |
+| Shipping | A carrier row at `/settings/shipments/carriers/app_<appId>_<extId>`: `enabled = true` plus hidden `name`, `extension_app_id` (the 24-char app record id) and `extension_config_id` (the extension id). **`enabled` + `extension_app_id` + `extension_config_id` all required** for dispatch. |
 | Tax | top-level `/settings/taxes.{extension_app_id, extension_config_id}`. Replaces any prior active tax extension. |
 
 Without these fields, `order.shipping`/`order.taxes` does not dispatch to the extension. For tax, the platform falls back to its internal tax rules.
@@ -166,4 +172,6 @@ Common mistakes:
 - Returning tax totals without item-level tax details when downstream flows expect item taxes.
 - Two functions in the same app subscribing to the same `event+extension+phase` — only one result is used and the platform logs a conflict.
 - (Shipping) Saving the extension settings dialog but forgetting to toggle `enabled` on the carrier row.
+- (Shipping) Reading `/settings/shipments/carriers/<extId>`, finding nothing, and reporting the extension unactivated — the row id is `app_<appId>_<extId>`.
+- (Tax) Binding `after:order.taxes` expecting to post-process a native result — binding already suppressed it.
 - (Tax) Assuming dispatch isn't competing — only one tax extension is active at a time.

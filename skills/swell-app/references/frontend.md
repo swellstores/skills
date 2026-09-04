@@ -25,27 +25,32 @@ swell create frontend --frontend hono -p npm -y
 
 ## Lifecycle
 
-`swell.json` has no `frontend` block — registration is automatic. `swell app push` does three things in order:
+`swell.json` has no `frontend` block — registration is automatic. `swell app push` does four things in order:
 
 1. Uploads `frontend/*` source files to the platform as configs (alongside `swell.json`, models, etc.).
-2. Runs `bunx wrangler deploy` against the **developer's** Cloudflare account (not Swell's).
-3. Writes the deployed Worker URL into the platform's app record (`frontend.url` field). The CLI prints `Updating frontend deployment.` followed by `View your app at <admin-proxy URL>`.
+2. **Only when the frontend deployment hash changed** (or `--force`): runs the framework's build command — `npx opennextjs-cloudflare build` (Next.js), `npx astro build`, `npx nuxt build`, `npx ng build`. Hono and React declare no build command and go straight to deploy.
+3. Same condition: runs `npx wrangler deploy` — `bunx wrangler deploy` only when the detected package manager is bun — against the **developer's** Cloudflare account (not Swell's), then writes the resulting Worker URL into the app record's `frontend.url`, always scoped to the **test** environment. Prints `Updating frontend deployment...` → `Updated frontend deployment.`
+4. Unconditionally prints `View your app at <admin-proxy URL>`.
 
-**Hard prerequisites for the deploy phase**: Node 22+ in `PATH`, `wrangler login` completed, and `CLOUDFLARE_ACCOUNT_ID` env var set. Without these, push completes the upload phase and fails at Wrangler. Use `swell app push --no-deploy` to skip Wrangler and only upload sources — the platform's `frontend.url` field is not updated, so any existing deployment continues serving.
+**`View your app at …` is not evidence of a deploy.** It prints whether or not anything shipped. The deployment hash covers `frontend/**` plus the root `package.json`; when it matches the stored `frontend.deployment_hash`, the build, the Wrangler deploy, and the `frontend.url` write are all skipped and the previous Worker keeps serving. Only `Updating frontend deployment...` confirms the URL was (re)registered. Redeploy an unchanged frontend with `swell app push --force`.
 
-There is no `swell inspect frontend` resource type. The push output is the authoritative confirmation that the URL was registered; treat it as the source of truth.
+**Hard prerequisites for the deploy phase**: Node 22+ in `PATH`, `wrangler login` completed, and `CLOUDFLARE_ACCOUNT_ID` env var set. Without these, push completes the upload phase and fails at Wrangler. Use `swell app push --no-deploy` to skip build and deploy and only upload sources — `frontend.url` is not updated, so any existing deployment continues serving.
+
+There is no `swell inspect frontend` resource type — the push output above is the only confirmation available.
 
 ## Local development
 
-`swell app dev` runs `wrangler dev --port 4000` (override with `--frontend-port`) for the frontend and tunnels it through the admin proxy at `http://test--<uuid>--local.swell.test:4001`. Requests to that URL go through the same proxy pipeline as production — the `Swell-*` headers, cookie behavior, and CSP all apply, so auth code paths are exercised in dev.
+`swell app dev` does **not** run `wrangler dev`. It starts the detected framework's own dev command — Hono and React `npm run dev -- --port <port>`, Next.js `npx next dev --turbopack --port <port>`, Astro `npx astro dev --port <port>`, Nuxt `npx nuxt dev --port <port>`, Angular `npx ng serve --port <port>` — on the first free port in 4000–4100. Pin the port with `--frontend-port`.
+
+The CLI tunnels that server through the admin proxy and prints `View it at https://<storeId>--<sessionId>--local.swell.store`. The deployed equivalent is `https://<storeId>--<installedAppId>--app.swell.store`. (`http://…--local.swell.test:4001` appears only when the CLI is pointed at a local Swell platform — never on a normal install.) Requests to the proxy URL go through the same pipeline as production — the `Swell-*` headers, cookie behavior, and CSP all apply, so auth code paths are exercised in dev.
 
 ## Iframe routing and `frontend://` links
 
-The dashboard renders the worker inside an iframe at `/app/<app-slug>/...`. Two entry points:
+The dashboard renders the worker inside an iframe at `/app/<app_id>/...`. Two entry points:
 
 1. **Initial iframe load.** The admin client builds an iframe URL with `?_swell_session=<adminSessionId>`. The proxy validates that session against the platform, sets a `_swell_admin_session` cookie (non-HttpOnly, `SameSite=Lax`), and 302-redirects to a clean URL. Subsequent requests inside the iframe carry the cookie automatically — but the cookie is set **only** on this redirect path.
 
-2. **Content-model nav and actions.** Use `frontend://path/{id}` in `nav.link` and `actions[].link`. The admin translates `frontend://path` to `/app/<app-slug>/path` for non-blank `target` (default), or to the full Worker URL with `?_swell_session=...` appended for `target: "blank"`. `{id}` and other placeholders expand against the current record before the link fires.
+2. **Content-model nav and actions.** Use `frontend://path/{id}` in `nav.link` and `actions[].link`. The admin translates `frontend://path` to `/app/<app_id>/path` for non-blank `target` (default), or to the full Worker URL with `?_swell_session=...` appended for `target: "blank"`. `{id}` and other placeholders expand against the current record before the link fires.
 
 ```json
 {
@@ -53,12 +58,15 @@ The dashboard renders the worker inside an iframe at `/app/<app-slug>/...`. Two 
     {
       "id": "edit",
       "actions": [
+        "save",
         { "id": "open-app", "label": "Open in app", "link": "frontend://records/{id}/edit" }
       ]
     }
   ]
 }
 ```
+
+A non-empty `actions` array **replaces** the view's default actions — it does not append. Record views default to `actions: ["save"]` with `extra_actions: ["delete"]`; list views default to `actions: ["new"]`, and `extra_actions` replaces the same way. Declaring only `open-app` on an edit view ships a record the merchant can open in your app but can no longer save, so re-declare every default you still want.
 
 Two cookie-name details to keep straight: the **query parameter** is `_swell_session` (the admin session id, passed once on entry), the **cookie** the worker sees is `_swell_admin_session` (set by the proxy after validating that query param).
 
@@ -74,7 +82,7 @@ The proxy injects request headers on **every** call that reaches the worker thro
 | `Swell-Public-Key` | Storefront API key |
 | `Swell-Store-Id` | Store id (also the basic-auth username for callbacks — see below) |
 | `Swell-Environment-Id` | `test` / `live` / branch id |
-| `Swell-App-Id` | App slug (matches `swell.json.id`) |
+| `Swell-App-Id` | App id in per-store slug form — same value as `swell.json.id` in the developing store, and the key to use for `record.$app[<app_id>]` and `/apps/<app_id>/…` paths |
 | `Swell-API-Host` | Backend API origin to call back |
 | `Swell-Admin-Url` | Admin URL for redirects/links shown in UI; not a callback target |
 
@@ -132,7 +140,7 @@ const products = await fetch(`${apiHost}/products?limit=20`, {
 }).then((r) => r.json());
 ```
 
-`Swell-Store-Id` is the basic-auth **username**, not implicit context — sending only the access token returns `401 Invalid access token`. `Bearer ${storeId}:${accessToken}` works as an alternative form. Use `Swell-Public-Key` (same scheme) when you intentionally want storefront-scoped access. App-scoped collections live at `/apps/<app-slug>/<collection>`.
+`Swell-Store-Id` is the basic-auth **username**, not implicit context — sending only the access token returns `401 Invalid access token`. `Bearer ${storeId}:${accessToken}` works as an alternative form. Use `Swell-Public-Key` (same scheme) when you intentionally want storefront-scoped access. App-scoped collections live at `/apps/<app_id>/<collection>`, with `<app_id>` taken from the `Swell-App-Id` header.
 
 ## Iframe constraints
 
@@ -144,7 +152,7 @@ const products = await fetch(`${apiHost}/products?limit=20`, {
 The skill's five-gate dev cycle applies with two deviations:
 
 - **Gate 2 (Schema)** — n/a, no schema-backed manifest.
-- **Gate 4 (Deploy & Verify)** — no `swell inspect frontend`. After `swell app push`, the CLI's `Updating frontend deployment.` and `View your app at <url>` are the source of truth.
+- **Gate 4 (Deploy & Verify)** — no `swell inspect frontend`. After `swell app push`, `Updating frontend deployment...` / `Updated frontend deployment.` is the source of truth. `View your app at <url>` prints even when the frontend hash was unchanged and nothing was built or deployed.
 
 **Gate 5 (Test)** — run `swell app dev` and exercise the local tunnel through the dashboard:
 

@@ -22,9 +22,32 @@ swell app version patch -y             # semver release types: major|minor|patch
 swell app install -v 1.0.0 -s other-store-id -e live
 ```
 
-- Installs a version (default: latest) into a store environment (default: live). Store and environment are prompted interactively when omitted; there is no `-y`, so pass `-s` and `-e` explicitly for non-interactive use.
+- Installs a version (default: latest) into a store environment (default: live). Store and environment are prompted interactively when omitted; there is no `-y`, so pass `-s` and `-e` explicitly.
+- `-s` and `-e` skip the install confirmation but **not** the development-app prompt: if the target store already carries a development instance of this app (matched by `.swellrc`'s id sent as `source_id`) and the app is not already installed there, the command blocks on `… has a development version of <app>. Do you want to replace it with an installed instance?` (defaults to **no**, no flag bypasses it). Answering yes PUTs `uninstalled: true` on the dev instance first. Unattended installs are only safe into a store with no dev instance, or where the app is already installed.
 - The developing store's own test environment is not a valid target — that is where the source app already lives. Installing into the developing store's live environment, or any environment of another logged-in store, is the supported path.
 - An installed app gets its own API keys per store environment and starts with **empty settings values** — defaults from `./settings/` files do not carry over as saved values. Configure the app's settings in the target store after installing.
+
+## Updating and uninstalling
+
+Installing a newer version over an existing install is **not a patch — it is a full uninstall followed by a reinstall** of every config. `swell app install` against a store that already has the app PUTs the new `version` to `/client/apps/<app_id>`, which triggers that update. Theme apps are the exception: they reinstall in place without the uninstall pass.
+
+Uninstall removes installed *resources*, by config type:
+
+| Config type | What uninstall does |
+|---|---|
+| `model` (app's own collection) | deletes the collection definition |
+| `model` (standard-model extension) | `$unset __app.<app_id>` — the extension fields leave the standard model's schema |
+| `content` | deletes the content record |
+| `notification` | deletes it, or blanks `content.html` when another config shares the name |
+| `setting` | deletes the app's settings **config** record (fields, defaults, labels, actions) |
+| `webhook`, `function` | deletes the record |
+| `file`, `asset`, `theme`, `frontend` | untouched — installed as files only |
+
+**Record data is not deleted.** The installer carries an explicit `TODO: delete related model/content data`: rows in the app's own collections and `$app.<app_id>.*` values already written onto standard records all survive, and become addressable again once the schema is reinstalled. Never treat an uninstall — or the uninstall half of a version update — as a data reset; plan migrations on that basis.
+
+Uninstall is a **reversible flag, not a delete**: `swell app _uninstall [-s <store>] [--env <env>]` (the leading underscore is part of the command name; `--env` defaults to `test`) confirms, then PUTs `uninstalled: true` to `/client/apps/<app_id>`. It errors with `app not installed on store.` or `app already uninstalled on store.`. Reinstalling flips the flag back and restores the app's `public_id`. While `uninstalled` — or `active: false` — the installed app's credentials stop authenticating, surfacing as `app_uninstalled` / `app_inactive`.
+
+Two guards to expect rather than retry through: a theme app with connected storefronts refuses to uninstall (`Cannot uninstall theme app with connected storefronts`), and any install, update, or uninstall attempted while another async app operation is in flight fails with `App is currently processing '<type>'`.
 
 ## Releasing — `swell app release`
 
@@ -51,10 +74,20 @@ Marks a version as released for App Store publication. Released versions are rev
 
 ## Marketing fields
 
-App-record fields validated **server-side at release time** — missing required fields are reported then, not at push:
+App-record fields validated **server-side at release time** — missing fields fail `swell app release`, never `swell app push`:
 
-- Required to release: `name`, `description` (≤ 70 chars), and an app icon (`assets/icon.*`).
-- Additionally required for App Store publication: `full_description` (≤ 3500 chars), `support_email`, and a cover image (`assets/image.*`).
-- Optional: `support_url`, `demo_url`, `documentation_url`, `preview_video_url`.
+| App type | Required before a version can be released |
+|---|---|
+| `theme` | `name`, `description` (≤ 70 chars) |
+| every other type | the above, plus `full_description` (≤ 3500 chars), `support_email`, an icon (`assets/icon.*` → `logo_icon`) and a cover image (`assets/image.*` → `cover_image`) |
+| `storefront` of kind `shop` whose theme provider is not `app` | the above, plus a preview image (`assets/preview.*` → `preview_image`) |
 
-Text fields belong in `swell.json` — the whole manifest syncs to the app record on push, including keys beyond the CLI-validated set. Images come from `./assets/` (`icon.*` and `image.*` are uploaded by `swell app push`), not from manifest fields.
+There is no stricter second tier for App Store publication — staging and publishing only check that the version is released. Failures read `App must have full_description, support_email to release. Add them to swell.json.`, `App must have a cover image to release. Add image.* to the assets folder.`, or `App must have a logo icon to release. Add icon.* to the assets folder.`
+
+Optional: `support_url`, `demo_url`, `documentation_url`, `preview_video_url`, `repository_url`.
+
+Text fields belong in `swell.json`, but only an allow-list of keys is applied to the app record, and the marketing subset — `description`, `full_description`, `support_url`, `documentation_url`, `support_email`, `preview_video_url`, `demo_url`, `repository_url`, `price` — is **cleared to `null` when the key is absent from the manifest**. Editing those in the dashboard is therefore temporary: the next push carrying a changed `swell.json` wipes whatever the manifest omits. Keep them all in the manifest.
+
+`full_description` has a second source, `assets/description.md`. Assets push before ordinary files, so a push carrying both applies `description.md` first and then overwrites it from `swell.json` — define it in one place.
+
+Images come from `./assets/`, matched by filename (`icon.*` → `logo_icon`, `image.*` → `cover_image`, `preview.*` → `preview_image`), not from manifest fields — a rename silently unbinds them and surfaces only at release.

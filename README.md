@@ -6,9 +6,11 @@ Install once and your agent picks up what it needs to work with Swell the way an
 
 ## What's included
 
-- **`swell-app`** — Build and modify [Swell Apps](https://developers.swell.is/apps/overview): data models, content views, settings, notifications, webhooks, edge functions, payment / shipping / tax integration extensions, and the version → install → release publishing lifecycle.
-- **`swell-backend`** — Server-side integration with the [Backend API](https://developers.swell.is/backend-api/introduction): querying and write semantics, batch and transactions, events and webhooks, and the commerce lifecycles (orders, payments, subscriptions, inventory) via `swell-node` or direct HTTP.
-- **`swell-storefront`** — Headless storefronts on the [Frontend API](https://developers.swell.is/frontend-api/introduction) with `swell-js`: catalog, cart and checkout, customer accounts, payments, subscriptions, and localization.
+- **`swell-app`** — Build and modify [Swell Apps](https://developers.swell.is/apps/overview): data models, content views, settings, permissions, notifications, webhooks, edge functions, payment / shipping / tax integration extensions, and the version → install → release publishing lifecycle.
+- **`swell-backend`** — Server-side integration with the [Backend API](https://developers.swell.is/backend-api/introduction): querying and write semantics, batch and transactions, events and webhooks, files and media, discounts and gift cards, and the commerce lifecycles (orders, payments, returns, invoices, subscriptions, inventory) via `swell-node` or direct HTTP.
+- **`swell-storefront`** — Headless storefronts on the [Frontend API](https://developers.swell.is/frontend-api/introduction) with `swell-js`: catalog and variant resolution, cart and checkout, payments, customer accounts, subscriptions, localization, and server-side rendering.
+
+Every factual claim in these skills is verified against the platform's own source, not just its documentation — where the two disagree, the source wins and the skill says so.
 
 More surfaces are in active work — themes and hosted storefront apps are next.
 

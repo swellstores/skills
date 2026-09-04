@@ -4,6 +4,35 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-08-29
+
+Source-verification pass: 1,128 factual claims across all three skills were checked against platform, CLI, and SDK source, then the result was adversarially reviewed and re-verified. 437 corrections and additions applied across two rounds; where developers.swell.is and the platform's source disagreed, the source won.
+
+### Fixed
+- Write semantics: array elements **without** an `id` merge **positionally by index** on a plain write (only id-bearing elements align by id) — a short array silently rewrites the wrong records.
+- Transactions are not atomic against validation failures: only request errors (not-found, permission, conflict, timeout) roll back; a child op's field-validation failure leaves the other operations committed.
+- Storefront gateway: on **GET** the gateway re-materializes data as real URL query parameters, so `req.query` **is** populated; the drop-the-query behavior applies to non-GET methods only.
+- `swell api` defaults to the **test** environment (`--live` for live data) — previously presented as equivalent to a live-key script.
+- `page=all` is capped at the 1000-record query maximum and returns HTTP 400 beyond it.
+- App release requirements have no two-tier split: every non-theme app needs `full_description`, `support_email`, a cover image, and an icon at release.
+- `req.session` is `null` (not an admin session) when a route is invoked through `swell api`; only the storefront gateway attaches a session.
+- Function responses are **truncated** at 75,000 bytes, not dropped — the caller receives an unparseable prefix.
+- Settings group keys are kebab-cased from the filename (`settings/new_section.json` → `settings['new-section']`).
+- Content views: a list view with no `nav` object gets no sidebar entry at all; a non-empty `actions` array replaces the view's defaults rather than appending.
+- Corrected `swell.payment.tokenize()` (resolves `undefined`; results arrive via callbacks), `swell.card.createToken()` (rejects, never resolves with `errors`), iDEAL's absence from `handleRedirect`, validation-error shape (details are flattened, there is no `params` wrapper), `window` default (10), notification dispatch (create/update only), and event/webhook payload shape.
+- Storefront exposure is opt-in: app extension fields on standard models are **not** readable through the Frontend API by default (the storefront field allowlist carries no `$app` entry), and app collections are invisible without `public_permissions` — previously both read as automatic.
+- Checkout-proxied cart routes **reject**; only cart item routes resolve with an `errors` object. The storefront skill taught one uniform convention, which produced handlers that miss real failures.
+- Generated product variants are created `active: true` (the `active: false` default applies only to hand-created variants), and `stock_tracking` must be set explicitly or stock never decrements — both silent failures in a bulk import.
+- Hooks, async functions, webhooks, and notifications all stay silent for writes inside a `/:transaction`; `$filters.category` values OR rather than AND; `swell app dev` intercepts model hooks and events but not routes or cron; `nav.parent` sections without sub-items drop a collection from the sidebar entirely.
+
+### Added
+- `swell-backend`: `files-media.md` (the `/:files` collection and the base64 wire format that silently stores corrupt data), `promotions-discounts.md` (coupons and bulk code generation, gift cards, promotions, purchase links); commerce coverage for returns, invoices, product variants and options, and account authentication including the one-time `password_token` handoff; bulk-write control directives.
+- `swell-storefront`: `ssr.md` (per-request clients, cookie bridging, and the state that leaks across visitors) and `catalog.md` (variant resolution, stock status, facet building); GraphQL (`/graphql/v2`, `/playground`), the shipped TypeScript declarations and where they diverge from runtime, and the third silent failure surface.
+- `swell-app`: app permissions, the absence of function environment variables or secrets, `swell app pull` / `.swellrc` round-tripping, `swell app dev` environment takeover, notification dispatch controls, and push's silent per-file skips.
+
+### Changed
+- Trigger descriptions rewritten for clean routing: `swell api` moved to `swell-backend`, an explicit `theme`/`storefront` app-type exclusion added to `swell-app`, feature-level triggers added to `swell-storefront`, and cross-platform guards added to both new skills.
+
 ## [0.4.0] - 2026-08-29
 
 ### Added
