@@ -47,39 +47,29 @@ Two non-obvious traps distinguish extension work from ordinary app work:
 
 # II. CLI Reference
 
-The Swell CLI orchestrates the complete development cycle. Commands follow consistent patterns across resource types, enabling a tight feedback loop: discover → scaffold → validate → deploy → verify.
+The CLI runs the whole cycle: discover → scaffold → validate → deploy → verify. Every command takes `--help`, and interactive ones take `-y`; read `references/cli.md` before using any of them in anger — the flags are discoverable, the failure modes are not.
 
-All commands accept `--help` for detailed usage. Interactive commands accept `-y` to skip prompts.
+| Command | Use it to |
+|---|---|
+| `swell inspect {content\|extensions\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
+| `swell schema <type> --format=dts` | The authoritative structure for a resource type — consult before authoring |
+| `swell schema <type> ./file` | Validate one manifest locally |
+| `swell create {content\|function\|model\|notification\|setting\|webhook\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
+| `swell app push` | Deploy every app resource to the test environment |
+| `swell app dev` | Local tunnel; model hooks and events execute locally |
+| `swell app pull` | Adopt an existing app — a two-way sync, not a download |
+| `swell app version` / `install` / `release` | Publishing lifecycle — see `references/app-publishing.md` |
+| `swell logs [-f]` | Remote logs for functions, webhooks and API calls |
 
-**Inspection** — `swell inspect {content|extensions|functions|models|notifications|settings|webhooks|workflows|workflow-runs}` inspects remote (deployed) resources (the two workflow topics apply only on stores with the Beta workflows feature — see `references/functions-workflows.md`). List mode (no argument) groups resources by app. Always discover via list mode, copy the identifier from column 1, and paste it unchanged into detail mode — do not construct identifiers by hand, since shapes vary by resource type. Detail mode prints the full record JSON followed by a `Next steps:` footer of runnable follow-up commands. Add `--app=.` to scope to the app in the current `swell.json`. Use list mode for discovery and to avoid duplicating standard resources; use detail mode after `swell app push` to verify deployed configuration and runtime state.
+Five behaviours that decide whether a deploy actually did what you think:
 
-**Schema Reference** — `swell schema {content|function|model|notification|setting|webhook} --format=dts` prints annotated TypeScript declarations with examples. This is the authoritative reference for schema-backed JSON structure. Always consult before authoring supported manifests—guessing field names or structure leads to validation failures.
+- **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
+- **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
+- **Push skips unchanged files by hash**, so edits confined to `functions/` subdirectories leave importing bundles stale — use `--force` after any lib-only change.
+- **`swell app dev` pushes first, then intercepts** that environment's model hooks and events for every caller until it exits.
+- **`swell api` targets the test environment** unless `--live` is passed.
 
-**Scaffolding** — `swell create {content|function|model|notification|setting|webhook|tests|frontend|app} [args] [flags] -y` generates new resources with correct structure. Output passes schema validation and provides a working starting point. See --help for command args and flags. (`swell create app` is covered under Integration App Creation below, `swell create frontend` in `references/frontend.md`.) Scaffold defaults are not always the working configuration: `swell create webhook … -y` writes `enabled: false` — see Webhooks.
-
-**Integration App Creation** — Use `swell create app <id> --type integration --integration-type <generic|payment|shipping|tax> --integration-id <id> -y` for integration apps. Payment integrations use `--integration-id card` for card processing, or a custom id for alternative payment methods. Shipping and tax integrations use a unique custom id. Custom extension config ids are **hyphenated** by convention (`my-method`, `fedex-rates`) — an underscore breaks settings-panel resolution and the card-gateway binding. Generic integrations do not create an extension slot.
-
-**Validation** — `swell schema {content|function|model|notification|setting|webhook} ./path/file` validates schema-backed manifests. Run `swell schema --help` first and use schema validation for every resource type the installed CLI supports. For resources not supported by `swell schema` in the current CLI, such as `components/` or `swell.json` in this branch, rely on TypeScript/bundling checks and `swell app push` against a test environment.
-
-Known issue: on current CLI releases, JSON-manifest validation fails with `no schema with key or ref "https://json-schema.org/draft/2020-12/schema"` (the CLI's validator predates the platform schemas' JSON Schema draft). Function-file validation (`swell schema function ./file.ts`, AST-based) and `--format=dts` output are unaffected. When you hit this, do not abandon Gate 3: author strictly against the `--format=dts` reference, optionally validate the JSON with a 2020-12-capable validator against `https://json.swell.store/schema-bundle/<type>.bundled.json`, and treat `swell app push` against the test environment as the authoritative check.
-
-**Deployment** — `swell app push` deploys all app resources. The platform runs additional validation; errors here indicate issues local validation cannot catch (e.g., references to non-existent collections). Use `--force` to re-deploy unchanged files. Change detection hashes each top-level file, so edits confined to shared code in `functions/` subdirectories (e.g. `functions/lib/`) leave the importing functions' deployed bundles stale — always `swell app push --force` after subdirectory-only changes. On a brand-new store, push fails with `Test environment is not enabled for this store.` until the test environment is enabled in the store's dashboard settings.
-
-Push is **not all-or-nothing and exits 0 on per-file failures**. A file the CLI cannot process prints one line and is skipped while everything else deploys. Only malformed manifests print the `Ignoring file:` prefix — `Ignoring file: Invalid JSON in <path>` / `Ignoring file: Empty JSON in <path>`. Every function/component failure, including a **missing `config` export**, is re-wrapped and prints as ``Unable to compile function <name> function must export a `config` object.`` (or `Unable to compile component <name> …`), so grepping push output for "Ignoring file" misses skipped functions entirely. Never read "push completed" as proof of deployment — scan the per-file lines, then confirm with `swell inspect <type> --app=.`; a skipped resource simply will not be listed.
-
-Push also **deletes**: per config type, remote configs whose local file no longer exists are removed with no prompt, so deleting `models/reviews.json` locally uninstalls the remote model. And it uploads **everything in the directory**, not just the known config dirs — `package.json`, `tsconfig.json`, `test/`, dotfiles. Exclusions are `.swellrc`, `.git/`, `node_modules/`, lockfiles, `.wrangler/`, `.dev.vars*`, **and anything your `.gitignore` matches** — so a gitignored generated file will never deploy, while `.env` is *not* excluded and gets uploaded. Hard limits: 10,000 files per app; any single file over 10 MB aborts the whole push before anything uploads. `swell app push <dir>` scopes upload and deletion to that directory and skips the frontend deploy; `swell app push <file>` pushes exactly one file and deletes nothing. `--force` additionally sends `$force_meta`, overwriting the server-side `name`, `description`, and icon with local values instead of only filling blanks.
-
-**Round-trip & app source** — `swell app pull [appId] [targetPath]` is a **two-way sync, not a download**: local files the remote app does not have are listed and offered for deletion, and `--force` deletes them with no prompt. Never run it in a tree with uncommitted local-only files. Pull is how you adopt an app you did not scaffold — run it in an empty directory and it writes `swell.json`, reconstructing the manifest from the app record when the remote app has none. First push writes the remote app's global id to **`.swellrc`**, which is excluded from both push and pull and travels as `source_id` on every later push; that link is what lets `swell app install` recognize an existing development instance in the target store. Committing `.swellrc` makes every clone push into the *same* remote app — decide deliberately. Without it, push looks up a dev app by `swell.json`'s `id` **scoped to the currently selected store** and creates a new one otherwise, so a clone pushed against a different store becomes a separate app with the same `id` and no `source_id` link.
-
-**Publishing** — `swell app version` creates immutable app versions, `swell app install` installs them into store environments, and `swell app release` submits them for App Store publication. Read `references/app-publishing.md` before running any of these — version creation pushes and deploys as a side effect, and install/release have non-obvious prompts and prerequisites.
-
-**Local Development** — `swell app dev` starts a local tunnel in watch mode, connecting to the platform's test environment. Model-hook and model-event functions execute locally, fired by triggers at the platform side; route and cron functions keep running the deployed worker (see below). Console output appears in your terminal. Note: direct localhost calls to route functions skip context initialization (settings, session etc). Use `swell api` writes against collections, or integration tests, to fire local functions through the platform with full context initialization.
-
-**`swell app dev` pushes first, then takes over the environment.** On start it runs a full `swell app push`, including the delete-what's-missing pass — pass `--no-push` for the tunnel alone. It then writes the tunnel URL to `/client/apps/<app_id>/local-proxy` as **one value per app per environment, not per session**. While it is set, exactly two invocation paths redirect to that machine: the app's **sync model hooks** (`before:`/`after:`) and its **async model-event function deliveries** in that environment — including ones triggered by other developers' writes. Route calls and cron ticks are **not** redirected: `$call` invocations (`swell api`, the storefront gateway, a dashboard action) and the cron task always invoke the deployed worker, so a route or cron function edited under `swell app dev` still runs the last-pushed code until you `swell app push`. Two dev sessions on the same app and environment clobber each other — last start wins, and the loser's functions go dark with no error. Ctrl-C/SIGTERM clears the pointer; a `kill -9` leaves it set, and the platform self-heals on the next invocation by detecting the dead tunnel, nulling `local_proxy_url`, and retrying against the deployed worker. Before debugging "my function stopped firing", confirm nobody else is running dev against that store and environment. `--function <name>` bundles and watches only that function (each otherwise gets its own wrangler process and port); `-p/--port` and `--frontend-port` resolve port collisions.
-
-**Observability** — `swell logs [-f] [--type function] [--app <id>] [-s <kw>] [--env <id>]` queries or follows (`-f`) remote logs for functions, webhooks, and API calls. Default env is `test`; pass `--env live` for production. Function entries include status, response, errors, and `console.log/warn/error` output captured automatically from each invocation. Complements `swell app dev`, which only streams local execution.
-
-**Data Operations** — `swell api {get|post|put|delete} /<path>` performs CRUD against the platform. Standard collections: `swell api get '/products?limit=1'`. App collections: `swell api get '/apps/<app_id>/<collection>'`. App collections, declared as children in the standard collection: `swell api get '/products:apps.<app_id>.<collection>'`. App functions `swell api get '/functions/<app_id>/<name>'`. Use `--body` for payloads: `--body '{"name":"Test"}'` or `--body ./fixture.json`.
+JSON-manifest validation is currently broken on released CLIs (`no schema with key or ref ".../2020-12/schema"`); `--format=dts` and function validation still work. Fall back to authoring against the dts output and treating `swell app push` as the real check — details and the workaround in `references/cli.md`.
 
 # III. Development Cycle
 
@@ -150,57 +140,14 @@ Events enable function triggers on record changes and are declared in the model 
 
 ## Content Models
 
-Content models configure Admin Dashboard views in `./content/*.json`. They control how merchants interact with data: list columns, form layouts, navigation, and input behavior. As established in Section I, content models map to data model Resource IDs and define UI logic only; data logic belongs in `./models/*.json`. Content field ID must correspond to a data model field.
+Content models configure Admin Dashboard views in `./content/*.json`: list columns, form layout, navigation, input behaviour. They map to a data model's Resource ID and hold **UI logic only** — types, events, permissions and formulas belong in `./models/*.json`, and a content field id must match a data-model field.
 
 **Decision Guide:**
 
-- [ ] **Augmenting standard models** applies when adding UI for fields on existing platform entities. For standard model extensions, `admin_zone` places fields within existing editor sections (e.g., `"admin_zone": "details"` on products); invalid zone values cause fields to silently disappear, so verify against `swell schema content --format=dts`. Alternatively, declare `tabs` in the edit view to add custom tab panels alongside native tabs. Extensions merge with existing UI rather than replacing it: `edit.tabs` adds alongside native tabs, `list.fields` appends to existing columns, and `list.tabs` introduces additional filtered views. Tab and view `query.where` may mix your app's extension fields (bare keys, auto-namespaced to `$app.<app_id>.*` by model metadata) with native model fields, recursing into `$and`/`$or`/`$nor`. Merchants can reorder or hide these additions in their dashboard preferences.
+- [ ] **Augment a standard model** when adding UI for fields on an existing entity. Extensions merge with the native UI rather than replacing it — `edit.tabs` adds alongside native tabs, `list.fields` appends columns, `list.tabs` adds filtered views — and merchants can reorder or hide the additions.
+- [ ] **Create app model views** for app-defined collections. A list view without a `nav` object gets **no sidebar entry at all**, and layout is controlled entirely through views (`admin_zone` has no effect here).
 
-- [ ] **Creating app model views** applies to app-defined collections. Declare `nav` on the list view to give the collection a sidebar entry — **a list view with no `nav` object gets no sidebar entry at all**. Within `nav`, `parent` nests it under an existing section, but only a section that already has sub-items can host a child: `orders`, `products`, `discounts`, `content`, `reporting`. `subscriptions` and `customers` are flat top-level entries with no sub-items — naming either (or any unrecognized id) as `parent` **drops the collection from the sidebar entirely**, with no fallback to top level and no error anywhere. Omit `parent` and set `icon` for a top-level entry. You cannot create a new nav section. For app-defined collections, control layout entirely through views—`admin_zone` has no effect.
-
-Content models declare views by id. The standard ids map to platform routes: `list` (table columns, sort, filters, navigation), `edit` (form for existing records), and `new` (creation form); a single `record` view replaces `edit` + `new` when their layouts are identical. Additional views with any custom id are allowed and surface in a view-selector dropdown. Each view's `type` is `list` or `record`, defaulting to `list` only when the id is `list`.
-
-Fields declared in views inherit properties from matching top-level field definitions by `id`. A view field `{ "id": "rating" }` acquires label, type, and constraints from the top-level `"rating"` entry. Override selectively per view—for instance, a shorter label in list columns versus the full label in edit forms.
-
-Layout uses `field_row` for horizontal arrangement and `field_group` for collapsible sections—both require a `fields` array (omitting it fails validation). Width is controlled via `admin_span` (1–4 on a 4-column grid). Conditions control field visibility using MongoDB-style operators: equality (`"status": "approved"`), negation (`"rewarded": { "$ne": true }`), comparison (`"count": { "$gt": 0 }`), and app settings references (`"$settings.feature.enabled": true`). Multiple conditions are AND-ed.
-
-A field's `readonly` accepts a boolean or a condition expression with the same operators and scopes as `conditions` (record fields, `$settings.*`, other apps' `$app.<app_id>.<field>`) — the field becomes non-editable while the expression matches. This gates dashboard editing only; direct API writes still succeed, so enforce integrity in model rules or app functions. Actions live in a view's `actions` array (with `extra_actions` for the overflow menu): each renders only when not `hidden` and its `conditions` match the current record (record fields only — no `$settings`); on list views, bulk-action `conditions` are not evaluated at all. A non-empty `actions` array **replaces** the view's default actions rather than appending to them, so re-declare any native action you still want. The schema also accepts a `record_actions` property, but no dashboard code reads it — actions placed there silently never render.
-
-An action is a **navigation link, never a mutation.** Only three built-in ids carry behavior: `new` (links to `<collection>/new`), `save` (submits the form), `delete` (deletes the record). Any other id is labeled from its id and gets **no link** unless the manifest supplies one — `link` interpolates `{field}` placeholders from the record and accepts `frontend://path/{id}` to target an app frontend (see `references/frontend.md`) — so a custom action without `link` renders as a button that goes nowhere, and on record pages fed by a content model it is dropped before render. App-collection list views also get **no bulk actions**: `view.actions` becomes page-header links only, and no bulk-action bar is wired up (the ones on Products/Orders are hand-coded platform pages). A dashboard button that writes a field therefore cannot be expressed in `content/*.json`. Model the transition as an editable field instead — a `select` or `toggle` on the record view plus `list.tabs` with `query.where` for Pending/Approved queues — or link out to an app `frontend/` route that performs the write.
-
-The `collection` content type creates inline references to other collections without duplicating data. Declare with `"type": "collection"`, target via `"collection": "products"` (or `"products:variants"` for child collections), and define the join with `"link": { "params": { "account_id": "id" } }`. This renders as a filterable list widget in the edit view.
-
-For field types, input widgets, and all property options, consult `swell schema content --format=dts`.
-
-```json
-{
-  "collection": "products",
-  "fields": [
-    {
-      "id": "seller",
-      "type": "lookup",
-      "label": "Seller",
-      "model": "apps/my_app/sellers",
-      "key": "seller_id"
-    }
-  ],
-  "views": [
-    {
-      "id": "edit",
-      "tabs": [
-        {
-          "id": "seller_info",
-          "label": "Seller Info",
-          "fields": [
-            { "id": "seller" }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-Note that lookup type can be set to the fields, declared with `"type": "link"` at the data model.
+Authoring detail — view ids and types, field inheritance, `field_row`/`field_group` layout, `admin_span`, conditions and `readonly` expressions, actions, and the `collection`/`lookup` field types — is in `references/content-models.md`. Consult `swell schema content --format=dts` for field types and every property option.
 
 ## Functions
 
@@ -362,31 +309,13 @@ Swell sends **no payload signature or HMAC header** — the only platform-side i
 
 ## Notifications
 
-Notifications are transactional emails triggered by model events, defined in `./notifications/` using a paired-file convention: a JSON manifest (`<name>.json`) and a Liquid template (`<name>.tpl`) must share the same base filename. Consult `swell schema notification --format=dts` for all configuration properties.
+Transactional emails in `./notifications/`, as a paired `<name>.json` manifest and `<name>.tpl` Liquid template sharing one basename. Consult `swell schema notification --format=dts` for every property.
 
-**Event binding.** Notifications fire only on record **create and update** — the platform triggers them on `post`/`put` only. Set `event` to `created`, `updated`, or a custom event declared in the collection's data model; `deleted` is accepted by the schema but never dispatches, so use a function or webhook for delete-driven mail. An undeclared custom event is **not** rejected at deploy either — the notification installs silently and never fires. Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.` and by triggering the event; the list key includes the model since name alone is not unique within an app. File basenames must not contain `.` — push rejects them, because the inspect identifier grammar splits on dots.
+Three things decide whether one ever sends:
 
-**Dispatch controls.** Binding alone does not decide whether a notification sends. Two defaults surprise people:
+- **Dispatch is create/update only.** `deleted` is accepted by the schema and never fires.
+- **The `event` must already exist** — a standard `created`/`updated`, or a custom event declared in the collection's data model. Binding to an undeclared event fails the deploy.
+- **Recipients resolve through the query.** `contact` is a dot path to an email field (`account.email`), and every relationship in that path must appear in `query.expand`.
 
-- **`repeat` defaults to `false`, meaning once per record, ever.** Before sending, the platform counts existing messages for `(template, record_id)` and skips when any exist — a notification bound to `order.updated` fires on the *first* qualifying update to an order and never again for that order. Set `"repeat": true` for anything that should send more than once per record.
-- **A notification with neither `conditions` nor `event` never sends.** That is deliberate legacy behavior, not a bug — always declare at least one.
+Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.`; name alone is not unique within an app. Template authoring — Liquid syntax, the `settings`/`store`/`get` globals, admin-editable `content` fields, child-collection `parent` access, and repeat/dispatch controls — is in `references/notifications.md`.
 
-Also: `new: true` restricts sending to record creation (POST) only; `conditions` are evaluated against the record with `$record`, `$data`, `$origData`, `$method`, `$env`, `$notify` in scope (an empty `{}` counts as no condition and passes); `delay` is in **minutes**; `cc`/`bcc` are comma-separated strings capped at 80 characters total; `attachments` holds at most 5 model field paths.
-
-**Testing.** `sample` supplies the record used when the dashboard renders a test/preview send — without it the preview renders against an essentially empty record and every `{{ field }}` comes out blank. It costs nothing at runtime, being read only on test sends. Any notification sent from a non-live environment gets `(TEST) ` prepended to the subject, so never assert on an exact subject line in test-environment checks.
-
-**Recipient resolution.** Set `contact` to a dot-notation path resolving to an email field (e.g., `"contact": "account.email"`), or set `admin: true` for store administrator delivery. The contact path is expanded automatically when the recipient is resolved — `query.expand` is what the **template** needs instead: any relationship your `.tpl` references (`{{ account.name }}`) must be listed there, e.g. `"expand": ["account"]`.
-
-**Child collections.** Use colon notation for the collection (`"collection": "reviews:comments"`). In templates, the parent record is accessible via the `parent` variable; expand upward with `"expand": ["parent", "parent.product"]`.
-
-The `.tpl` file uses Liquid syntax. Record fields are accessed directly (`{{ product.name }}`), child collection parents via `{{ parent.field }}`. Two global objects are available in all templates, plus a `get` filter:
-
-`settings` — App settings from `./settings/`, enabling conditional content: `{% if settings.rewards.enabled %}...{% endif %}`.
-
-`store` — Store metadata: `name`, `url`, `logo`, `currency`, `support_email`.
-
-`get` — a Liquid **filter**, not a function: `{{ '/products/abc' | get }}` fetches additional Swell data during rendering. It takes only the URL string — there is no second `data` argument, so interpolate any parameters into the URL yourself.
-
-Admin-editable fields defined in the manifest's `fields` array are accessed via `{{ content.field_id }}`. Standard Liquid filters apply: `{{ date_created | date: '%b %d, %Y' }}`, `{{ amount | currency }}`.
-
-Build templates with MJML for cross-client email compatibility, then convert to HTML.
