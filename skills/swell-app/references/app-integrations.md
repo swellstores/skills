@@ -28,7 +28,7 @@ Non-obvious invariants:
 Scaffold with the CLI:
 
 ```bash
-swell create app my_payment --type integration --integration-type payment --integration-id revolut -y
+swell create app my_payment --type integration --integration-type payment --integration-id my-method -y
 ```
 
 Minimal manifest:
@@ -36,11 +36,11 @@ Minimal manifest:
 ```json
 {
   "id": "my_payment", "name": "My Payment", "type": "integration", "version": "1.0.0",
-  "extensions": [{ "id": "revolut", "type": "payment" }]
+  "extensions": [{ "id": "my-method", "type": "payment" }]
 }
 ```
 
-Use hyphens, never underscores, in an extension `id` — an `_` silently breaks settings-panel resolution (see Settings).
+Extension config ids use **hyphens** by convention — `my-method`, never `my_method`. An `_` also breaks things: it silently defeats settings-panel resolution (see Settings) and truncates the card-gateway binding. Because the id doubles as an object key in billing payloads, a hyphenated id must be quoted in JS — `billing["my-method"]`, not `billing.my-method`.
 
 Each extension entry binds into one native flow:
 
@@ -65,7 +65,7 @@ Extension fields (current platform branch):
 
 Two payment traps in that table:
 
-- **`method` does not rename the method record.** The Admin always writes `methods.<extension.id>` (`methods.card` for card gateways) and reads `method` only to decide card vs. alt. Declaring `{"id": "revolut", "method": "revolut_pay"}` activates `methods.revolut`, but `swell inspect extensions` looks up `methods.revolut_pay` and reports a false `not activated`. Leave `method` unset unless the value is exactly `"card"`.
+- **`method` does not rename the method record.** The Admin always writes `methods.<extension.id>` (`methods.card` for card gateways) and reads `method` only to decide card vs. alt. Declaring `{"id": "my-method", "method": "my-method-pay"}` activates `methods.my-method`, but `swell inspect extensions` looks up `methods.my-method-pay` and reports a false `not activated`. Leave `method` unset unless the value is exactly `"card"`.
 - **A card-gateway extension needs `id: "card"` too.** Checkout renders app components with `component.extension === selectedMethod.id`, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs can never render its component. Keep the extension `id` free of underscores: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>` and recovers the pair with `split('_').slice(1)`, so an `_` in the extension id writes a truncated `extension_config_id` and dispatch never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
 
 Per-extension display assets do not render. `gateway_logo_src`/`gateway_icon_src` and the `method_*`/`carrier_*` pairs are their declared home, but the installer matches uploaded image paths against `app.highlights` — a field whose schema is only `id`/`title`/`description`/`image_src` — so `extension_assets[]` is never populated and the Admin falls back to the app-level icon (`logo_src`, else `assets/icon.*`). Ship one app icon; do not rely on these fields or on `gateway`.
@@ -78,7 +78,7 @@ Behave like ordinary app settings:
 
 ```typescript
 const settings = await req.swell.settings();                       // default
-const settings = await req.swell.settings(`${req.appId}/revolut`); // explicit
+const settings = await req.swell.settings(`${req.appId}/my-method`); // explicit
 ```
 
 Mark fields `"public": true` to expose to checkout components; provider secrets must remain non-public. Do not invent extension-specific settings APIs — the standard `req.swell.settings()` is the only access path.

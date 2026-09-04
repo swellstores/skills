@@ -11,7 +11,7 @@ Two payment-extension behaviors fail at runtime in ways no local check catches �
 Two-phase auth/capture requires all three: the order's billing method is in the platform's hardcoded native authorizable set (`card`, `paypal`, `amazon`, `affirm`, `resolve`, `ideal`, `klarna`, `bancontact`, `google`, `apple`, `twint`, `paysafecard`, `sezzle`), `/settings/orders/features/require_authorized_payment` is true (the default), and the order is not a subscription order (`subscription_id` unset). For extensions that means card-gateway replacements only.
 
 - **Card gateway (`method: "card"`) → two calls.** First: `req.data.captured === false` → authorize the provider intent without capturing. Second: `req.data.captured === true` → capture it. A single-shot "create + capture" handler succeeds on the first call (capturing too early), then fails or double-charges on the second.
-- **Alt method (any extension `id` outside that native set — `revolut`, `my_method`, …) → one call**, with `req.data.captured === undefined`. `captured` is a plain `bool` with no model default, and the native default handler that would set it is skipped whenever `extension_app_id` is set. Subscription orders are single-shot too, even on `card`.
+- **Alt method (any extension `id` outside that native set — `my-method`, `wallet-pay`, …) → one call**, with `req.data.captured === undefined`. `captured` is a plain `bool` with no model default, and the native default handler that would set it is skipped whenever `extension_app_id` is set. Subscription orders are single-shot too, even on `card`.
 - One handler must cover both: treat `captured === false` as the only authorize signal, every other value — `undefined` included — as a capture request, and stay correct when the authorize phase never happens.
 - Canonical handler shape: see Charge Function below — branch on `captured` and look up the existing provider intent (`req.data.intent.<provider>.id` or `req.data.transaction_id`) before creating a new one.
 - **Verify:** create one test order, then run `swell logs --type function --app=.`. Card gateway: two consecutive `payment.charge` invocations, `captured: false` then `captured: true`, returning the same `transaction_id`. Alt method: exactly one, `captured: undefined`. Hunting a missing second call on an alt method is hunting a bug that does not exist.
@@ -30,7 +30,7 @@ Alternative payment method:
 {
   "type": "integration",
   "extensions": [
-    { "id": "revolut", "type": "payment" }
+    { "id": "my-method", "type": "payment" }
   ]
 }
 ```
@@ -77,7 +77,7 @@ Each payment event is a synchronous platform hook. The platform merges **every**
 |----------|-------|-----------|--------------|------------------|----------------|----------------|
 | Intent | `after:payment.create_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `createIntent` in the component) | `{ result: { ...browserSafeData } }` | `{ error: "msg" }` |
 | Get Intent | `after:payment.get_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `getIntent` in the component) — same shape as `create_intent` | `{ result: { ...browserSafeState } }` | `{ error: "msg" }` |
-| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data.revolut`) | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
+| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data["my-method"]`) | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
 | Refund | `before:` or `after:payment.refund` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `transaction_id` | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
 
 Implement `payment.get_intent` only when the provider needs in-flight intent state refreshed from the platform — typically for redirect-return recovery, where checkout reopens after the shopper bounced through a provider page and the cart's persisted intent state is stale. The component triggers it through the injected `getIntent(data)` prop, which the platform routes via `Vault.getIntent`. Skip it for fully inline flows.
@@ -89,7 +89,7 @@ Minimal Intent and Refund handlers (Charge gets its own section because of two-p
 ```typescript
 // functions/create-intent.ts
 export const config: SwellConfig = {
-  extension: "revolut",
+  extension: "my-method",
   description: "Create payment intent",
   model: { events: ["after:payment.create_intent"], fields: ["result", "error"] },
 };
@@ -103,7 +103,7 @@ export default async function (req: SwellRequest) {
 ```typescript
 // functions/refund.ts
 export const config: SwellConfig = {
-  extension: "revolut",
+  extension: "my-method",
   description: "Refund payment",
   model: { events: ["after:payment.refund"], fields: ["success", "error", "transaction_id"] },
 };
@@ -129,7 +129,7 @@ The canonical handler covers both cases: two-branched, and idempotent on the exi
 ```typescript
 // functions/charge.ts
 export const config: SwellConfig = {
-  extension: "revolut",
+  extension: "my-method",
   description: "Charge payment",
   model: {
     events: ["after:payment.charge"],
@@ -201,13 +201,13 @@ Payment methods that need custom browser UI add a top-level `components/<Name>.t
 import { memo } from "preact/compat";
 
 export const config: SwellConfig = {
-  extension: "revolut",
-  description: "Revolut Pay via Stripe",
+  extension: "my-method",
+  description: "Checkout UI for the my-method extension",
 };
 
-function RevolutPay(props: SwellData) { /* ... */ }
+function MyMethodPay(props: SwellData) { /* ... */ }
 
-export default memo(RevolutPay); // memo avoids redundant re-renders
+export default memo(MyMethodPay); // memo avoids redundant re-renders
 ```
 
 Components bundle for the browser with Preact. Keep Node-only APIs, server-side provider SDKs, and secret-bearing modules out of component code. Browser-safe helpers in `components/lib/` may be imported from `functions/`; never import the other direction (functions may carry secrets the browser bundle must not see).
@@ -257,19 +257,19 @@ Server-side capture, authorization validation, and refunds belong in extension f
 
 ### Billing Persistence Contract
 
-The payment method id is the extension `id` (`card` for a card gateway). The manifest `method` field discriminates card vs. alt only — it never renames the method record; see `app-integrations.md` §Manifest. For `id: "revolut"`:
+The payment method id is the extension `id` (`card` for a card gateway). The manifest `method` field discriminates card vs. alt only — it never renames the method record; see `app-integrations.md` §Manifest. For `id: "my-method"`:
 
 ```typescript
 await updateCart({
   billing: {
-    method: "revolut",
-    revolut: { token: providerPaymentMethodId },
+    method: "my-method",
+    "my-method": { token: providerPaymentMethodId },   // hyphenated id must be quoted
     intent: { stripe: { id: providerIntentId } },
   },
 });
 ```
 
-The backend payment hook receives method-specific billing under `req.data[methodId]` (e.g. `req.data.revolut`). If the component stores the token under the wrong method id, the charge function will not find it. The `billing.intent` key is the **processing provider** that generates the intent — not the extension id. In this example, the extension is `revolut` but the intent key is `stripe` because Stripe is the payment processor. When extension and processor coincide (e.g. a Klarna extension calling Klarna APIs), the key happens to equal the extension id. The charge function reads the same key: `req.data.intent?.stripe?.id`. A mismatch between what the component stores and what the function reads yields `undefined` with no deploy-time or runtime error. Store only browser-safe identifiers; never persist secret keys or raw provider responses.
+The backend payment hook receives method-specific billing under `req.data[methodId]` (e.g. `req.data["my-method"]`). If the component stores the token under the wrong method id, the charge function will not find it. The `billing.intent` key is the **processing provider** that generates the intent — not the extension id. In this example, the extension is `my-method` but the intent key is `stripe` because Stripe is the payment processor. When your extension calls its own provider directly, extension and processor coincide and the key happens to equal the extension id. The charge function reads the same key: `req.data.intent?.stripe?.id`. A mismatch between what the component stores and what the function reads yields `undefined` with no deploy-time or runtime error. Store only browser-safe identifiers; never persist secret keys or raw provider responses.
 
 ### Intent Request
 
