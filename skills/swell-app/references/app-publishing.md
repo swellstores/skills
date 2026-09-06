@@ -90,4 +90,4 @@ Text fields belong in `swell.json`, but only an allow-list of keys is applied to
 
 `full_description` has a second source, `assets/description.md`. Assets push before ordinary files, so a push carrying both applies `description.md` first and then overwrites it from `swell.json` — define it in one place.
 
-Images come from `./assets/`, matched by filename (`icon.*` → `logo_icon`, `image.*` → `cover_image`, `preview.*` → `preview_image`), not from manifest fields — a rename silently unbinds them and surfaces only at release.
+Images come from `./assets/`, matched by filename (`icon.*` → `logo_icon`, `image.*` → `cover_image`, `preview.*` → `preview_image`), not from manifest fields — a rename silently unbinds them and surfaces only at release. Draw the icon with **square corners**: the surfaces that display it round it themselves, and a pre-rounded icon renders double-rounded.
