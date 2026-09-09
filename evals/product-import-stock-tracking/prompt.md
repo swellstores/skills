@@ -1,0 +1,1 @@
+Using swell-node, show me how to create a product with two options — Size (S/M/L) and Colour (Black/White) — so that all six variants exist, and make sure inventory actually decrements when one sells.

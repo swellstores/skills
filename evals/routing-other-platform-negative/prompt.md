@@ -1,0 +1,1 @@
+Our Shopify webhooks keep retrying and I can't work out why. What's Shopify's retry schedule, and how long before they disable an endpoint? (We're evaluating Swell for later, but this is our Shopify store.)

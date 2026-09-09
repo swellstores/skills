@@ -10,7 +10,7 @@ export const config: SwellConfig = {
   route: {
     methods: ["post"],                // 'get' | 'post' | 'put' | 'delete'
     public: true,                     // false requires secret key auth
-    cache: { timeout: 5000 },         // ms, GET only; defaults to 5000 — set 0 to disable
+    cache: { timeout: 5000 },         // ms, GET only, gateway-only; defaults to 5000 — set 0 to disable
     headers: ["x-custom-token"],      // allow-list of incoming header names; omit to forward all
   },
 };
@@ -56,14 +56,14 @@ export default {
 
 `route.public: true` exposes the endpoint without auth. `public: false` (or omitted) requires the store's secret key in the request.
 
-`req.session` carries the authenticated user when present. Storefront routes typically gate on `req.session?.account_id`.
+`req.session` carries the storefront customer session, but only the storefront gateway attaches it (`Swell-Session` header). On every other invocation path it is `null` — see Local testing caveat. Storefront routes typically gate on `req.session?.account_id`.
 
 ## Calling routes from outside Swell (hosted gateway)
 
 External callers (storefronts, third-party webhooks) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 
-- **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Use the app's own public key: the key selects the environment (an `app_pk_test_…` key routes to the test environment) and resolves the app slug in the URL. Without it the gateway returns 404 `Function app.<slug>.<name> not found` — a key/slug-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
-- **Query parameters are forwarded only when the request body is empty**, in which case they arrive in `req.data`; with a non-empty body, query parameters are dropped entirely, and `req.query` is never populated through the gateway. For externally-called routes, read inputs from `req.data` / `req.body` and put everything in the body when POSTing.
+- **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Any valid public key for the environment where the app is installed works: the store's storefront public key (`pk_…`, what `swell-js` sends) or the app's own `app_pk_…` key. The key selects the environment (`…_test_…` routes to test) and populates the gateway's installed-app list; the slug in the URL is resolved against that list, not against the key's app identity. Without a resolvable key the gateway returns 404 `Function app.<slug>.<name> not found` — a key/environment-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
+- **Query parameters are forwarded only when the request body is empty** — the gateway sends `$call.data = body || query`, so a non-empty body drops the query string entirely. On a **GET** the platform re-materializes that data as real URL query parameters, so `req.query` and `req.data` are both populated and `req.body` is an empty string. On **non-GET** methods the data goes out as the JSON body and `req.query` is always empty. For externally-called non-GET routes, read inputs from `req.data` / `req.body` and put everything in the body.
 
 ## Headers
 
@@ -73,7 +73,9 @@ For local testing, forward caller headers via repeatable `-H 'Name: value'` on `
 
 ## Cache
 
-`route.cache.timeout` controls response caching for GET routes. Defaults to 5000 ms when `cache` is omitted; set to `0` to disable. Has no effect on non-GET methods.
+`route.cache.timeout` caches GET responses stale-while-revalidate, and only at the storefront gateway (`https://<store>.swell.store/functions/…`). Defaults to 5000 ms when `cache` is omitted; set `0` to disable; non-GET methods are never cached.
+
+Direct invocation — `swell api`, or any backend `PUT /:functions/{id}` with `$call` — bypasses the cache entirely, so local testing never reproduces the storefront's stale-response window.
 
 ## Return values
 
@@ -82,7 +84,7 @@ For local testing, forward caller headers via repeatable `-H 'Name: value'` on `
 - `new SwellResponse(data, { status, headers })` for custom status/headers (preferred over native `Response`).
 - Throw `SwellError(msg, { status })` to return an error response.
 
-Response bodies above 75 KB are silently dropped by the platform — paginate large collections rather than returning them. The truncated payload reaches the caller as an unparseable string.
+The platform's HTTP client stops reading a function response at 75,000 bytes mid-stream. The chunk-boundary fragment then fails to JSON-parse and reaches the caller as a raw truncated string instead of an object, with no error raised. Paginate large collections rather than returning them.
 
 ## Signature verification (HMAC, third-party webhooks)
 
@@ -92,4 +94,6 @@ Functions run on Cloudflare Workers **without** Node compatibility: use the Web 
 
 ## Local testing caveat
 
-Under `swell api`, `req.session` is the CLI admin session — not a storefront customer session. Customer-scoped auth gates (`session?.account_id`) won't behave the same locally as in production. Verify those paths through integration tests against actual storefront auth.
+Under `swell api` — and on model-hook, schedule, and cron invocations — no `Swell-Session` header is sent, so `req.session` is `null`. It is never a CLI admin session. Only the storefront gateway attaches a session, and only when the caller's storefront request carries one.
+
+The trap: a `if (!req.session) throw new SwellError('unauthorized', { status: 401 })` gate rejects every local call while passing in production, and `req.session?.account_id` is always `undefined` locally. Verify customer-scoped auth paths through a real storefront request.
