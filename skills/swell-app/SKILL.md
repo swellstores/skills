@@ -105,7 +105,7 @@ Confirm the resource behaves as designed under realistic conditions. Actions dep
 - Data models: Execute create → read → update → delete cycle via `swell api` or integration test. Test relationship expansion with `?expand=`.
   Pass: Resource produces expected behavior. For testable resources, integration tests in `./test/integration/` pass and provide regression coverage.
 
-Note: Consider formalizing your tests in unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary. The current scaffold pins `vitest` 3.x while pulling `@cloudflare/vitest-pool-workers@latest`, which requires vitest 4 — after scaffolding, pin pool-workers to a vitest-3-compatible line (e.g. `0.8.x`) or align both on 4.x before installing. The scaffold's `test/setup-globals.ts` defines `SwellError` and `SwellRejection` globals but not `SwellResponse` — add it there if tests construct responses.
+Note: Consider formalizing your tests in unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary. The scaffold's `test/setup-globals.ts` defines `SwellError` and `SwellRejection` globals but not `SwellResponse` — add it there if tests construct responses.
 
 # IV. Resources best practices
 
@@ -246,7 +246,7 @@ Authenticated context for the handler. Common fields across triggers:
 - `req.session` — user session (routes only); `null` unless the storefront gateway attached one, so gate with `req.session?.account_id`.
 - `req.context.waitUntil(promise)` — run work after the response returns (logs, metrics, non-blocking side effects); the Worker continues until the promise resolves or CPU time expires.
 - `await req.swell.settings()` — app settings from `./settings/`. Pass another app's id to read its settings cross-app.
-- `req.isLocalDev` — `true` under `swell app dev` (set at runtime from the `Swell-Local-Dev` header), useful for dev-only branches. It is **not declared on `SwellRequest` in `@swell/app-types` ≤1.2.4**, so `npm run typecheck` fails Gate 3 with TS2339 — read it through a cast: `const isDev = (req as any).isLocalDev === true;`
+- `req.isLocalDev` — `true` under `swell app dev` (set at runtime from the `Swell-Local-Dev` header), useful for dev-only branches.
 
 **Writing to standard model extensions** — namespace under `$app` via `req.appValues`. Pass `(otherAppId, values)` to target another app:
 
