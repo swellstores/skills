@@ -72,7 +72,7 @@ Two cookie-name details to keep straight: the **query parameter** is `_swell_ses
 
 ## Auth contract
 
-The proxy injects request headers on **every** call that reaches the worker through the proxy URL — even when the visitor never went through the iframe entry path. The injected access token grants full app-scoped backend permissions, so a worker route that calls Swell APIs without checking the cookie is exposed to anonymous internet visitors.
+The proxy injects request headers on **every** call that reaches the worker through the proxy URL — even when the visitor never went through the iframe entry path. The injected access token grants full app-scoped backend permissions, so a worker route that calls Swell APIs without checking `Swell-Admin-Authenticated` is exposed to anonymous internet visitors.
 
 **Always-injected headers:**
 
@@ -85,49 +85,32 @@ The proxy injects request headers on **every** call that reaches the worker thro
 | `Swell-App-Id` | App id in per-store slug form — same value as `swell.json.id` in the developing store, and the key to use for `record.$app[<app_id>]` and `/apps/<app_id>/…` paths |
 | `Swell-API-Host` | Backend API origin to call back |
 | `Swell-Admin-Url` | Admin URL for redirects/links shown in UI; not a callback target |
+| `Swell-Admin-Authenticated` | `true` when a signed-in admin of this store made the request, otherwise `false`. Set by the proxy on every request, so clients can't forge it |
 
 **Cookie set only when iframe-loaded:**
 
-- `_swell_admin_session: <sessionId>` — present only when the request reached the worker through the dashboard iframe path. Absent ⇒ treat as anonymous.
+- `_swell_admin_session: <sessionId>` — present only when the request reached the worker through the dashboard iframe path. The proxy reads it to set `Swell-Admin-Authenticated`; the worker does not need to.
 
-**Required gating pattern.** Validate the cookie against the platform before any route that returns or mutates store data:
+**Required gating pattern.** Check `Swell-Admin-Authenticated` before any route that returns or mutates store data:
 
 ```typescript
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
 import type { Context } from "hono";
 
-async function getAdminSession(c: Context) {
-  const sessionId = getCookie(c, "_swell_admin_session");
-  if (!sessionId) return null;
-
-  const apiHost = c.req.header("swell-api-host");
-  const storeId = c.req.header("swell-store-id");
-  const accessToken = c.req.header("swell-access-token");
-  if (!apiHost || !storeId || !accessToken) return null; // proxy didn't inject headers
-
-  const r = await fetch(`${apiHost}/:sessions/${sessionId}`, {
-    headers: { authorization: `Basic ${btoa(`${storeId}:${accessToken}`)}` },
-  });
-  if (!r.ok) return null;
-  // Empty body parses as null — the platform returns 200 with empty body for invalid ids.
-  const session = await r.text().then((t) => (t ? JSON.parse(t) : null));
-  if (!session?.user_id || session.client_id !== storeId) return null;
-  return session;
-}
+// "true" only when a signed-in admin of this store made the request
+const isAdmin = (c: Context) => c.req.header("swell-admin-authenticated") === "true";
 
 const app = new Hono();
 
-app.get("/api/protected", async (c) => {
-  const session = await getAdminSession(c);
-  if (!session) return c.text("Unauthorized", 401);
-  // Safe to call Swell APIs here.
+app.use("/api/*", async (c, next) => {
+  if (!isAdmin(c)) return c.text("Unauthorized", 401);
+  await next(); // Safe to call Swell APIs here.
 });
 ```
 
-Do **not** trust the cookie alone — it is non-HttpOnly and forwarded by the proxy verbatim, so any caller can set any value if validation is skipped.
+Compare with `"true"` exactly, so a missing header means anonymous. The header is missing when a request did not come through the proxy, for example one sent straight to the worker's `*.workers.dev` address. Such a request can carry any headers it likes, but it has no valid `Swell-Access-Token`, so it cannot reach store data. Do not let the header alone unlock anything the worker holds itself, such as its own secrets.
 
-Follow REST conventions — do not mutate state on `GET`. The cookie is `SameSite=Lax`, which blocks cross-site form `POST`s but lets top-level `GET` navigations carry the cookie, so a mutating `GET` handler is reachable cross-origin.
+Follow REST conventions — do not mutate state on `GET`. The cookie is `SameSite=Lax`, which blocks cross-site form `POST`s but lets top-level `GET` navigations carry the cookie, and the proxy then sends `Swell-Admin-Authenticated: true`. A mutating `GET` handler is therefore reachable cross-origin.
 
 ## Calling Swell APIs from the worker
 
@@ -156,14 +139,15 @@ The skill's five-gate dev cycle applies with two deviations:
 
 **Gate 5 (Test)** — run `swell app dev` and exercise the local tunnel through the dashboard:
 
-1. Open the tunnel URL via the dashboard's iframe path; confirm gated routes resolve under the validated cookie.
-2. Hit the tunnel URL directly (no iframe entry) without the cookie; gated routes must return 401.
+1. Open the tunnel URL via the dashboard's iframe path; confirm gated routes resolve (the proxy sends `Swell-Admin-Authenticated: true`).
+2. Hit the tunnel URL directly (no iframe entry) without the cookie; gated routes must return 401. Sending `Swell-Admin-Authenticated: true` yourself must not change that.
 
 Repeat against the deployed proxy URL after `swell app push` for the same checks in the test environment.
 
 ## Common mistakes
 
-- **Trusting the cookie without validating it.** Non-HttpOnly cookies are spoofable. Validation against `/:sessions/{id}` is the only real gate.
+- **Checking the session yourself.** The proxy already did. Calling `/:sessions/{id}` with the app's access token returns an empty body for real dashboard sessions, so a check built on it rejects every admin. Check `Swell-Admin-Authenticated === "true"` instead.
+- **Treating a missing `Swell-Admin-Authenticated` as allowed.** Only `"true"` means an admin; anything else, including no header, is anonymous.
 - **Calling Swell with the access token alone.** `Authorization: Bearer <token>` returns `401 Invalid access token` — the store id must be the basic-auth username (`Basic base64(storeId:token)`) or `Bearer storeId:token`.
 - **Linking outside the proxy.** The raw `*.workers.dev` URL has none of the headers and cookie behavior; treat it as if it didn't exist.
 - **Conflating with storefront frontends.** Storefront apps' `frontend/` runs under a different platform contract (public visitors, `Swell-Public-Key` as primary credential, visual-editor integration). The admin/integration auth contract above does not apply.
