@@ -142,6 +142,14 @@ const products = await fetch(`${apiHost}/products?limit=20`, {
 
 `Swell-Store-Id` is the basic-auth **username**, not implicit context — sending only the access token returns `401 Invalid access token`. `Bearer ${storeId}:${accessToken}` works as an alternative form. Use `Swell-Public-Key` (same scheme) when you intentionally want storefront-scoped access. App-scoped collections live at `/apps/<app_id>/<collection>`, with `<app_id>` taken from the `Swell-App-Id` header.
 
+## Signed third-party webhooks
+
+A worker route can receive webhooks that a third party signs over the request body. The proxy passes the body to the worker unparsed, so the route can verify the signature against the original bytes, which a function route cannot do (see `references/functions-routes.md`, Signature verification).
+
+Register the proxy URL with the sender: `https://<storeId>--<installedAppId>--app.swell.store/webhooks/<provider>`. The `*.workers.dev` address receives no Swell headers. Keep the route under `/webhooks/` or another path the gateway does not claim: it handles `/api`, `/admin`, `/functions`, `/graphql` and several other paths itself, and `/checkout/…` reaches the worker only when the store uses a custom checkout.
+
+The sender is never a signed-in admin, so this route is the one exception to the admin check above, and the signature is its gate. Until the signature verifies, read nothing but the signing secret (for example the merchant's key from the app's settings), and do not act on the payload or return store data. Reject any request that fails verification.
+
 ## Iframe constraints
 
 - **Same-origin iframe only.** The proxy stamps `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self' *.swell.store *.swell.test:*` on every response. Custom domains for the worker break the embed.

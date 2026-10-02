@@ -50,7 +50,7 @@ export default {
 
 - `req.body` — parsed JSON object, or the raw text string when the body isn't JSON.
 - `req.query` — URL parameters as `{ [key]: string }`.
-- `req.rawBody` — untouched body text. Use for HMAC and webhook signature verification — re-stringifying `body` won't byte-match the original.
+- `req.rawBody` — the body text as the function received it. Every invocation the platform makes re-serializes the body first, so this is not the caller's original bytes and cannot reliably verify a third-party signature. See Signature verification below.
 
 ## Authentication
 
@@ -88,9 +88,13 @@ The platform's HTTP client stops reading a function response at 75,000 bytes mid
 
 ## Signature verification (HMAC, third-party webhooks)
 
-When verifying a third-party webhook signature, hash `req.rawBody` — re-stringifying `req.body` won't byte-match the original payload and signatures will never match.
+A route function cannot reliably verify a signature computed over the sender's raw body, because in production it never receives that body. The storefront gateway parses `application/json` and form-encoded bodies, and drops any other content type in favor of the query string. The platform then sends the parsed data to the function as `JSON.stringify(data, null, 2)`. `req.rawBody` is that re-serialized text, so an HMAC over it matches only if the sender signed exactly that form. Under `swell app dev`, a request sent to the function server itself (`http://localhost:<port>/<function-name>`, or the same path on the dev tunnel or `--local.swell.store` URL) is passed through untouched, so a signature check that passes there proves nothing about production.
 
-Functions run on Cloudflare Workers **without** Node compatibility: use the Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.verify`), not Node's `crypto` module. Rely on `subtle.verify` for the comparison — it runs in constant time. Never compare signatures with `===`, which leaks timing information.
+To accept a signed third-party webhook, terminate it at the app's frontend Worker instead. The admin proxy passes request bodies to the Worker unparsed, so the Worker can hash the original bytes, verify, and then call the Swell API with the credentials the proxy injects. `references/frontend.md` (Signed third-party webhooks) covers the URL to register, the paths to avoid, and how the route is gated.
+
+Without a frontend, the fallback is to rebuild the sender's serialization from the parsed body and hash that. Key order, whitespace, escaping, and number formatting all have to match, and some values cannot be rebuilt: a float sent as `1.0` comes back as `1`. A genuine payload that does not rebuild byte-for-byte fails verification. Reject it anyway, and tell the user that some genuine deliveries will be rejected.
+
+Use the Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.verify`), which every Worker has. Functions run **without** Node compatibility, so Node's `crypto` module is not available there. Rely on `subtle.verify` for the comparison — it runs in constant time. Never compare signatures with `===`, which leaks timing information.
 
 ## Local testing caveat
 

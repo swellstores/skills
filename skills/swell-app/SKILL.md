@@ -215,7 +215,7 @@ export default async function (req: SwellRequest) {
 }
 ```
 
-**HTTP Route Triggers** expose a custom API endpoint. The basic shape is below; `references/functions-routes.md` covers handler dispatch (named vs. default vs. object exports, the `delete` reserved-word issue), `req.body` / `req.query` / `req.rawBody`, header allow-listing, cache tuning, and signature-verification patterns.
+**HTTP Route Triggers** expose a custom API endpoint. The basic shape is below; `references/functions-routes.md` covers handler dispatch (named vs. default vs. object exports, the `delete` reserved-word issue), `req.body` / `req.query` / `req.rawBody`, header allow-listing, cache tuning, and signed third-party webhooks. A route cannot reliably verify a signature over the request body, because the platform re-serializes the body and `req.rawBody` is not the sender's bytes. Terminate signed webhooks at the app's frontend Worker instead.
 
 ```typescript
 export const config: SwellConfig = {
