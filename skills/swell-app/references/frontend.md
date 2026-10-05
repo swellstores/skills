@@ -19,19 +19,16 @@ The frontend is **orthogonal to `components/`**, not an alternative. Integration
 
 For a new frontend, scaffold from a Swell template. The Swell templates carry the hosting profile, the connection helpers, and a working example of every pattern this reference describes.
 
-| `--frontend` | What it is | Choose it when |
-|---|---|---|
-| `swell-vinext` | Vinext — the Next.js App Router API on Vite: server and client components, route handlers, `next/*` imports | **Default.** Use it unless there is a reason not to. |
-| `swell-react` | React + Vite rendered in the browser, plus a small Worker for server endpoints. No server rendering, no router. | The app is a client-side tool and the user prefers plain React. |
+- `--frontend swell-vinext` Vinext — the Next.js App Router API on Vite: server and client components, route handlers, `next/*` imports. **Default choice.**
+- `--frontend swell-react` React + Vite rendered in the browser, plus a small Worker for server endpoints. No server rendering, no router.
 
 ```bash
 swell create frontend --frontend swell-vinext -y            # add a frontend to the app in the current directory
-swell create app <id> -t admin --frontend swell-vinext -y   # new app with a frontend
+swell create app <id> -t admin --frontend swell-vinext -p bun -y   # new app with a frontend
 ```
+Always pass `--frontend` together with `-y`.
 
-- **Always pass `--frontend` together with `-y`.** `swell create frontend -y` without it errors; `swell create app … -y` without it creates the app with no frontend.
-- `-p npm|yarn|pnpm|bun` picks the package manager (default: the app's lockfile, else npm). Requires Node.js 22.22.2 or newer.
-- The scaffold writes `frontend/`, makes the app root a package workspace that includes it (dependencies install from the app root), and sets `"frontend": { "hosting": "managed" }` in `swell.json`.
+The scaffold writes `frontend/`, makes the app root a package workspace that includes it (dependencies install from the app root), and sets `"frontend": { "hosting": "managed" }` in `swell.json`.
 
 The home page is a demonstration: replace it, keep the helpers. In the Vinext template, `next/*` imports come from Vinext — do not install the `next` package.
 
