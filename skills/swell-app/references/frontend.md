@@ -60,13 +60,13 @@ Both run server code for the app. They are different runtimes with different job
 
 | | `/app-api` handler in `frontend/` | Function in `functions/` |
 | --- | --- | --- |
-| Runs when | a page or external caller requests its URL, including a provider callback | a model event or hook fires, on a schedule, on a dashboard action, or on a call to its route |
-| Knows the viewer | A store user or shopper when present; provider callbacks need their own authentication | Not the frontend's viewer |
+| Runs when | a page or external caller requests its URL | a model event or hook fires, on a schedule, on a dashboard action, or on a call to its route, including a provider callback |
+| Knows the viewer | A store user or shopper when present | Not the frontend's viewer |
 | Reaches Swell through | the SDK clients | `req.swell` |
 | Logs | the `swell app dev` terminal; a deployed managed frontend's logs are not available, and are not in `swell logs` | `swell logs` |
 
-- **Put background work in a function**: reacting to store events, schedules and dashboard actions. A route function can also receive external calls that meet its key requirements. See `references/functions-*.md` and `references/actions.md`.
-- **A caller that cannot send a Swell key cannot reach a route function.** Receive a third-party callback with a fixed request format in an `/app-api` handler at the app address; this can be a frontend's only feature, with no custom UI. No viewer is attached. Verify Swell's context first; if signature verification needs a merchant-provided secret, read only the app settings needed for that check. Authenticate the provider and validate the payload before reading or changing business records. This credential lookup does not authorize business operations. Developer-owned secrets follow `references/settings.md`.
+- **Put background work in a function**: reacting to store events, schedules and dashboard actions. A route function also receives external calls, including a provider's callback with the public key in its address (`references/functions-routes.md`). See `references/functions-*.md` and `references/actions.md`.
+- **A provider callback goes to a route function first.** Use an `/app-api` handler only for a sender that will not keep credentials in the callback address; do not add a frontend to an app just to receive callbacks a route can take. When a handler is needed, it can be the frontend's only feature, with no custom UI. No viewer is attached. Verify Swell's context first; if signature verification needs a merchant-provided secret, read only the app settings needed for that check. Authenticate the provider and validate the payload before reading or changing business records. This credential lookup does not authorize business operations. Developer-owned secrets follow `references/settings.md`.
 - **Put work in a handler when it only serves the frontend's own pages.** A handler already has the Backend client; do not route a page's request through a function to reach the Backend API.
 - **Calling a function from a handler.** `backend.functions.call(context.appId, '<name>', data)` runs the function with the app's authority. Nothing about the viewer is forwarded: authorize in the handler first and pass what the function needs as data.
 

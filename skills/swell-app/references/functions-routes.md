@@ -60,7 +60,15 @@ export default {
 
 ## Calling routes from outside Swell (hosted gateway)
 
-External callers (storefronts, and other services that can send a Swell public key) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. A third-party service that cannot add an `Authorization` header cannot call a route; an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or the developer's own service has to receive it. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
+External callers reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`, and every call carries a Swell public key. A storefront sends it in the `Authorization` header. A third-party service that only takes a callback address, such as a provider's webhook, gets the key in the address, and its HTTP client sends it as Basic credentials:
+
+```
+https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<function_name>
+```
+
+Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
+
+Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 
 - **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Any valid public key for the environment where the app is installed works: the store's storefront public key (`pk_…`, what `swell-js` sends) or the app's own `app_pk_…` key. The key selects the environment (`…_test_…` routes to test) and populates the gateway's installed-app list; the slug in the URL is resolved against that list, not against the key's app identity. Without a resolvable key the gateway returns 404 `Function app.<slug>.<name> not found` — a key/environment-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
 - **Query parameters are forwarded only when the request body is empty** — the gateway sends `$call.data = body || query`, so a non-empty body drops the query string entirely. On a **GET** the platform re-materializes that data as real URL query parameters, so `req.query` and `req.data` are both populated and `req.body` is an empty string. On **non-GET** methods the data goes out as the JSON body and `req.query` is always empty. For externally-called non-GET routes, read inputs from `req.data` / `req.body` and put everything in the body.

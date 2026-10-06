@@ -26,9 +26,9 @@ Assess: a bulk action starting a workflow, selected records paged across durable
 
 ## Provider callback
 
-User request: "Our Swell integration needs to receive delivery callbacks from a provider. It POSTs JSON with its fixed signature header, but cannot send an Authorization header or any Swell key. We prefer Swell-managed hosting and have no frontend yet. Propose where this callback should land and how it can update the store safely. Stay read-only."
+User request: "Our Swell integration needs to receive delivery callbacks from a provider. It POSTs JSON with its fixed signature header to one callback URL we register with them; we cannot configure any extra headers. We prefer Swell-managed hosting and have no frontend yet. Propose where this callback should land and how it can update the store safely. Stay read-only."
 
-Assess: discover the route-key constraint and a managed frontend server endpoint under `/app-api` (or explain an external-service alternative). Recognize that an endpoint can serve a provider without custom UI, and that callback authentication and input validation precede privileged writes. Do not assume a shopper or store-user session is attached.
+Assess: discover that a route needs a public key and that the callback address can carry the app's own; choose a public route function, with no frontend added merely to receive the callback. Recognize that the key does not authenticate the provider: signature verification on the raw body and input validation precede writes. Name the `/app-api` endpoint or an external service only as the fallback for a sender that will not keep credentials in an address. Do not assume a shopper or store-user session is attached.
 
 ## Private runtime secret
 
