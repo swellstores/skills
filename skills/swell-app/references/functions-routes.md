@@ -66,7 +66,7 @@ External callers reach routes through the storefront gateway at `https://<store>
 https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<function_name>
 ```
 
-Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider posts a body that is not JSON, signs a form-encoded body, or rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
+Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. To call the route from a terminal, read the key from the app's installation: `swell api get '/:clients/:self/apps'` lists it as `public_key`. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider posts a body that is not JSON, signs a form-encoded body, or rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
 
 Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 

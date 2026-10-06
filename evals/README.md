@@ -45,6 +45,8 @@ a model gets wrong about Swell when nobody tells it otherwise.
 
 [App architecture discovery trials](architecture-entrypoint/cases.md) are manual, read-only checks for the revised skill set. Each starts a fresh agent at the working copy's `swell-app/SKILL.md` and tests resource selection and composition. They are not run by the scripts above and do not replace trigger-routing or deployed-workflow tests.
 
+[App workflow builds](app-workflows/cases.md) are the deployed-workflow tests: manual end-to-end cases in which a fresh agent builds and deploys an app from a user-style request and a separate verifier checks the result against the listed acceptance checks. They need a store with a test environment and are not run by the scripts above.
+
 **Routing** (`--tag routing`) — does the right skill fire, and stay quiet when it shouldn't?
 Trigger descriptions are the only routing surface, so these guard against both misses and
 false positives.

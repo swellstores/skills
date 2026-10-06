@@ -9,7 +9,7 @@ Each settings file creates a grouped panel in the App Preferences UI. Structure:
 - **Group keys are kebab-cased filenames.** Settings returned by `settings()` are namespaced under the filename, but the CLI converts `_` to `-` first: `settings/new_section.json` deploys as the group `new-section`, read as `settings['new-section'].<field>` — `settings.new_section` is `undefined`. Name settings files in kebab-case so the group key matches the filename exactly.
 - **`field_group` does not introduce nesting** — its child fields are flattened to the parent level.
 - **Select-style fields require `options` entries as `{ "value": …, "label": … }` objects** — bare strings fail validation.
-- **One record per app.** An app's settings files collapse to one platform record at push time. Inspect it with `swell inspect settings --app=.`.
+- **One record per app.** An app's settings files collapse to one platform record at push time. Inspect it with `swell inspect settings --app=.`. To set values for a test without the dashboard, write them to the same record: `swell api put '/settings/<app_id>' --body '{"<group>":{"<field>":"…"}}'`.
 - **Saved values do not travel with the app.** An app installed in another store or environment starts with empty settings values — see `references/app-publishing.md`.
 
 ## Configuration, credentials and secrets

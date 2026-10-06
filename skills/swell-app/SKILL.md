@@ -244,8 +244,6 @@ Five behaviours that decide whether a deploy actually did what you think:
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
 - **`swell api` targets the test environment** unless `--live` is passed.
 
-JSON-manifest validation is currently broken on released CLIs (`no schema with key or ref ".../2020-12/schema"`); `--format=dts` and function validation still work. Fall back to authoring against the dts output and treating `swell app push` as the real check — details and the workaround in `references/cli.md`.
-
 ## Development cycle
 
 The five gates describe delivery of a working app change. Apply them to the requested outcome and affected behavior; related resources can share schema discovery, a deployment and test evidence. A `frontend/` uses the adaptations under "Gate alignment" in `references/frontend.md`.
@@ -268,7 +266,7 @@ Pass: You have the schema output and understand the structural requirements for 
 
 ### Gate 3 — Author & Validate
 
-For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes; when the CLI lacks the required shape, follow the resource reference's adaptation (for example, actions start from a route scaffold). Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file` (if it errors on the JSON Schema draft, follow the validation known issue under "CLI"). For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
+For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes; when the CLI lacks the required shape, follow the resource reference's adaptation (for example, actions start from a route scaffold). Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
 Pass: Supported local validation and relevant type checks pass. Name unavailable checks and any pre-existing failures separately; do not claim deployment validation from local checks alone.
 
 ### Gate 4 — Deploy & Verify
