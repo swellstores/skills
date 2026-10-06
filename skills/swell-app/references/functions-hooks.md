@@ -5,7 +5,7 @@ Synchronous handlers that run inside the originating API request. Prefix a model
 ```typescript
 export const config: SwellConfig = {
   description: "Validate review rating before save",
-  model: { events: ["apps/<app_id>/reviews/before:review.created"] },
+  model: { events: ["before:review.created"] },
 };
 
 export default async function (req: SwellRequest) {
@@ -68,12 +68,9 @@ Writes from inside a hook re-trigger the same hook chain. Guard with `conditions
 
 ## Event syntax
 
-Format: `<modelPath>/<hook>:<root>.<type>`. The hook prefix sits immediately before the event root, never before the model path. Short form `'<hook>:<root>.<type>'` is valid when no model path is given.
+Format: `<hook>:<root>.<type>`, with the hook prefix immediately before the event root. The event root is the singular of the collection name (`review` for `reviews`, `product` for `products`).
 
-The event root is the singular of the collection name (`review` for `reviews`, `product` for `products`).
-
-- **Standard models** — short form is fine: `'before:product.updated'`.
-- **App-defined collections** — use the fully-qualified path to avoid collisions with same-root standard models: `'apps/<app_id>/reviews/before:review.created'`.
+The form is the same for a standard model (`'before:product.updated'`) and for one of the app's own collections (`'before:review.created'`). A name is matched against the app's own collections first, then against standard models.
 
 ## Only `created`/`updated`/`deleted` are real hook phases
 
