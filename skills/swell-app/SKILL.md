@@ -99,7 +99,7 @@ Server logic. Each top-level file is one function with exactly one trigger; shar
 
 Calling a route from outside Swell:
 
-- The address is `https://<store>.swell.store/functions/<app_id>/<name>`, and the caller **must send a valid public key in `Authorization` even when the route is `public`**. A storefront sends it as a header. A third-party service that only takes a callback address, such as a provider's webhook, gets the app's public key in the address, which its HTTP client turns into that header: `https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<name>`. Only a sender that will not keep credentials in an address needs another receiver: an `/app-api` endpoint of the app's frontend, or the developer's own service.
+- The address is `https://<store>.swell.store/functions/<app_id>/<name>`, and the caller **must send a valid public key in `Authorization` even when the route is `public`**. A storefront sends it as a header. A third-party service that only takes a callback address, such as a provider's webhook, gets the app's public key in the address, which its HTTP client turns into that header: `https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<name>`. A sender whose body is not JSON, or that will not keep credentials in an address, needs another receiver: an `/app-api` endpoint of the app's frontend, or the developer's own service.
 - `req.session` holds the shopper's session only when a storefront calls the route at that address.
 
 Limits that hold for every function:

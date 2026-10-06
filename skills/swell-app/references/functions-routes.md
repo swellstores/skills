@@ -48,9 +48,9 @@ export default {
 
 `req.data` on a route is the parsed body merged with the query params, with **query keys overwriting body keys**. When that precedence matters (security-sensitive handlers, conflicting names), use the layer-specific accessors:
 
-- `req.body` — parsed JSON object, or the raw text string when the body isn't JSON.
+- `req.body` — the parsed JSON object. Only JSON gets through from an outside caller: a form-encoded body arrives converted to an object, and any other body (XML, plain text) arrives empty.
 - `req.query` — URL parameters as `{ [key]: string }`.
-- `req.rawBody` — untouched body text. Use for HMAC and webhook signature verification — re-stringifying `body` won't byte-match the original.
+- `req.rawBody` — the body as text; "Signature verification" says when it is the caller's exact text.
 
 ## Authentication
 
@@ -66,7 +66,7 @@ External callers reach routes through the storefront gateway at `https://<store>
 https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<function_name>
 ```
 
-Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
+Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider posts a body that is not JSON, signs a form-encoded body, or rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
 
 Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 
@@ -96,7 +96,7 @@ The platform's HTTP client stops reading a function response at 75,000 bytes mid
 
 ## Signature verification (HMAC, third-party webhooks)
 
-When verifying a third-party webhook signature, hash `req.rawBody` — re-stringifying `req.body` won't byte-match the original payload and signatures will never match.
+When verifying a third-party webhook signature, hash `req.rawBody`. For a JSON body on a call through the storefront gateway it is the exact text the caller sent; re-stringifying `req.body` won't byte-match it. A form-encoded body arrives rewritten, so a signature over one cannot be verified in a route. `swell api` rewrites the body as well: test a signature check with a real HTTP request to the gateway address.
 
 Functions run on Cloudflare Workers **without** Node compatibility: use the Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.verify`), not Node's `crypto` module. Rely on `subtle.verify` for the comparison — it runs in constant time. Never compare signatures with `===`, which leaks timing information.
 
