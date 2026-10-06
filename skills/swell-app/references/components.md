@@ -57,7 +57,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 }
 ```
 
-Changes to `value`, `context`, `params`, `readonly` and `locale` arrive as a **re-render with new props**; there is no change event. `setValue`, `setValidity`, `fetch` and `on` keep the same identity across renders. Values and context must be structured-cloneable.
+Changes to `value`, `context`, `params`, `readonly` and `locale` arrive as a **re-render with new props**; there is no change event. `setValue` re-renders the component with the new value at once; the host sends a value back only when it changes elsewhere or when the host refuses the one you set (a non-string on a text field, a read-only field). `setValue`, `setValidity`, `fetch` and `on` keep the same identity across renders. Values and context must be structured-cloneable.
 
 What the admin content field puts into the props:
 
@@ -69,7 +69,7 @@ What the admin content field puts into the props:
 | `settings` | The app's **public** settings (setting fields flagged `public`). |
 | `locale` | The store's default locale. Localized component values are not supported. |
 | `readonly` | `true` while the field is disabled or read-only. A `setValue` sent while read-only is dropped. |
-| `setValidity(msg)` | `msg` blocks saving and shows under the field; `null` clears it. |
+| `setValidity(msg)` | `msg` blocks saving and shows under the field; `null` clears it. A `required` field rejects an empty value itself ("Required") before asking the component, so use `setValidity` for non-empty values that are invalid. |
 | `fetch` | See "Calling the backend". |
 | `on` | The admin sends no events to content field components. |
 
@@ -126,10 +126,10 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
   }
   ```
 
-  App frontend (Hono shown; `verifySwellContext` throws on a missing or invalid context, which also means reject):
+  App frontend (Hono shown; `verifySwellContext` throws on a missing or invalid context, which also means reject; pin `appId` so a context minted for another app does not verify):
 
   ```ts
-  const ctx = await verifySwellContext(c.req.raw.headers, { env: c.env }).catch(() => null);
+  const ctx = await verifySwellContext(c.req.raw.headers, { env: c.env, appId: '<app_id>' }).catch(() => null);
   if (!(ctx?.surface === 'admin' && ctx.storeUser)) {
     return c.json({ error: 'admin_component_only' }, 403);
   }
