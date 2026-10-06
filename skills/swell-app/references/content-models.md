@@ -20,6 +20,8 @@ An action is a **navigation link, never a mutation.** Only three built-in ids ca
 
 The `collection` content type creates inline references to other collections without duplicating data. Declare with `"type": "collection"`, target via `"collection": "products"` (or `"products:variants"` for child collections), and define the join with `"link": { "params": { "account_id": "id" } }`. This renders as a filterable list widget in the edit view.
 
+A field with `"type": "component"` renders in the admin with an app component from `./components/` instead of a built-in input: `{ "id": "brand_color", "label": "Brand color", "type": "component", "component": "ColorPicker", "params": { ... } }`. `component` names the pushed component (the file name with `_` → `-`) and is required; `params` (a plain object) reaches the component as `props.params`. The value is stored as a `string` unless `models/` declares the field with another type, which then wins. A push fails if the named component does not exist — the CLI pushes components before content. Components, their props, and calling the app's backend: `references/components.md`.
+
 For field types, input widgets, and all property options, consult `swell schema content --format=dts`.
 
 ```json

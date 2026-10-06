@@ -195,6 +195,8 @@ Verify: `swell logs --type function --app=.` — two `payment.charge` entries fo
 
 ## Checkout Component
 
+This section covers the legacy checkout payment component (`config.extension`, evaluated by `swell-js` in the checkout page). Components that render in admin content fields are a different, iframe-based mechanism: `references/components.md`. A component with `config.extension` keeps this contract and the legacy build; one without it is an admin field component.
+
 Payment methods that need custom browser UI add a top-level `components/<Name>.tsx`. The file must export a named `config` AND a default Preact component. The bundler validates only `config`; a missing default export deploys cleanly and renders nothing at runtime.
 
 ```typescript

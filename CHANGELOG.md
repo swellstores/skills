@@ -4,6 +4,11 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `swell-app`: `references/components.md` documents app components in admin content fields (`type: "component"`): files and names, the Preact build, `ComponentProps`, calling functions and `/app-api` with `props.fetch`, `req.swellContext`, and the security model; cross-references added to the content-model, route, frontend, CLI and payment-extension references.
+
 ## [0.5.0] - 2026-08-29
 
 Source-verification pass: 1,128 factual claims across all three skills were checked against platform, CLI, and SDK source, then the result was adversarially reviewed and re-verified. 437 corrections and additions applied across two rounds; where developers.swell.is and the platform's source disagreed, the source won.
