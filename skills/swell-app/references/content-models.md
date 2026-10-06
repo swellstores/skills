@@ -1,6 +1,6 @@
 # Content Models
 
-Content models configure Admin Dashboard views in `./content/*.json`. They control how merchants interact with data: list columns, form layouts, navigation, and input behavior. As established in Section I, content models map to data model Resource IDs and define UI logic only; data logic belongs in `./models/*.json`. Content field ID must correspond to a data model field.
+Content models configure Admin Dashboard views in `./content/*.json`. They control how merchants interact with data: list columns, form layouts, navigation, and input behavior. Content models map to data model Resource IDs and define UI logic only; data logic belongs in `./models/*.json` (`references/data-models.md`). Content field ID must correspond to a data model field.
 
 **Decision Guide:**
 

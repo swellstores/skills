@@ -54,13 +54,13 @@ export default {
 
 ## Authentication
 
-`route.public: true` exposes the endpoint without auth. `public: false` (or omitted) requires the store's secret key in the request.
+`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request.
 
 `req.session` carries the storefront customer session, but only the storefront gateway attaches it (`Swell-Session` header). On every other invocation path it is `null` — see Local testing caveat. Storefront routes typically gate on `req.session?.account_id`.
 
 ## Calling routes from outside Swell (hosted gateway)
 
-External callers (storefronts, third-party webhooks) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
+External callers (storefronts, and other services that can send a Swell public key) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. A third-party service that cannot add an `Authorization` header cannot call a route; an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or the developer's own service has to receive it. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 
 - **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Any valid public key for the environment where the app is installed works: the store's storefront public key (`pk_…`, what `swell-js` sends) or the app's own `app_pk_…` key. The key selects the environment (`…_test_…` routes to test) and populates the gateway's installed-app list; the slug in the URL is resolved against that list, not against the key's app identity. Without a resolvable key the gateway returns 404 `Function app.<slug>.<name> not found` — a key/environment-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
 - **Query parameters are forwarded only when the request body is empty** — the gateway sends `$call.data = body || query`, so a non-empty body drops the query string entirely. On a **GET** the platform re-materializes that data as real URL query parameters, so `req.query` and `req.data` are both populated and `req.body` is an empty string. On **non-GET** methods the data goes out as the JSON body and `req.query` is always empty. For externally-called non-GET routes, read inputs from `req.data` / `req.body` and put everything in the body.

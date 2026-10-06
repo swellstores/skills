@@ -52,7 +52,7 @@ The rules that hold for every template and every app type:
 - **Backend failures throw.** The Backend client rejects with a `SwellError` (`status`, `code`, `body`), including on a write that fails validation — not the `result.errors` object swell-node returns.
 - **Endpoints live under `/app-api`.** Swell answers `/api`, `/graphql`, `/playground`, `/checkout/` and `/functions/` itself on every address it routes to the frontend, so declare no page or handler under them. Push warns about Vinext route files under `/api`, and cannot see routes declared any other way.
 - **Swell sets the caching, framing and cross-origin headers.** Every response of a managed frontend goes out as `Cache-Control: private, no-store`, except the build's content-hashed assets, and with Swell's own `Access-Control-Allow-Origin` and frame policy in place of the app's. Do not design around response caching, and do not rely on headers of that kind set in app code. The `Cache-Control: private, no-store` that the scaffold's examples send is harmless; keep it.
-- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI explicitly excludes `.dev.vars*` from uploads; `.env*` exclusion relies on the scaffold's `.gitignore`. Read merchant configuration with the Backend client's `settings()`; what SKILL.md says under "Settings" (not a secret store) and "App Permissions" (`read_settings` once `permissions` is non-empty) applies here too.
+- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI explicitly excludes `.dev.vars*` from uploads; `.env*` exclusion relies on the scaffold's `.gitignore`. Read merchant configuration with the Backend client's `settings()`. Settings are not a secret store (`references/settings.md`), and the read needs the `read_settings` scope once `permissions` is non-empty (`references/permissions.md`).
 
 ## Frontend endpoint or app function
 
@@ -66,8 +66,9 @@ Both run server code for the app. They are different runtimes with different job
 | Logs | the `swell app dev` terminal; a deployed managed frontend's logs are not available, and are not in `swell logs` | `swell logs` |
 
 - **Put work in a function when it must happen with nobody looking at the frontend**: reacting to store events, schedules, dashboard actions, calls from other systems. See `references/functions-*.md` and `references/actions.md`.
+- **A caller that cannot send a Swell key cannot reach a route function.** A third-party callback with a fixed request format is received by a handler, at the app address. No viewer is attached to it: the handler verifies the caller itself before it touches the Backend client.
 - **Put work in a handler when it only serves the frontend's own pages.** A handler already has the Backend client; do not route a page's request through a function to reach the Backend API.
-- **Calling a function from a handler.** `backend.functions.call(context.appId, '<name>', data)` runs the function with the app's authority. Nothing about the viewer is forwarded: authorize in the handler first and pass what the function needs as data. If the call rejects with `Function not found` for a function that is deployed, the platform is not resolving the app by that id; do the work in the handler instead.
+- **Calling a function from a handler.** `backend.functions.call(context.appId, '<name>', data)` runs the function with the app's authority. Nothing about the viewer is forwarded: authorize in the handler first and pass what the function needs as data.
 
 ## Local development
 
