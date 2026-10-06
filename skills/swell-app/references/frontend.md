@@ -120,7 +120,7 @@ There is no automatic navigation entry. Link to the frontend from content models
 }
 ```
 
-A non-empty `actions` array **replaces** the view's default actions — it does not append. Record views default to `actions: ["save"]` with `extra_actions: ["delete"]`; list views default to `actions: ["new"]`, and `extra_actions` replaces the same way. Declaring only `open-app` on an edit view ships a record the merchant can open in your app but can no longer save, so re-declare every default you still want.
+An `actions` array that contains a link (or any built-in id) **replaces** the view's default actions — it does not append; only an array made entirely of function actions is added after the defaults (see `references/actions.md`). Record views default to `actions: ["save"]` with `extra_actions: ["delete"]`; list views default to `actions: ["new"]`, and `extra_actions` replaces the same way. Declaring only `open-app` on an edit view ships a record the merchant can open in your app but can no longer save, so re-declare every default you still want.
 
 ## Gate alignment
 

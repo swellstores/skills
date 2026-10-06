@@ -4,6 +4,22 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-10-06
+
+Covers platform and CLI changes through 2026-10-06, plus the fixes merged since 0.5.0.
+
+### Added
+- `swell-app`: `references/actions.md`, covering app actions (dashboard buttons that run app functions or workflows): where they render (the settings Actions menu, view `actions`/`extra_actions`, list `bulk_actions`, `type: "action"` fields), the `action: true` trigger, the `$action` context and the bulk `selection.query`, dialogs, how view defaults merge or get replaced, permissions (admin users only, refused through `$call` and the storefront gateway, role checks), local-dev behavior and testing, push and run-time error codes, the minimum `@swell/cli` (2.9.23) and `@swell/app-types` (1.2.6) versions, and an id-cursor recipe for bulk actions whose writes change what the list filters on.
+
+### Changed
+- `swell-app`: workflows are available on every store. The beta feature gate and its `workflow_beta_*` errors are gone. Workflows can declare `action: true` to be started by app actions, can read and update their own app's settings at `/settings/<req.appId>`, and their runs are listed in a Workflows tab on the app's dashboard page.
+- `swell-app`: content-model actions are no longer links only. Function actions, bulk actions, and action fields write data from the dashboard, on app collections and on standard pages. A view's `actions` made entirely of function actions are added after the defaults instead of replacing them.
+- `swell-app`: `swell app dev` also runs action functions locally; workflows started by actions run the pushed version.
+- `swell-app`: JSON-manifest validation works again from `@swell/cli` 2.9.24, which validates against draft 2020-12; the workaround now applies only to older CLIs. Tests scaffolded by 2.9.24 also define a `SwellResponse` global.
+- `swell-app`: the new `secret` settings field type masks the input in App Preferences but stores plain text, so settings are still not a secret store.
+- `swell-app`: an app's functions can call each other with `PUT /:functions/app.<app slug or id>.<name>` and a `$call`-only body, with no `permissions` entry needed.
+- `swell-app`: always declare `permissions` (#5); `req.isLocalDev` no longer needs a cast, and the tests-scaffold vitest pin note is removed (#6); the frontend reference is corrected for admin and integration app frontends (#9).
+
 ## [0.5.0] - 2026-08-29
 
 Source-verification pass: 1,128 factual claims across all three skills were checked against platform, CLI, and SDK source, then the result was adversarially reviewed and re-verified. 437 corrections and additions applied across two rounds; where developers.swell.is and the platform's source disagreed, the source won.

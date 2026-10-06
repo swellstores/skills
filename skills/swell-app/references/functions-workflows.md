@@ -1,19 +1,14 @@
-# Workflows (Beta — feature-gated)
+# Workflows
 
 Durable functions that run as a sequence of retriable steps, persist across restarts, and can sleep for long periods. Use for multi-step background processes that must survive failures between steps — syncs to external systems, long-running fulfillment flows, delayed follow-ups.
 
-## Availability gate
+## When to use
 
-Workflows are behind the `functions.workflows` feature flag, enabled **per store by Swell**. When the flag is off:
-
-- `swell app push` fails with `Workflow deployment is not enabled for this store`, code `workflow_beta_deploy_not_allowed`
-- `req.swell.workflows.create()` fails with `Workflow creation is not enabled for this store`, code `workflow_beta_create_not_allowed`
-
-Both are HTTP 400 with `retryable: false`. Neither is a code problem — report the message and code to the user and stop; do not debug the workflow code, and do not retry. Enabling the flag is a Swell-side action; the CLI and the app cannot do it. Do not propose workflows unprompted: prefer cron/model/route triggers unless the user explicitly requests workflows or the store is confirmed enabled.
+Workflows are available on every store — there is no beta flag to enable, and the old `workflow_beta_*` errors no longer occur. Reach for one when the work needs retriable steps, long sleeps, or more time than a function's timeout allows, including dashboard actions over many records (see `references/actions.md`). For short, single-step logic, a route, model, cron, or action function is simpler.
 
 ## Declaring
 
-`kind: 'workflow'` plus a default-exported class with `run(req, step)` — no handler function, and no `route`/`model`/`cron`/`extension`/`timeout` config keys:
+`kind: 'workflow'` plus a default-exported class with `run(req, step)` — no handler function, and no `route`/`model`/`cron`/`extension`/`timeout` config keys. The one trigger a workflow can declare is `action: true`, which lets app actions start it (see Starting a workflow):
 
 ```typescript
 // functions/sync-order.ts — the FILE basename is the workflow's name, not the class
@@ -58,7 +53,7 @@ await step.do('call warehouse', {
 
 ## Starting a workflow
 
-From any app function (route, model event, cron):
+From any app function (route, model event, cron, action):
 
 ```typescript
 const run = await req.swell.workflows.create('sync-order', { order_id: id });
@@ -67,7 +62,11 @@ const run = await req.swell.workflows.create('sync-order', { order_id: id });
 
 The first argument is the workflow's **function name**: the pushed file's basename with underscores converted to hyphens. `functions/sync_order.ts` and `functions/sync-order.ts` both register as `sync-order`; `functions/syncOrder.ts` registers as `syncOrder`. It is never the exported class name — a `SyncOrder` class buys you nothing. Confirm the deployed name with `swell inspect workflows --app=.`; a wrong name is a 404 `workflow_not_found`, and naming a non-workflow function is `workflow_manifest_not_workflow`. An app may declare at most 25 workflows (`workflow_count_exceeded` at push).
 
-The second argument is passed through as `req.data` inside the workflow. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
+The second argument is passed through as `req.data` inside the workflow, and the run's `req.workflow.trigger` is `function`. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
+
+### From an app action
+
+Set `action: true` in the workflow's config and name the workflow in an action's `function` (settings `actions`, view `actions`/`extra_actions`/`bulk_actions`, or a `type: "action"` field). Each click starts a run and returns immediately. The run receives the same `req.data` as an action function — the dialog's field values plus `$action` — and `req.workflow.trigger` is `action`. The same 128 KB params limit applies (`workflow_params_too_large`), so a bulk action over thousands of individually selected records fails before the run starts. While the run is active the action is disabled (an action field also shows the run's status and current step); when it ends the dashboard reports the outcome and reloads the page. The workflow's return value is never shown. Functions can pass a forged `$action` to `workflows.create()`, so trust `$action` only when `req.workflow.trigger === 'action'`. Full action contract: `references/actions.md`.
 
 Inside the workflow, `req.swell` is a **narrower** client than a function's, not the same one:
 
@@ -75,10 +74,11 @@ Inside the workflow, `req.swell` is a **narrower** client than a function's, not
 |---|---|
 | `get/post/put/delete` | Ordinary store collections only |
 | `settings()` | No argument — always resolves the app's own settings |
-| `/settings/...` paths | Rejected: `workflow_operation_blocked` |
+| `/settings/...` paths | Own app only: `/settings/<req.appId>` (or the app's id) can be read and updated. No query string, and no `id`/`where` in the body; any other settings path is rejected with `workflow_operation_blocked` |
 | `:`-prefixed paths (`/:functions`, `/:cache`, …) | Rejected: `workflow_operation_blocked` |
-| `/:batch` | Allowed (the one `:` exception) — child ops are re-validated *without* it, so no nested batch, `/:transaction`, `/settings`, or `..` inside |
+| `/:batch` | Allowed (the one `:` exception) — child ops are re-validated *without* it, so no nested batch, `/:transaction`, store or other apps' settings, or `..` inside |
 | `/:transaction` | Rejected — no transactions inside a workflow |
+| `include` or `$jsonp` in data or query | Rejected: `workflow_operation_blocked` |
 | `appValues()` | **Does not exist** |
 | `workflows.create()` | **Does not exist** — a workflow cannot start another workflow |
 
@@ -90,15 +90,15 @@ await req.swell.put(`/orders/${orderId}`, { $app: { [req.appId]: { synced: true 
 
 Calling `req.appValues(...)` instead throws `TypeError: req.appValues is not a function` inside the step, and the step-retry machinery retries that TypeError to exhaustion — the run reads as a flaky integration, not a typo.
 
-`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`). `req.isLocalDev` is always `false`.
+`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `action` for runs an app action started and `function` for runs started with `workflows.create()`. `req.isLocalDev` is always `false`.
 
 ## Deploy-only iteration loop
 
 Workflows do **not** execute under `swell app dev` — your other functions still do, but workflow instances run only after `swell app push`. Iterate as:
 
 1. `swell app push`
-2. Trigger from a function (`swell api` against the calling route or model event)
-3. Inspect: `swell inspect workflows --app=.` (deployed workflows), `swell inspect workflow-runs --app=.` (recent instances + status)
+2. Trigger from a function (`swell api` against the calling route or model event), or click its action in the dashboard
+3. Inspect: `swell inspect workflows --app=.` (deployed workflows), `swell inspect workflow-runs --app=.` (recent instances + status, including which action started a run). The app's page in the dashboard also has a **Workflows** tab listing runs with their steps and errors; users with manage or full Apps access can cancel an active run there (finished steps are not undone)
 4. Logs: `swell logs --type workflow --app <id>` (step-level logs)
 
 This also means Gate 5 testing for workflows happens against the test environment via push, never via local dev or direct localhost calls.
