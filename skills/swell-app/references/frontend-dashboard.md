@@ -9,7 +9,7 @@ A frontend is the most expensive way to put something in the dashboard. Go down 
 | Need | Use |
 | --- | --- |
 | List, filter, create and edit records | Content-model views — `references/content-models.md` |
-| A button that does something: on a record, on selected records, in a field, or in the app's settings; optionally asking a few inputs in a dialog first | An action that runs a function, or a workflow when the work outlives a function timeout — <https://developers.swell.is/apps/actions> |
+| A button that does something: on a record, on selected records, in a field, or in the app's settings; optionally asking a few inputs in a dialog first | An action that runs a function, or a workflow when the work outlives a function timeout — `references/actions.md` |
 | Anything else: multi-step flows, charts and summaries across records, a custom layout, an embedded third-party widget | A frontend |
 
 They combine. A typical app keeps its records in content-model views, runs its one-click operations as actions, and opens a frontend page for the one screen neither can express.
