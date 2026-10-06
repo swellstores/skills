@@ -120,22 +120,22 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
 
   Function:
 
-```ts
+  ```ts
   if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
     throw new SwellError('Admin component calls only', { status: 403 });
   }
   ```
 
-  App frontend:
+  App frontend (Hono shown; `verifySwellContext` throws on a missing or invalid context, which also means reject):
 
-```ts
-  const ctx = await verifySwellContext(headers, { env });
-  if (!(ctx.surface === 'admin' && ctx.storeUser)) {
-    // respond 403: not an admin component call
+  ```ts
+  const ctx = await verifySwellContext(c.req.raw.headers, { env: c.env }).catch(() => null);
+  if (!(ctx?.surface === 'admin' && ctx.storeUser)) {
+    return c.json({ error: 'admin_component_only' }, 403);
   }
   ```
 
-  `storeUser` without `surface` is an admin browsing the app frontend with their dashboard cookie, not a component call; `surface` is set only when a component token was used. Check `surface` too when only admin components may call. A bare `if (req.swellContext)` is not a check.
+  `storeUser` without `surface` is an admin browsing the app frontend with their dashboard cookie, not a component call; `surface` is set only when a component token was used. A bare `if (req.swellContext)` is not a check.
 - `req.swellContext` is `null` unless the platform forwarded a signed context (secret-key calls, storefront calls, hooks, cron). Treat `null` as "not from a component", never as "allowed".
 - The token is never accepted as a `Swell-Context`: it has its own token type and audience, and the platform drops any `Swell-Context` a client sends.
 
