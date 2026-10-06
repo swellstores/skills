@@ -12,7 +12,7 @@ Applies to `admin` and `integration` apps. A full working app: the `components-e
 - A component's **name** is the file name with `_` replaced by `-`: `ColorPicker.tsx` → `ColorPicker`, `color_picker.tsx` → `color-picker`. Content fields, the metadata endpoint, and the dev route all use that normalized name, so `component: "color-picker"` — not `color_picker`. `swell create component` writes PascalCase names, which need no normalization.
 - Use only letters, digits, `_` and `-` in the file name. Push does not check it, but the content field's `component` must match `^[\w-]+$` and the shell page only serves `[\w-]+`, so `Color.Picker.tsx` pushes and then can never be referenced or loaded.
 - `export const config` is optional and must be a **static object literal**: no spreads, no computed keys, no references to values computed at runtime. The CLI reads it from the source without running it. v1 defines only `description`. A non-static `config` fails that component's push.
-- A **default export is required**. Without one the compile fails (esbuild: `No matching export … for import "default"`) and push prints a `Unable to compile component <name> …` line for that file. This differs from legacy payment components, where a missing default export deploys and renders nothing.
+- A **default export is required**. Without one the compile fails (esbuild: `No matching export … for import "default"`) and push prints a `Unable to compile component <name> …` line for that file. Legacy payment components (`config.extension`) are different: a missing default export deploys and renders nothing.
 - Push is not all-or-nothing and exits 0 on per-file failures — see `references/cli.md`. A component that failed to compile is simply missing, which then fails any content that names it.
 
 ## Scaffold
@@ -23,6 +23,7 @@ swell create component ColorPicker -d "Brand color picker" -y
 
 Writes `components/ColorPicker.tsx` (a text input bound to `value` / `setValue`). It also, without overwriting what exists:
 
+- without a `package.json` it only warns (run `npm init`, then install `preact` and `@swell/apps-sdk` yourself);
 - adds `preact` to `dependencies` and `@swell/apps-sdk` to `devDependencies` — run `npm install`;
 - writes `components/tsconfig.json` (Preact JSX, DOM libs, `react` → `preact/compat` paths);
 - adds `components` to the root `tsconfig.json`'s `exclude`;
@@ -62,7 +63,7 @@ What the admin content field puts into the props:
 
 | Prop | Content |
 |---|---|
-| `value` / `setValue(v)` | The field value. `null` when empty — never `''`, `undefined` or `0`. |
+| `value` / `setValue(v)` | The field value. `null` when the field is empty (an `''` a component sent stays `''`). `setValue(null)` — or `undefined`, which arrives as `null` — clears any field, string fields included. |
 | `context` | `{ record, field }`. `field` is `{ id, label, required, type }`. |
 | `params` | The field's `params` from `content/*.json`. `{}` when none. |
 | `settings` | The app's **public** settings (setting fields flagged `public`). |
@@ -76,11 +77,11 @@ Exact semantics:
 
 - `context.field.type` is the **model field type** (`string`, `int`, `array`, `object`, …), so a component knows what it stores. It is `'string'` when the app's models do not declare the field.
 - `context.record` depends on where the field is:
-  - **Record page** (edit and new): the whole record **with unsaved form edits**, so a component can read other fields. No permission filtering — the component sees every field the form has.
+  - **Record page** (edit and new): the whole record **with unsaved form edits**, so a component can read other fields. The record is the form's own data and is not filtered by permissions (no filtering is applied in `conditionValues`).
   - **Row of a collection field**: the row.
   - **App action modal**: the modal's form values. There is no record and the target record id is not passed (the action's `record_id` is not in `context`).
 - `$settings` is not part of `context.record`; use `props.settings` for public settings.
-- `setValue` is type-checked against the model field type. On a `string` field a non-string value is **rejected, not coerced**: the field shows `The component sent <a list | an object | a number | …>; this field stores text.`, the value does not change, and the form cannot be saved until the component sends a valid value. Send strings (`JSON.stringify` for structured data) or declare the field in `models/` with the type you store.
+- `setValue` is type-checked against the model field type. On a `string` field a non-empty non-string value is **rejected, not coerced** (`null` is not rejected; it clears the field): the field shows `The component sent <a list | an object | a number | …>; this field stores text.`, the value does not change, and the form cannot be saved until the component sends a valid value. Send strings (`JSON.stringify` for structured data) or declare the field in `models/` with the type you store.
 - `setValidity('message')` keeps the form from saving until the component calls `setValidity(null)`. A stale message can remain visible after clearing until the next change or submit.
 - A component that fails to start shows its error under the field and does not take the form down. An error after a successful start shows as a notice and does not block saving.
 
@@ -111,12 +112,31 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
 
 - **Third-party URLs get the plain `fetch`** — no token. A component that needs a third-party API with secrets goes through an app function.
 - The platform verifies the token (signature, expiry, store, installation, app) and mints a signed **`Swell-Context`** with `surface: 'admin'` and `admin: { user_id }` for the call. The token is valid for 600 seconds and is refreshed by the host; it is scoped to one installation of one app.
-- **Functions** see the minted context as `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface, storefrontId? }` — and `null` for every other caller. The runtime does not verify the signature (only the platform can set the header); call `verifySwellContext(req.headers)` from `@swell/apps-sdk` when a function needs proof.
+- **Functions** see the minted context as `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface, storefrontId? }` — and `null` unless the platform forwarded a signed context. The runtime does not verify the signature (only the platform can set the header); call `verifySwellContext(req.headers)` from `@swell/apps-sdk` when a function needs proof.
 - **A route function called with its own app's context does not need `route.public: true`**, and a secret key is not required. Only route functions qualify (not hooks or cron), only of the token's own app. Calls for another app's function fall back to the normal secret-key rule.
 - **GET responses for such calls are not cached.**
 - **The app frontend** verifies the context with `verifySwellContext` (see `references/frontend.md`). `surface` is absent on contexts the proxy mints for ordinary requests, and `'admin'` for a component call.
-- **A verified context is not proof of an admin.** The proxy signs a context for **every** request through the app origin, anonymous visitors included, with `admin: null`. Check `context.storeUser` (and `surface === 'admin'` when only admin components may call) before returning store data. The same holds for `req.swellContext` in functions: a call with a context is not automatically an admin call.
-- A function reached without a component token has `req.swellContext === null`. Treat `null` as "not from a component", not as "allowed".
+- **A verified context is not proof of an admin.** The proxy signs a context for **every** request through the app origin, anonymous visitors included, with `admin: null`. A route that returns or changes store data **must** check both `surface` and `storeUser`, exactly:
+
+  Function:
+
+```ts
+  if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
+    throw new SwellError('Admin component calls only', { status: 403 });
+  }
+  ```
+
+  App frontend:
+
+```ts
+  const ctx = await verifySwellContext(headers, { env });
+  if (!(ctx.surface === 'admin' && ctx.storeUser)) {
+    // respond 403: not an admin component call
+  }
+  ```
+
+  `storeUser` without `surface` is an admin browsing the app frontend with their dashboard cookie, not a component call; `surface` is set only when a component token was used. Check `surface` too when only admin components may call. A bare `if (req.swellContext)` is not a check.
+- `req.swellContext` is `null` unless the platform forwarded a signed context (secret-key calls, storefront calls, hooks, cron). Treat `null` as "not from a component", never as "allowed".
 - The token is never accepted as a `Swell-Context`: it has its own token type and audience, and the platform drops any `Swell-Context` a client sends.
 
 ## Develop and deploy
@@ -124,7 +144,7 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
 - `swell app dev` pushes the app, then serves component modules from your machine and rebuilds on every change. It prints `Component modules at: http://localhost:<port>/.swell/components/<Name>.js`. While the dev session sets `local_proxy_url`, the shell page loads the bundle from `<local_proxy_url>/.swell/components/<name>.js` instead of the CDN. Edits to shared files (`components/lib/*`) rebuild every component.
 - `swell app push` builds each component to an ES module and uploads it with the source and static `config`. Neither build ever runs the component.
 - The admin loads the components of the **installed version**; a development install (no version) uses the current unversioned build.
-- **The component hash includes its imports**: editing only `components/lib/*` redeploys every component that imports it on the next plain `swell app push`, no `--force` needed. This differs from the function rule in `references/cli.md` (`functions/lib/` edits need `--force`), which holds for CLI releases whose function hash covers only the file itself. After upgrading to a CLI with component builds, push each component once: the hash changed.
+- **The component hash includes its imports**: editing only `components/lib/*` redeploys every component that imports it on the next plain `swell app push`, no `--force` needed. After upgrading to a CLI with component builds, push each component once: the hash changed.
 - `swell inspect` has no component topic. Check that a component deployed from the push output and by opening the field.
 
 ## Security model
@@ -143,9 +163,9 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
 - **Expecting React APIs that Preact compat lacks.** React 19-only APIs (`use`, Actions, `useOptimistic`) are not available.
 - **Fetching a third-party API and expecting the token there.** Only same-origin requests carry it.
 - **A route or frontend handler that trusts `req.swellContext` / a verified context without checking `storeUser` and `surface`.**
-- **Treating a missing `req.swellContext` as allowed.** It is `null` for secret-key calls, storefront calls and everything else; decide deliberately.
+- **Treating a missing `req.swellContext` as allowed.** It is `null` unless the platform forwarded a signed context; decide deliberately.
 - **Hard-coding the store id.** Use `req.swellContext.storeId` / `context.storeId`; the app origin is per installation and relative URLs already target the right one.
-- **Sending a non-string with `setValue` on a content-only field.** It is rejected; declare the field in `models/` with the real type.
+- **Sending a non-empty non-string with `setValue` on a content-only field.** It is rejected (`null` clears); declare the field in `models/` with the real type.
 - **Forgetting the `exclude` in the root `tsconfig.json`.** The root config checks functions with Worker libs, which conflict with the DOM libs components need; `swell create component` adds `components` to `exclude`, and a hand-built setup must too.
 - **A `component` name that does not match the pushed name** (`color_picker.tsx` is `color-picker`).
 - **Naming a component file with dots or other characters outside `[A-Za-z0-9_-]`.** It pushes and then cannot be used.
