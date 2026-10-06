@@ -65,6 +65,8 @@ export default async function (req: SwellRequest) {
 }
 ```
 
+The schedule is a five-field cron expression in UTC; one that cannot be parsed fails the push. To run the function without waiting for the schedule, call it by name: `swell api post '/functions/<app_id>/<name>'`.
+
 **HTTP route triggers** expose a custom API endpoint. The basic shape is below; `references/functions-routes.md` covers handler dispatch (named vs. default vs. object exports, the `delete` reserved-word issue), `req.body` / `req.query` / `req.rawBody`, header allow-listing, cache tuning, calling the route from outside Swell, and signature-verification patterns.
 
 ```typescript
