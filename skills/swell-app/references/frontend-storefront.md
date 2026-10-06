@@ -1,6 +1,6 @@
 # Storefront frontend
 
-The store's own site, written in code: the `frontend/` of a `storefront` app. Swell builds it, hosts it and serves it at the storefront's address. Read `references/frontend.md` first — the scaffold, the connection to Swell, `/app-api` endpoints, local development and deployment are the same for every frontend. This reference covers what is specific to a storefront. Where that reference talks about the app's own address, the dashboard frame and store users, a storefront has the storefront's address and shoppers instead.
+The store's own site, written in code: the `frontend/` of a `storefront` app. Swell builds it, hosts it and serves it at the storefront's address. Read `references/frontend.md` first — the scaffold, the connection to Swell, `/app-api` endpoints, local development and deployment are the same for every frontend. This reference covers what is specific to a storefront.
 
 ## Check that this is the right kind of storefront
 
@@ -45,7 +45,7 @@ A storefront is a record in the store: it has a name and an address, and it is s
 - **Its address.** In the test environment a storefront answers at `https://<storeId>--<storefrontId>.swell.store`. In the live environment the store's primary storefront answers at `https://<storeId>.swell.store` and on the merchant's domain, and any other storefront at an address with its own id. Which storefront is primary and which domain it uses are the merchant's settings in the dashboard, not something the app declares.
 - **Give people the storefront's address.** The same build also answers at the app address every frontend has, `https://<storeId>--<installedAppId>--app.swell.store`, but that is not the storefront: domains, the primary setting and the storefront's version do not apply there. The dashboard lists the storefront under Storefronts.
 - **It follows the installed version.** A storefront serves the version of the app installed in its environment, unless the merchant selects another version for that storefront in the dashboard.
-- **Link to pages by path.** The same build serves every storefront on the app, in every environment and on any domain. Use relative links and read the host from the request when an absolute address is needed; never hardcode a storefront address. `context.storefrontId` says which storefront a request is for.
+- **Link to pages by path.** The same build serves every storefront on the app, in every environment and on any domain. Use relative links, and when an absolute address is needed take it from `request.url` in a route handler (the `Host` header is not passed on); never hardcode a storefront address. `context.storefrontId` says which storefront a request is for.
 
 ## Who is viewing
 
@@ -57,6 +57,7 @@ Every request to the storefront comes from a shopper: a visitor, or a customer o
 - **Find out who the customer is from the session, never from request parameters.** On the server, `(await getStorefront()).account.get()` returns the logged-in customer or `null`. An account id in a path, query or body is input anyone can type.
 - **A customer's own data comes from the Storefront client too.** Their account, addresses, orders and subscriptions are read through the same session, which is what limits them to that customer. A customer-only page is a server component that reads the account first and redirects a visitor to the login page.
 - **The Backend client is the app, not the shopper.** It returns the same data to everyone, and every storefront page is public. Show shoppers only what the Storefront client returns. Use `getBackend()` only in a server handler, for work the Storefront client cannot do, after establishing the customer from the session and narrowing the query to their own records.
+- **Swell does not screen a shopper's writes.** The origin rule that protects store users does not cover the shopper's session: a POST sent from another site reaches a storefront handler with the session cookie whenever the browser attaches it, and browsers treat every `*.swell.store` address as one site. A route handler that changes the cart or the account refuses a request whose `Origin` header is not the origin of `request.url`; the two match under `swell app dev` as well.
 - **Nothing is shared between shoppers.** Pages render on each request and Swell sends every page and endpoint with `Cache-Control: private, no-store`. Keep server state inside the request as well: no module-level client, cart or account.
 
 ## Adapt the starter
@@ -78,7 +79,7 @@ The scaffold's home page is a demonstration of three patterns. A storefront keep
 - **One browser client, one cart.** `useSwell()` returns the client that `SwellProvider` created. Hold the cart in one client context inside that provider: read it once with `cart.get()` in an effect, and replace it with the cart each change returns. The header count, the add-to-cart button and the cart page are all views of that context, so the count updates without a reload.
 - **Account pages are the storefront's to build.** Login, sign-up and password recovery are forms on the account methods of the browser client. After a login or logout, reload the page so server-rendered parts and the cart context read the new session.
 - **Checkout is Swell's.** Send the shopper to the cart's `checkout_url`; do not build payment forms into the storefront unless the task asks for a custom checkout.
-- **Swell owns some paths.** `/api`, `/functions` and `/checkout/` on the storefront's address never reach the app. Put the storefront's own endpoints under `/app-api` and choose other names for pages.
+- **Swell owns some paths**, `/checkout/` among them; the list is in `references/frontend.md`. Put the storefront's own endpoints under `/app-api` and choose other names for pages.
 - **Commerce operations are not documented here.** Which methods exist, what they take, what a cart, product or order contains, pricing, variants, accounts, subscriptions and localization are covered by the `swell-frontend-api` skill; this reference only places those calls on the right side of the server/browser line.
 
 ## Preview and verify
@@ -90,7 +91,7 @@ swell app push    # build and deploy to the test environment
 
 `swell app dev` serves the local frontend at `https://<storeId>--<storefrontId>--local.swell.store`, connected to the app's storefront in the test environment. `--store-user` is refused for storefront apps. When the app runs more than one storefront, pick one with `--storefront-id <id>` or `--storefront-select`.
 
-For a storefront these checks replace the store-user checks in `references/frontend.md`:
+Check each of these before calling a storefront page done:
 
 1. `swell app dev`, in a private browser window: the page renders on a first visit, with no session cookie yet.
 2. Add a product to the cart: the header count changes without a reload and is the same after one.

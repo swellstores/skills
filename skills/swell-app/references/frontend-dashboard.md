@@ -80,7 +80,6 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
 - **Looking up the viewer.** To learn more than the id, read `/:users/<userId>` with the Backend client, as the scaffold's store user card does. Once `permissions` in `swell.json` is non-empty that read needs the `read_:users` scope, colon included; without it the read answers 403, which the card handles.
 - **Writes go in POST/PUT/DELETE handlers or server actions.** Swell withholds the store user on a request from another origin unless it is a `GET`, `HEAD` or `OPTIONS`. That is what stops another site from triggering a store-user-only write, and it does not protect a `GET` that changes data.
 - **Ids in the address are input.** A `frontend://shipments/{id}` link delivers an id anyone can type. Validate it and load the record on the server before acting on it.
-- **Never cache.** Send `Cache-Control: private, no-store` from every endpoint whose answer depends on the viewer.
 
 ## Preview and verify
 
