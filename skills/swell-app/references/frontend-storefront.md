@@ -1,14 +1,14 @@
 # Storefront frontend
 
-The store's own site, written in code: the `frontend/` of a `storefront` app. Swell builds it, hosts it and serves it at the storefront's address. Read `references/frontend.md` first — the scaffold, the connection to Swell, `/app-api` endpoints, local development and deployment are the same for every frontend. This reference covers what is specific to a storefront.
+The store's own site, written in code: the `frontend/` of a `storefront` app. Swell serves it at the storefront's address, with managed hosting by default or self-hosting in the developer's Cloudflare account. Read `references/frontend.md` first — the scaffold, the connection to Swell, `/app-api` endpoints, local development, deployment and hosting choices are the same for every frontend. This reference covers what is specific to a storefront.
 
 ## Check that this is the right kind of storefront
 
 | Situation | Where it belongs |
 | --- | --- |
-| A storefront written in code and hosted by Swell | A `storefront` app with a frontend — this reference |
+| A storefront written in code, installed as a Swell app, with managed hosting or Cloudflare self-hosting | A `storefront` app with a frontend — this reference |
 | A Liquid theme, `swell theme *` commands, the dashboard theme editor | Theme authoring — not covered by this skill |
-| A storefront hosted somewhere else (the developer's own server or another platform) | No app: build it on the Frontend API directly — the `swell-frontend-api` skill |
+| An independent storefront connecting directly to the API, without Swell's app lifecycle and supplied context, on Cloudflare or elsewhere | The `swell-frontend-api` skill |
 | Pages for store users inside the dashboard | An `admin` or `integration` app — `references/frontend-dashboard.md` |
 
 **There is no visual editor.** The dashboard's theme editor works on themes. In a code-based storefront, layout and content change in code and ship with a push.
@@ -21,18 +21,9 @@ The store's own site, written in code: the `frontend/` of a `storefront` app. Sw
 swell create app <id> -t storefront --frontend swell-vinext -y
 ```
 
-```json
-{
-  "id": "my_shop",
-  "name": "My Shop",
-  "type": "storefront",
-  "version": "1.0.0",
-  "permissions": [],
-  "frontend": { "hosting": "managed" }
-}
-```
+The scaffold sets `type: "storefront"` and `frontend.hosting: "managed"`. Configure `permissions` for the Backend operations the app actually uses before deployment — see `references/permissions.md`, including the case where no scopes are needed. The scaffold's empty array grants full store access; using only the Storefront client does not remove those Backend credentials.
 
-Nothing else is declared. Run `swell app push` once before the first preview: it installs the app in the test environment, Swell creates a storefront for it, and the push prints the storefront's address. The scaffold's demo page is what goes up; that is fine in the test environment.
+Run `swell app push` once before the first preview: it installs the app in the test environment, Swell creates a storefront for it, and the push prints the storefront's address. The scaffold's demo page is what goes up; that is fine in the test environment.
 
 The scaffold's README and demo page are written for every app type. Their `--store-user` advice does not apply here: the flag is refused for storefront apps.
 
@@ -49,7 +40,7 @@ A storefront is a record in the store: it has a name and an address, and it is s
 
 ## Who is viewing
 
-Every request to the storefront comes from a shopper: a visitor, or a customer once they log in. At the storefront's address `context.storeUser` is `null`, and `requireStoreUser` has no place in a storefront. Tools for the merchant belong in a separate `admin` app.
+Every request to the storefront comes from a shopper: a visitor, or a customer once they log in. At the storefront's address `context.storeUser` is `null`, and `requireStoreUser` has no place in a storefront. Custom frontend pages requiring a store-user identity belong in an `admin` app. This does not require a separate frontend for native merchant lists, forms or actions; use the content-model building blocks described in the entry page.
 
 - **The session is a cookie that both clients share.** `getStorefront()` on the server and `useSwell()` in the browser read and write the same session, so a cart filled in the browser is the cart the server reads on the next request.
 - **A page render can read the session but cannot save it.** A shopper's first page arrives without a session cookie. The session Swell starts for that render is not kept; the one that lasts is started by the browser client's first call, or by a route handler or server action. So: read on the server, change in the browser.
@@ -58,7 +49,7 @@ Every request to the storefront comes from a shopper: a visitor, or a customer o
 - **A customer's own data comes from the Storefront client too.** Their account, addresses, orders and subscriptions are read through the same session, which is what limits them to that customer. A customer-only page is a server component that reads the account first and redirects a visitor to the login page.
 - **The Backend client is the app, not the shopper.** It returns the same data to everyone, and every storefront page is public. Show shoppers only what the Storefront client returns. Use `getBackend()` only in a server handler, for work the Storefront client cannot do, after establishing the customer from the session and narrowing the query to their own records.
 - **Swell does not screen a shopper's writes.** The origin rule that protects store users does not cover the shopper's session: a POST sent from another site reaches a storefront handler with the session cookie whenever the browser attaches it, and browsers treat every `*.swell.store` address as one site. A route handler that changes the cart or the account refuses a request whose `Origin` header is not the origin of `request.url`; the two match under `swell app dev` as well.
-- **Nothing is shared between shoppers.** Pages render on each request and Swell sends every page and endpoint with `Cache-Control: private, no-store`. Keep server state inside the request as well: no module-level client, cart or account.
+- **Nothing is shared between shoppers.** Pages render on each request. Managed hosting sends pages and endpoints with `Cache-Control: private, no-store`; on Cloudflare self-hosting the app sets the appropriate headers, as described in `references/frontend.md`. Keep server state inside the request as well: no module-level client, cart or account.
 
 ## Adapt the starter
 
@@ -66,7 +57,7 @@ The scaffold's home page is a demonstration of three patterns. A storefront keep
 
 | Scaffold file | In a storefront |
 | --- | --- |
-| `lib/swell.ts` | Keep unchanged. `getStorefront()`, `getPublicConfig()` and `getBackend()` are the connection; `requireStoreUser` stays unused |
+| `lib/swell.ts` | Keep the connection helpers: `getStorefront()`, `getPublicConfig()` and `getBackend()`. On self-hosting, apply the verification options in `references/frontend.md`; `requireStoreUser` stays unused |
 | `app/layout.tsx`, `components/swell-provider.tsx` | Keep. Set the site's own `metadata`; add the header, footer and cart indicator here |
 | `components/swell-image.tsx` | Keep for product and content images |
 | `components/catalog-card.tsx` | The pattern for every server read — product lists, product pages, categories, content. Copy from it, then delete it |

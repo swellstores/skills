@@ -6,13 +6,15 @@
 
 ## Scope names
 
+**When the app needs no scopes:** an app that uses only exempt operations or the Storefront client still gets full Backend access from `[]`. A supported way to express no Backend access has not been established in this skill. Do not invent a dummy scope or add unrelated permissions to make the array non-empty. State this limitation when proposing such an app; an empty array is not evidence of least privilege.
+
 Entries are `read_<collection>` / `write_<collection>` against the **top-level collection**: `read_products`, `write_orders`. `write_x` implies `read_x`. Child collections collapse to their parent, so `/products:variants` and `/products:apps.<app_id>.<name>` are both covered by `products`.
 
 The CLI validates only that the value is an array — there is no enum, so a typo like `products_read` deploys clean and grants nothing. A call outside the declared scopes fails with 403 `The client does not have the required permissions`.
 
 ## What needs no scope
 
-- **The app's own collections, by their short path**: `req.swell.get('/reviews')`. They are matched by model name. The same collection addressed as `/apps/<app_id>/reviews`, with the `id` from `swell.json`, is checked as the `apps` collection and refused unless the app declares `read_apps` / `write_apps` — inside the app's own code, use the short path. A path that carries the app's 24-character record id instead, as `$action.collection` does, is the app's own and passes.
+- **The app's own collections.**
 - **The app's own functions.** An app can call its own functions, as `backend.functions.call(context.appId, …)` does from a frontend, whatever its scopes.
 - `/:details` and `/:logs`.
 

@@ -14,12 +14,12 @@ Each settings file creates a grouped panel in the App Preferences UI. Structure:
 
 ## Configuration, credentials and secrets
 
-**There are no environment variables or secret bindings.** Settings are a function's only configuration channel, and they are not a secret store:
+**Functions and managed frontends have no custom runtime variables or secret bindings.** Settings configure them, and settings are not a secret store. A frontend self-hosted in the developer's Cloudflare account can use its own bindings and secrets; setup is covered in `references/frontend.md`, "Self-hosting on Cloudflare".
 
 - The deployed function worker is uploaded with **no Cloudflare bindings** (upload metadata carries only `body_part`, `tags`, `annotations`) and the runtime wrapper discards the env argument, so `env.MY_SECRET` is undefined. `process.env` does not exist either — functions run service-worker format with no `nodejs_compat`.
 - `.dev.vars` is **never uploaded** — `swell app push` ignores `**/.dev.vars*`. It feeds the `frontend/` dev server only. A managed frontend gets no custom variables or bindings either (`references/frontend.md`).
 - **`"type": "secret"` masks the input; it does not protect the value.** Use it for API keys and other credentials the merchant enters: the dashboard hides the value behind a show button. It is an alias of `short_text`, so the value is stored as an ordinary string and `settings()` returns it like any other field. The only access flags on a field are `public` (expose to the storefront API) and `private` (restrict from it).
 - Settings are **not isolated per app**. `await req.swell.settings('<other_app_id>')` is a plain `GET /settings/<id>` sent with the caller's own app credentials. An app with an empty `permissions` array — the `swell create app` default — is authorized for everything, and so is an app that declares `read_settings`. Assume any other installed app can read your provider credentials.
-- Rotation is a merchant action in App Preferences; there is no separate store to purge and no versioning of old values. A secret the merchant must not see has to live in your own service and be called out to — never bundle it into the app, where it ships inside the deployed worker script.
+- Rotation of a settings value is a merchant action in App Preferences; there is no separate store to purge and no versioning of old values. A secret the merchant must not see belongs in the developer's own service or a secret binding of a self-hosted frontend. Never put it in settings or bundle it into app code. A frontend's secret binding is not available to app functions; code needing it must execute in that frontend's server runtime or in the external service.
 
 An app that declares `permissions` needs `read_settings` to read even its own settings — see `references/permissions.md`.

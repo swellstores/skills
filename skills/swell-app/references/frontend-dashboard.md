@@ -14,7 +14,7 @@ A frontend is the most expensive way to put something in the dashboard. Go down 
 
 They combine. A typical app keeps its records in content-model views, runs its one-click operations as actions, and opens a frontend page for the one screen neither can express.
 
-**An action is closed to the outside; a frontend endpoint is not.** An action function runs only when a store user clicks it in the dashboard — it cannot be called through the API — and on stores with user roles Swell also requires manage access to the standard collection the action sits on, or to Integrations for a settings action. A frontend endpoint is a public address that does all of its own checking (see "Authorize store users"). When an operation needs no custom UI, make it an action.
+**Swell authenticates action callers.** An action uses the store-user invocation path described in `references/actions.md`, including its role checks and equivalent CLI request. A frontend endpoint is a public address whose code must authorize the viewer (see "Authorize store users"). When an operation needs no custom UI, make it an action.
 
 **Template.** Use `swell-vinext` unless there is a reason not to: pages render on the server, so a page can check the store user and read Backend data in one place. `swell-react` fits a dashboard that is a browser app from end to end — every read and write then goes through a `/app-api` handler in its Worker, and the app adds its own client-side router.
 

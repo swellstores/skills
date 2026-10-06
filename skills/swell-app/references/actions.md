@@ -110,7 +110,7 @@ Name a workflow in `function` the same way; the workflow adds `action: true` bes
 
 ## Who can run an action
 
-Only a user signed in to the store's dashboard. An action function cannot be called through the API, `swell api /functions/...`, another function, or the storefront, so it needs no authentication code of its own — that is its advantage over a route function or a frontend endpoint for dashboard-only operations.
+The action invocation path requires an authenticated store user. The dashboard sends this request on click; a CLI login can send the equivalent `PUT /:functions/<function record id>` request with `$action`, as shown under "Verify". An action function cannot be called as an ordinary route (`swell api /functions/...`), by another function, or by a storefront caller. Swell authenticates the store user; the handler still checks record state, supplied ids and any finer access rules.
 
 On plans with user roles Swell also requires manage access to the standard collection the content file extends (Products for `content/products.json`), or to Integrations for a settings action. Actions on the app's own collections are open to every dashboard user. Any finer rule is the function's job, from `$action.user_id`.
 

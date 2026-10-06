@@ -1,6 +1,6 @@
 ---
 name: swell-frontend-api
-description: Use this skill for building headless storefront experiences on the Swell e-commerce platform's Frontend API with the `swell-js` library and a store public key. Triggers include swell-js usage or `swell.init('<store-id>', 'pk_...')`; storefront implementation of product listing/detail pages, carts, checkout, payments, customer accounts and login, or subscription purchase/management; Next.js/React/Vue/Svelte e-commerce frontends backed by Swell; customer-facing features that read or write store data from the browser (product reviews, wishlists, storefront search) — pair with swell-app when the feature also needs a custom model, hook, or route function; calling an app's route function via `swell.functions`; storefront GraphQL against `/graphql/v2` or the `/playground`; requests to `https://<store>.swell.store/api`; `swell-session` cookies or `X-Session` headers; and storefront localization or multi-currency work. Do NOT use for server-side secret-key integrations with swell-node or api.swell.store (use the swell-backend skill), for building deployable Swell Apps with the `swell` CLI (use the swell-app skill), or for another e-commerce platform's storefront that only mentions Swell in passing.
+description: "Use this skill for Swell Frontend API operations: catalog and content, shopper sessions, carts, checkout, payments, customer accounts, subscriptions, localization and public app data. Applies inside Swell app frontends through the Apps SDK Storefront client and swell-js, and to independent storefronts using explicitly configured clients or direct API requests. Also covers storefront GraphQL and calls to app route functions. Pair with swell-app for app scaffolding, runtime setup, models, hosting and deployment; reuse its supplied clients and session helpers. Privileged store operations belong to swell-backend-api. Proxima / Liquid theme authoring and other platforms are outside scope."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -8,9 +8,15 @@ allowed-tools: Read, Grep, Glob, Bash
 
 The Frontend API is the session-scoped, public-key-safe subset of Swell used by storefronts. `swell-js` is its universal JavaScript client — safe in browsers and on servers. It reads catalog/content/settings, owns the visitor's cart and checkout, and manages the logged-in customer's account and subscriptions. It cannot administer the store: writes are limited to session-owned resources (cart, account, subscriptions) plus custom models that declare public permissions.
 
-Boundaries: server-side integrations with a secret key (imports, automations, order administration) belong to the **swell-backend** skill; deployable store extensions (models, functions, checkout integrations) belong to the **swell-app** skill. This skill frequently pairs with both — e.g. a storefront calling an app's route function.
+This skill owns Frontend API operations in both Swell apps and independent storefronts. `swell-app` owns app scaffolding, runtime context, resource declarations, hosting and deployment. Use both for a Swell storefront app or when a storefront feature needs an app model or function. Privileged store operations belong to `swell-backend-api`.
 
-# II. Client Setup & Request Model
+**Keep the supplied client in a Swell app.** Use the scaffold's Storefront helpers (`getStorefront()` on the Vinext server and `useSwell()` in the browser) and session wiring, as described in the `swell-app` frontend references. Do not replace them with standalone `swell.init()` or hand-built cookie adapters. Identify whether the call uses the SDK Storefront client or swell-js before applying a method signature or error rule; the swell-js-specific details below are not a complete SDK client contract. Read the installed `@swell/apps-sdk` README for SDK-specific behavior.
+
+Outside apps, swell-js and explicitly configured Apps SDK clients can connect directly to the API. An independently configured SDK client does not require app packaging; follow its installed README for setup.
+
+# II. swell-js Setup & Request Model
+
+The explicit initialization below is for an independently configured swell-js client. In an app, use the existing client and its runtime-provided configuration.
 
 ```js
 import swell from 'swell-js';
@@ -44,7 +50,7 @@ Without a session, every server request starts a new (empty-cart) session — an
 
 **Generic requests.** `swell.get/put/post/delete(url, data)` hit any `/api/*` path with the same auth and session — for `get` the second argument is a query object, or a string appended as a path segment (`swell.get('/products', 'blue-shoes')`); on writes a string replaces the body, so use `swell.request(method, url, id, data)` when you need both.
 
-This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VIII). App extension fields (`$app.<app_id>.*`) on standard models are not reachable from the Frontend API at all. Read `references/app-data.md` before exposing any app data to a storefront.
+This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VIII). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
 
 Two undocumented query features:
 

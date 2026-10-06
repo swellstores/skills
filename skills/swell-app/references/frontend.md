@@ -1,6 +1,6 @@
 # Frontend
 
-Optional `./frontend/` directory: a web app that Swell builds, hosts and connects to the store where the app is installed. `swell app push` deploys it. No Cloudflare account or separate hosting is involved.
+Optional `./frontend/` directory: a web app connected to the store where the app is installed. `swell app push` deploys it. With the default managed hosting, Swell builds and hosts it and no Cloudflare account is needed. Hosting the frontend in the developer's own Cloudflare account retains the same Swell connection and app lifecycle — see "Self-hosting on Cloudflare".
 
 This reference covers what every frontend shares: the template, the connection to Swell, endpoints, local development, deployment and hosting. Read it first, then the reference for what is being built:
 
@@ -44,7 +44,7 @@ There are two clients. The **Storefront client** works on the viewer's own sessi
 The rules that hold for every template and every app type:
 
 - **The context is server-only.** Never expose the full context or its credentials to the browser, or log them. Initialize the browser client with the SDK's public configuration, as the scaffold does. `@swell/apps-sdk` itself is a server library: importing it from browser code fails the build.
-- **Verify once per request, through the scaffold's helper.** The signed context is valid for about a minute, so verifying it again late in a slow request fails. Keep the context and the clients inside the request: no module-level client. Leave the helper file as scaffolded (`lib/swell.ts` in Vinext, `worker/swell.ts` in React). The SDK README shows `verifySwellContext` with options the scaffold does not pass: a managed frontend is reachable only through Swell and does not need them.
+- **Verify once per request, through the scaffold's helper.** The signed context is valid for about a minute, so verifying it again late in a slow request fails. Keep the context and the clients inside the request: no module-level client. For managed hosting, leave the helper file as scaffolded (`lib/swell.ts` in Vinext, `worker/swell.ts` in React). For self-hosting, apply the context-verification options described under "Self-hosting on Cloudflare"; keep the helper's per-request lifecycle.
 - **No context and a bad context are different things.** A missing context means the frontend is not connected to Swell. An invalid or expired context is a verification failure — surface the error instead of continuing as a visitor.
 - **The Backend client acts as the app, not as the viewer.** It uses the app's access token, scoped by `swell.json` `permissions`, and returns the same data whoever asks. Every address of the frontend is public, so a page or endpoint that returns Backend data without checking who is asking is open to the internet. Authorize first; let the server choose the endpoint and query, and take from the browser only the inputs the operation needs.
 - **Find out who is viewing from Swell, never from what the browser sends.** Swell identifies two kinds of viewer and each has its own rules: a store user, in `context.storeUser` (`references/frontend-dashboard.md`, "Authorize store users"), and a customer, in the Storefront client's session (`references/frontend-storefront.md`, "Who is viewing"). Everyone else is a visitor. An id in a path, query or body is input anyone can type.
@@ -60,13 +60,13 @@ Both run server code for the app. They are different runtimes with different job
 
 | | `/app-api` handler in `frontend/` | Function in `functions/` |
 | --- | --- | --- |
-| Runs when | the frontend's own pages call it | a model event or hook fires, on a schedule, on a dashboard action, or on a call to its route |
-| Knows the viewer | Yes — the store user or the shopper's session | Not the frontend's viewer |
+| Runs when | a page or external caller requests its URL, including a provider callback | a model event or hook fires, on a schedule, on a dashboard action, or on a call to its route |
+| Knows the viewer | A store user or shopper when present; provider callbacks need their own authentication | Not the frontend's viewer |
 | Reaches Swell through | the SDK clients | `req.swell` |
 | Logs | the `swell app dev` terminal; a deployed managed frontend's logs are not available, and are not in `swell logs` | `swell logs` |
 
-- **Put work in a function when it must happen with nobody looking at the frontend**: reacting to store events, schedules, dashboard actions, calls from other systems. See `references/functions-*.md` and `references/actions.md`.
-- **A caller that cannot send a Swell key cannot reach a route function.** A third-party callback with a fixed request format is received by a handler, at the app address. No viewer is attached to it: the handler verifies the caller itself before it touches the Backend client.
+- **Put background work in a function**: reacting to store events, schedules and dashboard actions. A route function can also receive external calls that meet its key requirements. See `references/functions-*.md` and `references/actions.md`.
+- **A caller that cannot send a Swell key cannot reach a route function.** Receive a third-party callback with a fixed request format in an `/app-api` handler at the app address; this can be a frontend's only feature, with no custom UI. No viewer is attached. Verify Swell's context first; if signature verification needs a merchant-provided secret, read only the app settings needed for that check. Authenticate the provider and validate the payload before reading or changing business records. This credential lookup does not authorize business operations. Developer-owned secrets follow `references/settings.md`.
 - **Put work in a handler when it only serves the frontend's own pages.** A handler already has the Backend client; do not route a page's request through a function to reach the Backend API.
 - **Calling a function from a handler.** `backend.functions.call(context.appId, '<name>', data)` runs the function with the app's authority. Nothing about the viewer is forwarded: authorize in the handler first and pass what the function needs as data.
 
@@ -113,12 +113,12 @@ There is no `swell inspect frontend` resource type — the push output above, th
 
 ## Gate alignment
 
-The skill's five-gate dev cycle applies with these deviations:
+Apply the skill's five gates to the requested frontend change. For a new frontend, or changes to identity, sessions, hosting or entry points, exercise the relevant viewer paths end to end. For a narrow edit, reuse checks of unchanged behavior and verify the part affected. The frontend-specific adaptations are:
 
 - **Gate 2 (Schema)** — n/a, no schema-backed manifest. The scaffold's README and the SDK's README are the references.
 - **Gate 3 (Author & Validate)** — `npm run check` in `frontend/` must pass.
 - **Gate 4 (Deploy & Verify)** — confirm `Deployed managed frontend package <digest>.` in the push output. There is no frontend inspect command; verify the deployed frontend.
-- **Gate 5 (Test)** — run the "Preview and verify" checklist of the specialized reference, first under `swell app dev` and again against the deployed build. Each checklist exercises every kind of viewer the app has; a frontend checked as one viewer only is not verified.
+- **Gate 5 (Test)** — use the "Preview and verify" checklist of the specialized reference for the affected behavior. Full frontend delivery checks every kind of viewer the app has, first under `swell app dev` and again against the deployed build. Local-only work leaves deployment checks unverified; architecture and read-only reviews do not start dev or push.
 
 ## Self-hosting on Cloudflare
 

@@ -12,7 +12,7 @@ Data models hold data logic: types, events, permissions, formulas. How a collect
 
 - **Use a child collection** when data is tightly scoped to a parent and should not exist independently. Declare with `"type": "collection"` containing nested `fields`. Children share the parent's API path. Child collections declared in a standard-model extension live at `/<collection>:apps.<app_id>.<name>`, expand into the record under `$app.<app_id>.<name>` (not the record root), fire events under the parent model's event root (`before:product.<name>.created`), and are deleted automatically when the parent record is deleted.
 
-Reference an app model by its Fully Qualified Name, `apps/<app_id>/<collection>`, in relationship links and when anything outside the app addresses it: `swell api`, another app, a storefront. Inside the app's own functions use the short path, `req.swell.get('/reviews')`: once the app declares `permissions`, the short path needs no scope and the FQN path with the app's `id` is refused (`references/permissions.md`).
+Reference an app model by its Fully Qualified Name, `apps/<app_id>/<collection>`, in API endpoints, relationship links and SDK queries. Inside the app's own functions the short path works too: `req.swell.get('/reviews')`.
 
 ## Relationships
 
@@ -61,7 +61,7 @@ Hook-specific event properties (`hooks`, `hook_timeout`, `hook_retry_attempts`) 
 - `input.fields` is **required for any storefront write** (without it POST/PUT/DELETE fail with `You may not update <model> without public permissions`), and a field outside that list is *rejected* (`You are not allowed to update <field>`), not ignored.
 - `scope: "account"` restricts reads and writes to the logged-in customer, but it is only applied when an `input` block is also present.
 
-Run `swell schema model --format=dts` for the full shape. Choosing between public writes and a route function is covered from the storefront's side in the `swell-frontend-api` skill.
+Run `swell schema model --format=dts` for the full shape. **Ownership and authentication are separate requirements.** The carried-forward Frontend API guidance reports that account scope permits anonymous creates without an owner; that behavior still needs verification during API-skill revision. Do not claim a login-only write boundary from scope or a browser login check alone. Until anonymous rejection is established for the chosen model, use an authenticated server write path and keep direct public writes closed when login is mandatory. Choosing between direct writes, a frontend handler and a route function is covered in the `swell-frontend-api` skill's `references/app-data.md`.
 
 **Fields added to a standard model are a different story.** They are **not readable from the Frontend API** with a store's own public key, whatever `"public": true` says on the field: the storefront gateway projects every read through a per-model field allowlist, and the allowlist it builds for a store's own public key contains no `$app` path at all. The field simply comes back absent — no error, no 403 — so a storefront feature built on it fails while every secret-key check passes. Three real options, most portable first: put the storefront-visible data in the app's **own collection** with `public_permissions` and attach it per product with an `include` sub-query; return it from a `public: true` route function; or have the merchant extend that **public key record's** own field permissions to allow the `$app` path.
 

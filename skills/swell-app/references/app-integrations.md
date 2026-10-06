@@ -31,11 +31,12 @@ Scaffold with the CLI:
 swell create app my_payment --type integration --integration-type payment --integration-id my-method -y
 ```
 
-Minimal manifest:
+Manifest for an extension that reads its provider configuration from app settings (add scopes for other Backend operations as required by `references/permissions.md`):
 
 ```json
 {
   "id": "my_payment", "name": "My Payment", "type": "integration", "version": "1.0.0",
+  "permissions": ["read_settings"],
   "extensions": [{ "id": "my-method", "type": "payment" }]
 }
 ```
