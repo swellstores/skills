@@ -12,7 +12,7 @@ Data models hold data logic: types, events, permissions, formulas. How a collect
 
 - **Use a child collection** when data is tightly scoped to a parent and should not exist independently. Declare with `"type": "collection"` containing nested `fields`. Children share the parent's API path. Child collections declared in a standard-model extension live at `/<collection>:apps.<app_id>.<name>`, expand into the record under `$app.<app_id>.<name>` (not the record root), fire events under the parent model's event root (`before:product.<name>.created`), and are deleted automatically when the parent record is deleted.
 
-Reference an app model by its Fully Qualified Name, `apps/<app_id>/<collection>`, in API endpoints, relationship links and SDK queries. Inside the app's own functions the short path works too: `req.swell.get('/reviews')`.
+Reference an app model by its Fully Qualified Name, `apps/<app_id>/<collection>`, in API endpoints, relationship links and SDK queries. The app's own code can use the short path, `/reviews`, in its functions (`req.swell`) and in its frontend's Backend client.
 
 ## Relationships
 
