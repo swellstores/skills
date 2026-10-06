@@ -96,7 +96,7 @@ export default async function (req: SwellRequest) {
 - **Use `selection.query` to read the selected records.** It is the filter for exactly what the merchant selected — hand-picked rows, or everything matching the list's search and filters when they selected all. Pass it to `swell.get` with your own `limit` and `page`. Add conditions by appending to `query.$and`, as above; replacing `query.$and` or `query.where` drops the selected ids or the list's filters. `selection.count` is what the dashboard showed, for the message only.
 - **Return `{ message }` to say what happened.** The dashboard shows it and reloads the record or list. Any other return value shows "<label> finished". To fail, throw `SwellError`: its message is shown, and a dialog stays open with the entered values so the merchant can correct them and retry.
 - **The function runs as the app.** `req.swell` has the app's permissions whoever clicked, and `req.session` is `null`. `$action.user_id` is the id of the dashboard user, for an audit field; read `/:users/<id>` for the name, which needs the `read_:users` scope once the app declares `permissions`.
-- **The merchant waits for the result.** Past the function timeout (10 seconds by default) the dashboard reports that the action may still be running. For longer work, and for bulk actions on more than a page or two of records, run a workflow.
+- **The merchant waits for the result.** Past the function timeout the dashboard reports that the action may still be running. For longer work, and for bulk actions on more than a page or two of records, run a workflow.
 
 ## Run a workflow from an action
 

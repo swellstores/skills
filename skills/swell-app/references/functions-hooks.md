@@ -64,7 +64,7 @@ On updates, `req.data.$app.<slug>` is the record's **stored** app subdocument me
 
 ## Re-entrancy
 
-Writes from inside a hook re-trigger the same hook chain. Guard with `conditions` on the function or with a sentinel field in `$app[req.appId]` — an unconditional write-back to the same collection stalls the originating request until the hook invocation times out: 10 s by default, or the `hook_timeout` declared on a custom event of an app-defined collection.
+Writes from inside a hook re-trigger the same hook chain. Guard with `conditions` on the function or with a sentinel field in `$app[req.appId]` — an unconditional write-back to the same collection stalls the originating request until the hook invocation times out.
 
 ## Event syntax
 
@@ -125,7 +125,7 @@ Custom events on your own collections must be declared in the model before any f
 
 - `hooks` is a whitelist, not an enabler. Declare it and only the listed prefixes install; omit it and both `before:` and `after:` are accepted anyway. Declaring it does **not** exempt the event from the `updated` fold — only `extension: true` does.
 - `conditions` must be a non-empty object on every non-standard event that is not `extension: true` — install fails otherwise. It is **not evaluated when the hook fires**: the event folds into the model's `updated` series like any other, so `before:review.reviewed` runs on every update of that collection and never on create or delete. Gate the handler with `config.model.conditions` on the function itself — the only condition set the hook path evaluates.
-- `hook_timeout` ≤ 60000 ms — the per-invocation timeout for this hook. Hooks ignore the function's own `config.timeout` entirely (that applies only to route, cron and async-event invocations, where it clamps to 1000–20000 ms). Without `hook_timeout` a hook is cut off at 10 s, and it is the only way to give a hook longer.
+- `hook_timeout` ≤ 60000 ms — the per-invocation timeout for this hook. Hooks ignore the function's own `config.timeout` entirely. Without `hook_timeout` a hook is cut off at 10 s, and it is the only way to give a hook longer.
 - `hook_retry_attempts` ≤ 3 — retries only when the invocation returns no status at all (timeout or network error); a function that responds with an error status is never retried.
 - `hook_*` knobs are valid on app-defined collections only — declaring either on a standard model fails install.
 
@@ -133,7 +133,7 @@ A custom event can also declare `"extension": true`, which makes its `conditions
 
 ## One handler per app per hook event
 
-A second function in the same app subscribing to the same hook event (same `app_id + event.type + extension`) is skipped at **runtime**, every time the event fires — the deploy reports nothing. The skip is recorded in the app's function logs (`Function '<name>' of the same app has already been triggered for the event '<type>'`); the API caller sees nothing. Which of the two wins depends on invocation order you do not control, so split work across `before` / `after` phases or combine into one handler. `extension` is the optional `config.extension` field that scopes a function to a specific app extension — single-extension apps can ignore it.
+A second function in the same app subscribing to the same hook event (same `app_id + event.type + extension`) is skipped at **runtime**, every time the event fires — the deploy reports nothing. The skip is recorded in the app's function logs (`Function '<name>' of the same app has already been triggered for the event '<type>'`); the API caller sees nothing. Which of the two wins depends on invocation order you do not control, so split work across `before` / `after` phases or combine into one handler. `extension` is `config.extension`, set only on functions that serve an integration extension slot — see `references/app-integrations.md`.
 
 ## Decision tip
 
