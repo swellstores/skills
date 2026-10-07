@@ -1,13 +1,13 @@
 # Writes
 
-Creating, updating and deleting records on the Backend API: how an update merges, the update operators, child records, what a write sets off, imports, batch requests and transactions. This reference says what the API does with a request. How a refused write or an error reaches the code differs by client and is in `references/clients.md`. Examples use `swell` for whichever client the code has.
+Creating, updating and deleting records on the Backend API: how an update merges, the update operators, child records, what a write sets off, imports, batch requests and transactions. This reference says what the API does with a request. How a refused write or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
 
 ## What a write does
 
 - **`POST /<collection>` creates a record** and answers with it.
 - **`PUT /<collection>/<id>` updates a record by merging** the body into what is stored, and answers with the whole record as it is afterwards.
 - **A `PUT` to an id that does not exist creates a record with that id.** It is validated as a new record, so required fields are asked for. Read the record first when the code must not create one.
-- **`DELETE /<collection>/<id>` removes the record for good** and answers with what it removed. Orders and subscriptions are no exception. Canceling one is an update, not a delete: `references/commerce.md`.
+- **`DELETE /<collection>/<id>` removes the record for good** and answers with what it removed. Orders and subscriptions are no exception. Canceling one is an update, not a delete: `references/orders-payments.md`.
 - **A write that fails field validation writes nothing** and answers with `{ errors }`.
 - **Nothing can be undone.** There is no history and no rollback outside a transaction. Run operator writes and writes over many records against test records first.
 
@@ -20,11 +20,7 @@ Fields the body does not send are kept, at every depth of nested objects. Arrays
 
 An array never gets shorter on a plain update, and sending `[]` changes nothing.
 
-```js
-// stored: tags === ['new', 'summer', 'x']
-await swell.put(`/products/${id}`, { tags: ['sale'] });
-// → ['sale', 'summer', 'x'], not ['sale'] and not ['new', 'summer', 'x', 'sale']
-```
+With `tags` stored as `['new', 'summer', 'x']`, `PUT /products/<id>` with `{ tags: ['sale'] }` gives `['sale', 'summer', 'x']`: not `['sale']`, and not `['new', 'summer', 'x', 'sale']`.
 
 Merging by id is the way to change one element and leave the rest: `{ options: [{ id: optionId, name: 'New label' }] }`. The same body without the `id` renames whichever option is first.
 
@@ -32,12 +28,12 @@ Merging by id is the way to change one element and leave the rest: `{ options: [
 
 Operators say what the merge cannot. They come in two forms, and both can share a body with plain fields that merge.
 
-**On the field itself**, for arrays:
+**On the field itself**, for arrays. `PUT /products/<id>` with:
 
 ```js
-await swell.put(`/products/${id}`, { tags: { $set: ['a', 'b'] } });   // replace the array
-await swell.put(`/products/${id}`, { tags: { $push: 'c' } });         // add at the end
-await swell.put(`/products/${id}`, { options: { $unset: [0, 2] } });  // remove the elements at these indexes
+{ tags: { $set: ['a', 'b'] } }    // replace the array
+{ tags: { $push: 'c' } }          // add at the end
+{ options: { $unset: [0, 2] } }   // remove the elements at these indexes
 ```
 
 `$unset` takes indexes, and `':last'` for the last element.
@@ -60,15 +56,15 @@ Where an id is supplied instead of generated, in a `$set` or on a new nested ele
 
 ## App fields on a standard record
 
-An app's fields live under `$app.<app_id>` and merge like the rest of the record. The operators take different forms there:
+An app's fields live under `$app.<app_id>` and merge like the rest of the record. The operators take different forms there. `PUT /products/<id>` with:
 
 ```js
 // Replace one field: $set directly inside the app's object
-await swell.put(`/products/${id}`, { $app: { my_app: { $set: { badges: ['new'] } } } });
+{ $app: { my_app: { $set: { badges: ['new'] } } } }
 // Replace everything the app stores on the record; other apps' data is untouched
-await swell.put(`/products/${id}`, { $app: { $set: { my_app: { badges: ['new'] } } } });
+{ $app: { $set: { my_app: { badges: ['new'] } } } }
 // Remove a field: a dotted path starting with the app id
-await swell.put(`/products/${id}`, { $app: { $unset: ['my_app.badges'] } });
+{ $app: { $unset: ['my_app.badges'] } }
 ```
 
 - **The form on the field does not replace inside `$app`.** `{ $app: { my_app: { badges: { $set: ['new'] } } } }` does not leave `['new']`. Use the first form above.
@@ -96,11 +92,7 @@ Two flags in the body of a write switch that off, each for its own part:
 | `$events: false` | The event record, and with it webhooks and app functions | Notification emails |
 | `$notify: false` | Notification emails | The event, webhooks and app functions |
 
-An import that must be silent sends both:
-
-```js
-await swell.post('/orders', { ...order, $events: false, $notify: false });
-```
+An import that must be silent sends both: `POST /orders` with `{ ...order, $events: false, $notify: false }`.
 
 - **Neither flag stops the store's own logic.** An order still takes stock and a payment still updates its order.
 - **In a batch the flags go inside each operation's `data`.**
@@ -110,15 +102,15 @@ Operations inside a transaction fire no events of their own in any case: see "Tr
 
 ## Keeping ids and dates on import
 
-A value in the body is used in place of the one the platform would generate. `id` and `date_created` can be supplied on a `POST`, and so can `number` on an order, invoice or return. Keeping ids keeps every reference between imported records valid, so collections can be imported in any order.
+A value in the body is used in place of the one the platform would generate. `id` and `date_created` can be supplied on a `POST`, and so can `number` on an order, invoice or return. Keeping ids keeps every reference between imported records valid, so collections can be imported in any order. `POST /products` with:
 
 ```js
-await swell.post('/products', {
+{
   id: '5f8a1c2e3d4b5a6c7d8e9f01', // 24 hexadecimal characters
   date_created: '2025-11-03T14:22:00Z',
   name: 'Imported product',
   price: 20,
-});
+}
 ```
 
 - **An `id` in any other format is dropped without an error**, and the record gets a generated one.
@@ -133,14 +125,14 @@ await swell.post('/products', {
 
 ## Batch
 
-Several requests in one call. They run 10 at a time and independently: one failing does not stop or undo the others.
+Several requests in one call. They run 10 at a time and independently: one failing does not stop or undo the others. `POST /:batch` with an array of operations:
 
 ```js
-const results = await swell.post('/:batch', [
+[
   { method: 'post', url: '/products', data: { name: 'A', price: 10 } },
-  { method: 'put', url: `/products/${id}`, data: { active: true } },
+  { method: 'put', url: '/products/<id>', data: { active: true } },
   { method: 'get', url: '/products/:count' },
-]);
+]
 ```
 
 - **Up to 1,000 operations**, reads included. An operation without a `method` takes the method of the batch request.
@@ -151,13 +143,13 @@ const results = await swell.post('/:batch', [
 
 ## Transactions
 
-A short set of writes that are committed together.
+A short set of writes that are committed together. `POST /:transaction` with an array of operations:
 
 ```js
-const results = await swell.post('/:transaction', [
+[
   { method: 'post', url: '/orders', data: { /* … */ } },
-  { method: 'put', url: `/accounts/${accountId}`, data: { /* … */ } },
-]);
+  { method: 'put', url: '/accounts/<id>', data: { /* … */ } },
+]
 ```
 
 A function's `req.swell` and the Apps SDK Backend client have `transaction(ops, { retry })` for the same call; a workflow cannot make it.

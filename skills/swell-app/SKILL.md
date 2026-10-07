@@ -204,7 +204,7 @@ Use the client the runtime supplies. Pair this skill with the API skill when imp
 | Frontend Backend client (`getBackend()` in Vinext) | The app; server code authorizes business operations for the caller | `references/frontend.md` and the relevant viewer reference | `swell-backend-api` |
 | Frontend Storefront clients (`getStorefront()` / `useSwell()` in Vinext) | The shopper's session, shared between server and browser | `references/frontend.md` and `references/frontend-storefront.md` | `swell-frontend-api` |
 
-Clients share API operations, not necessarily initialization, methods or error behavior. Follow the selected client's contract: for example, a function's `req.swell` and the frontend Backend client throw on a write refused by validation, whereas a workflow's `req.swell` resolves with an `errors` object. The `swell-backend-api` skill's `references/clients.md` compares the clients. Workflow restrictions still apply when reading Backend API guidance.
+Clients share API operations, not necessarily initialization, methods or error behavior. Follow the selected client's contract: for example, a function's `req.swell` and the frontend Backend client throw on a write refused by validation, whereas a workflow's `req.swell` resolves with an `errors` object. Workflow restrictions still apply when reading Backend API guidance.
 
 ### Permissions
 

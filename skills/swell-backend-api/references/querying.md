@@ -1,6 +1,6 @@
 # Querying
 
-Reads on the Backend API: filtering, sorting, paging, counting, search, related records, aggregation, and localized or multi-currency values. Every list endpoint takes the same parameters. How a client sends them, and how a missing record or an error reaches the code, is in `references/clients.md`. Examples use `swell` for whichever client the code has.
+Reads on the Backend API: filtering, sorting, paging, counting, search, related records, aggregation, and localized or multi-currency values. Every list endpoint takes the same parameters. How a missing record or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
 
 ## Parameters
 

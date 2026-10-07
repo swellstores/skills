@@ -1,6 +1,6 @@
 # Events and webhooks
 
-How the Backend API records what happens in a store and how a webhook delivers it: the event log, what an event carries, which events a change records, creating a webhook, what its endpoint receives, retries, and what to check when a webhook is silent. What a write sets off, and the flags an import uses to switch that off, are in `references/writes.md`. An app declares its webhooks and event functions as files: see the `swell-app` skill. Examples use `swell` for whichever client the code has.
+How the Backend API records what happens in a store and how a webhook delivers it: the event log, what an event carries, which events a change records, creating a webhook, what its endpoint receives, retries, and what to check when a webhook is silent. What a write sets off, and the flags an import uses to switch that off, are in `references/writes.md`. An app declares its webhooks and event functions as files: see the `swell-app` skill.
 
 ## Events
 
@@ -50,15 +50,15 @@ An event is a notice that something changed, not the record. Read the record by 
 
 ## Creating a webhook
 
-A webhook is a record in `/:webhooks`: an address, and the event types to send there. The dashboard manages them under Developer > Webhooks.
+A webhook is a record in `/:webhooks`: an address, and the event types to send there. The dashboard manages them under Developer > Webhooks. Code creates one with `POST /:webhooks` and:
 
 ```js
-const webhook = await swell.post('/:webhooks', {
+{
   url: 'https://example.com/hooks/swell',
   events: ['order.submitted', 'payment.succeeded'],
   enabled: true,
   alias: 'order-sync',
-});
+}
 ```
 
 - **`enabled` is `false` unless the body sets it.** A webhook created without it is stored, receives nothing and reports no error.
@@ -122,7 +122,7 @@ Check in this order.
 
 ```js
 const rows = await swell.get('/events:webhooks', {
-  where: { webhook_id: webhook.id },
+  where: { webhook_id: webhookId },
   sort: 'date_sent desc',
   expand: 'parent', // the event
   limit: 25,

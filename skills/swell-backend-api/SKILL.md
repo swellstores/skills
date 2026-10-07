@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 This skill owns Backend API operations in both Swell apps and independent integrations. `swell-app` owns app scaffolding, runtime context, resource declarations, permissions and deployment. Use both when an app performs Backend operations. Shopper-session operations belong to `swell-frontend-api`.
 
-**Choose the client first.** Read `references/clients.md` before writing a call: it covers each client's setup and methods, how a missing record, a refused write and an HTTP error reach the code, calling an app function, retries and rate limits. Inside an app, use the client the runtime supplies.
+**Inside an app, use the client the runtime supplies** — a function's or a workflow's `req.swell`, or the frontend's Backend client — and do not construct a second one beside it. `swell-app` says how to obtain each and how it reports failures.
 
 The Backend API provides privileged store operations within the caller's credential scope; it does not apply shopper-session ownership. For standalone secret-key HTTP access, use `https://api.swell.store`, HTTP Basic auth with the store ID as username and the secret key as password:
 
@@ -17,6 +17,22 @@ curl https://api.swell.store/products -u my-store:sk_test_...
 ```
 
 Keys live in the dashboard under Developer > API keys. The key alone selects the environment, and its prefix is the only visible marker: a **live** secret key is a bare `sk_` plus 32 random characters, a test key is `sk_test_…`, and a key minted in a custom environment carries that environment's slug (`sk_staging_…`). **There is no `sk_live_` prefix** — no environment segment means live, so a guard that greps for `sk_live_` never matches a real key. Public keys follow the same rule (`pk_…` / `pk_test_…`). Environments are not a test/live binary: a store can create arbitrarily named ones. There is no environment header or parameter — mint a key in the environment you target. Secret keys must never reach browsers, storefront bundles, or client-visible config; anything customer-facing belongs on the Frontend API (swell-frontend-api skill).
+
+Outside an app, the client follows from where the code runs:
+
+- **swell-node** (version 6 or later) for a Node.js server or script. Calls resolve with the response body itself — the record or the list envelope, with no wrapper to unpack.
+
+  ```js
+  const { swell } = require('swell-node');
+  swell.init('my-store', process.env.SWELL_SECRET_KEY);
+  const products = await swell.get('/products', { limit: 25, active: true });
+  ```
+
+- **Apps SDK `SwellBackendAPI`** for a runtime swell-node does not support, such as an edge runtime: `new SwellBackendAPI({ storeId, secretKey, apiHost: 'https://api.swell.store' })`. Install `@swell/apps-sdk@next`; the `latest` tag is the 1.x theme SDK, a different API.
+- **Direct HTTP** from any other language, with JSON bodies. A query goes in the URL in bracket notation (`?where[active]=true&limit=25`) or as a JSON body on the `GET`.
+- **`swell api get|post|put|delete '<path>'`** for a one-off look or change from a terminal, as the logged-in CLI user. It targets the **test** environment unless `--live` is passed, so a command that looks like it read or changed the live store did neither.
+
+The clients send the same paths, queries and bodies, so the references give a write as its method, path and body — `PUT /orders/<id>` with `{ canceled: true }` — for whichever client sends it. Queries and examples of several steps are JavaScript in which `swell` stands for that client: `swell.get(path, query)`, and `swell.post`, `put` and `delete(path, body)`. The clients differ in how a failure reaches the code: see "Errors, Rate Limits, Retries".
 
 # II. Data Model & Discovery
 
@@ -72,13 +88,37 @@ The reference also covers the event log and type names, the forms of a webhook's
 
 # VI. Commerce Lifecycles
 
-Read `references/commerce.md` before scripting orders, payments, subscriptions, or inventory — statuses are mostly **derived** from flags and related records (you rarely write `status` itself), payments auto-update their orders/invoices, subscription creation can charge immediately, and stock is an append-only adjustment ledger.
+Read `references/orders-payments.md` before scripting orders, shipments, payments, refunds, returns, invoices or subscriptions. Five of its rules change a design:
+
+- **State is derived.** `status`, `paid` and `delivered` are read-only: code writes a flag or creates a payment, a shipment or a refund.
+- **Creating an order or a subscription takes money in the same request.** An order that is not a draft spends the customer's account credit and charges its billing method, and a subscription without a trial charges its first period.
+- **Canceling refunds nothing, and a return moves no money.** A refund is its own write.
+- **Nothing checks a payment, a shipment or a return against the order.** Amounts and quantities above what the order has are accepted.
+- **`paid` stays true after a refund.** `payment_balance` is what is owed.
+
+Read `references/commerce.md` before scripting products, variants, inventory or accounts: variants are generated from options, stock is a ledger of adjustments that a product must opt into, and deleting an account with history is refused.
 
 Read `references/promotions-discounts.md` before scripting discounts or stored value — coupons (including bulk code generation), gift cards, promotions, and purchase links.
 
 # VII. Errors, Rate Limits, Retries
 
-Read `references/clients.md` — the clients do not report failures the same way. Batch and transaction results are in `references/writes.md`.
+The API answers a failed call in one of three ways, and the clients do not hand them to the code the same way.
+
+- **A missing record is not an error.** A `GET` or `DELETE` for an id that does not exist answers with status 200 and an empty body, which swell-node and the SDK resolve as an empty value: test `if (!record)`.
+- **A refused write is not an HTTP error.** A `POST`, `PUT` or `DELETE` that fails field validation writes nothing and answers `{ errors: { <field>: { code, message } } }`. Keys are dotted paths for nested fields (`items.0.quantity`), and detail values sit on the entry itself: `MINVAL` carries `min`, `ENUM` carries `values`.
+- **Everything else is an HTTP error.** 401 is a wrong store id or a bad or revoked key, and 402 a canceled plan or an expired trial. The body is plain text, or `{ error: { code, message, status } }` for an error with a code.
+
+| Client | Refused write | HTTP error |
+| --- | --- | --- |
+| swell-node | **Resolves** with `{ errors }`. Check `result.errors` after every write, or the script reports success while writing nothing | Throws. Branch on `err.status`; `err.code` is the HTTP status text, not the platform's code, and the API's body is at `err.cause.response.data` |
+| Apps SDK Backend client | **Throws** a `SwellError` with status 400 and the field map as `err.body` | Throws a `SwellError` with `status`, `code` and `body` |
+| Direct HTTP | Status 200 with an `errors` key in the body | The status and the body |
+
+The app clients differ among themselves too: a function's `req.swell` throws on a refused write and a workflow's resolves with `errors`. `swell-app` states each contract. Results of a batch or a transaction are per operation: `references/writes.md`.
+
+**Rate limits** apply per store and per environment, to both throughput and concurrency. The figures depend on the plan and are not published; a test environment always has the lower tier. Requests over the limit are queued, not rejected, so a 429 means a request waited more than 60 seconds: the load is sustained, not a spike. Back off with increasing delays, spread bulk work over time, and make each request lighter — every `expand` level and `include` adds to a request's weight. There are no rate-limit response headers to read.
+
+**Retries.** No client repeats a request the API answered with an error. Retry a 429 and a transaction's 409 in your own code, with increasing delays, and do not retry a 400, 401, 403 or 404.
 
 # VIII. Operating Guardrails
 

@@ -1,107 +1,8 @@
 # Commerce Lifecycles
 
-The rule that shapes everything here: **statuses are derived**. Write the underlying flags and related records; the platform computes `status`, `paid`, `delivered`, totals, and balances. Verify shapes against `GET /:models/<collection>` for the exact store.
+Products, variants, inventory and accounts. Orders, payments, refunds, returns, invoices and subscriptions are in `references/orders-payments.md`. Verify shapes against `GET /:models/<collection>` for the exact store.
 
 Read-only and immutable fields do not throw. A write to one resolves 200 with `{ errors: { <field>: { code: 'READONLY' | 'IMMUTABLE', ... } } }` and no effect — an import loop that doesn't check `result.errors` reports success while writing nothing. `immutable` only rejects a *change*: setting a field that is currently unset or null is allowed, so these fields accept a value on insert and refuse it forever after.
-
-## Orders
-
-`status` (auto): `pending | draft | payment_pending | delivery_pending | hold | complete | canceled`. The lifecycle booleans behind it are all read-only and all **forced false on a draft**:
-
-- `paid` — `not(draft) AND not(canceled) AND (payment_marked OR (payment_total > 0 AND payment_balance >= 0))`. The field description's "always true when `payment_marked=true`" is wrong: a draft or canceled order is never `paid` regardless of flags.
-- `delivered` — `not(draft) AND (delivery_marked OR (item_quantity_delivered > 0 AND item_quantity_deliverable <= 0))`.
-- `refunded` — `not(draft) AND (refund_marked OR (refund_total > 0 AND refund_total >= payment_total))`.
-
-`payment_balance` is `payment_total - refund_total - grand_total + return_total`: negative = customer owes, positive = refund due, zero = settled. Refunds and returns feed back into it, and therefore into `paid`. `hold` and `closed` are writable (`closed` is forced false whenever `paid`).
-
-- Create directly with `account_id` + `items[{ product_id, quantity }]` (plus billing/shipping/coupon_code) — or convert carts by checkout. Draft orders double as editable carts (`draft: true`).
-- **Cancel by writing `canceled: true`** (with `cancel_reason`) — there is no `/cancel` endpoint. `DELETE /orders/{id}` is permanent removal, not cancellation. `canceled` is **immutable on orders**: once set it can never be cleared, so cancellation is irreversible (subscriptions differ — their `canceled` flag is mutable and reversible while still active). With stock tracking enabled, order placement and cancellation create stock adjustments automatically.
-- **Billing/shipping propagate to the account, but not the way the field descriptions claim.** On a *submitted* (non-draft) order the platform POSTs the address and card as **new** `accounts:addresses` / `accounts:cards` child records. It overwrites `account.billing` / `account.shipping` only when the account has none yet, or when the order sets `billing.default: true` / `shipping.default: true`. Editing `billing` on an order whose account already has a billing object leaves the account untouched — set `default: true` if a rewrite is what you want. `account_info_saved: false` on the order suppresses all of it.
-- Item `price` is settable at add time (overrides list/sale price) and never changes afterward unless explicitly edited; `orig_price` preserves the pre-override value. `send_email` and `send_note` are special item **option ids** on gift card products (the platform reads them by id when delivering the card). Subscription line items are configured through `items[].purchase_option` — `{ type: 'standard' | 'subscription' | 'trial', plan_id }`, carrying `billing_schedule` and `order_schedule`. The `subscription_interval` / `subscription_interval_count` / `subscription_trial_days` fields on order items, products, variants, and option values are all marked `deprecated` in the model; new code must not write them.
-- Shipping rates: with `shipping.country` set, `shipment_rating` holds available services; write `shipping.service` from `shipment_rating.services[].id` (service name/price follow). Gift cards apply via `giftcards: [{ code }]` and are drawn in order until payment completes.
-- **Per-item `quantity_*` counters decide what is still actionable** — how much may still be shipped, returned, invoiced or cancelled. Read them instead of recomputing from quantities you tracked yourself. Get the exact set for the store from `GET /:models/orders` (`fields.items.fields`) rather than guessing names: there is no `quantity_shipped`, and only some counters have an order-level `item_`-prefixed roll-up. The deliverable and invoiceable roll-ups zero out on a canceled order.
-
-## Payments & Refunds
-
-Payment `status` (auto, condition-derived): `pending | void | error | success | authorized` (from the flags `success`, `authorized`, `void`; `error` populates `error.code`/`error.message`). Payments attach to orders/invoices via `order_id`/`invoice_id`, and **automatically update the parent's payment totals and balance** — never write order payment totals directly.
-
-- Create: `account_id`, `amount` (min 0.01), `method` (`card`, `account` — pays from customer account credit, `amazon`, `paypal`, or a manual method defined in payment settings), plus `card.token` / `account_card_id` / `giftcard_id` as the method requires.
-- Authorize-then-capture: create with `authorized: true`, capture later via `PUT /payments/{id}` `{ captured: true }`. Async gateway payments set `async: true` with `success` undefined until resolution (`date_async_update` says when it will be checked).
-- Refunds are child records: `POST /payments/{id}/refunds` with `amount` up to the payment's `amount_refundable`; `method` defaults to the original payment method (`reason`, `reason_message` optional). The payment's `amount_refunded` and the order's `refunded` state follow automatically.
-
-## Returns
-
-A return records goods coming back and the credit owed for them. **It moves no money** — issue the refund separately (`POST /payments/{id}/refunds`, above) or apply account credit. Filing the return and stopping there leaves the customer unpaid.
-
-Create against an order. `order_id` is required and immutable, `items` is required, and each item needs at least `product_id` and `quantity` (add `order_item_id` and `variant_id` to bind it to the exact line):
-
-```js
-await swell.post('/returns', {
-  order_id,
-  items: [{ order_item_id, product_id, variant_id, quantity: 1 }],
-  reason_code: 'damaged',
-});
-// → number 'R100001', assigned automatically (unique, auto, immutable)
-```
-
-**There is no `status` field on a return.** Progress is two per-item counters plus their sums:
-
-- `items[].quantity_received` — how many of that line physically arrived. `quantity_receivable` is the formula `quantity - quantity_received`; `item_quantity_received` / `item_quantity_receivable` are the return-level sums.
-- `items[].quantity_restocked` — how many go back into sellable inventory. `quantity_restockable`, `item_quantity_restocked`, `item_quantity_restockable` mirror it.
-
-**`received` is read-only** — formula `if(and(item_quantity_received > 0, quantity_receivable <= 0), true, false)`. Writing `{ received: true }` yields a `READONLY` entry in `result.errors`. Mark receipt by writing the per-item counts and let the flag flip itself:
-
-```js
-await swell.put('/returns/{id}', {
-  id: returnId,
-  items: [{ id: returnItemId, quantity_received: 1, quantity_restocked: 1 }],
-});
-```
-
-(`items` deep-merges by element `id` like every array, so this amends one line rather than replacing the list.)
-
-`quantity_restocked` is what actually moves inventory: it propagates to the order item's `quantity_restocked`, and the order's stock recalculation emits a `/products:stock` adjustment with `reason: 'returned'`. Received-but-not-restocked (damaged goods) is the normal case for `quantity_received > quantity_restocked` — do not mirror the two by reflex. Note the order item's `quantity_returned` aggregates each return line's `quantity`, not its `quantity_received`, so an unreceived return already counts as returned on the order. Bundle items count as returned only once every constituent product has come back.
-
-Money on the return is advisory, not charged: `credit_total` is `shipment_total + extra_credit - restock_fee`, where `extra_credit` is goodwill compensation and `restock_fee` is what you keep; `credit_tax` follows `shipment_tax`. Cancel with `{ canceled: true }` — canceled returns drop out of the order's aggregation.
-
-Events: `return.created` / `.updated` / `.deleted`, plus `return.received` when the record first crosses into fully received, and `return.canceled`.
-
-## Invoices
-
-Invoices are generated by subscriptions (`subscription_id`) and, less often, attached to orders (`order_id`); both keys are immutable. `source_model` is a formula resolving to `'orders'` or `'subscriptions'`, so `expand: ['source']` pulls whichever applies without branching. `number` is auto-assigned and immutable.
-
-`status` is read-only and derived, with **its own four-value enum, not the order enum**:
-
-| status | condition |
-| --- | --- |
-| `pending` | `paid: false`, `closed: false`, `void: null` |
-| `paid` | `paid: true` (i.e. `payment_due <= 0`) |
-| `unpaid` | `paid: false`, `closed: true` |
-| `void` | `void: true` |
-
-(The field's own inline description lists only three and omits `void` — the enum above is what the platform evaluates.)
-
-`paid` is the read-only formula `payment_due <= 0`, and `payment_due` is `grand_total - credit_total - payment_total`, forced to 0 once void. Collect by creating a payment against `invoice_id`; the payment maintains these totals. `payment_total` and `credit_total` are read-only — never write them.
-
-There is **no `canceled` flag on an invoice**. Two different levers, and picking the wrong one is the usual mistake:
-
-- **`closed: true`** — stop trying to collect. Dunning halts and the invoice reads `unpaid`. This is "give up on this one".
-- **`void: true`** — the invoice should never have existed. `void` is **immutable**: settable once, never reversible. It also carries a rule that rejects the write with `Cannot void if payment has been applied` when `payment_total > 0` — refund the payment first, or close it instead.
-
-`pastdue`, `date_due`, and `net_days` are declared on the model but **inert** — `pastdue` is read-only with no formula and nothing computes it, and no platform code reads `date_due` or `net_days`. A dunning query on `pastdue: true` returns empty forever and raises no error, so track overdue invoices yourself from `date_created` plus your own terms. Failed collection *does* populate `payment_error`, `payment_retry_count`, `payment_retry_resolve`, and `date_payment_retry`; the retry schedule comes from the store's subscription settings, not from the invoice.
-
-Events declared on the model: `invoice.created` / `.updated` / `.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
-
-## Subscriptions
-
-`status` (auto, condition-derived): `pending | draft | complete | paused | active | trial | pastdue | unpaid | canceled` (`paid` is a read-only boolean flag — `not(trial) AND payment_balance >= 0` — not a status). Key semantics:
-
-- **Creating a subscription bills immediately** — `POST /subscriptions` with `account_id` + `product_id` charges the customer's default card on the spot unless `trial_days` / `date_trial_end` is set; a failed charge returns a validation error and creates no invoice. Plan changes (`product_id`/plan updates) prorate by adding a line item charged/credited on the next invoice — disable with `prorated: false`.
-- `billing_schedule` (`interval`, `interval_count`, `trial_days`, `limit` cycles) drives invoicing; `order_schedule` separately drives order generation for physical products (subscriptions auto-generate orders when the plan involves physical items). **`date_trial_end` is also the billing anchor** — set it to the 1st of next month to align monthly billing to the 1st, trial or not.
-- Pause: `{ paused: true, date_pause_end }` (`null` = indefinite) or schedule with `pause_at_end` / `date_pause_at` / `pause_skip_cycles`.
-- **Cancel: `{ canceled: true, cancel_at_end: false }` cancels immediately.** A bare `{ canceled: true }` is *not* reliably immediate — the platform merges the request over the stored record, so a subscription already carrying `cancel_at_end: true` or a stored `cancel_at_schedule` defers instead. Schedule deliberately with `cancel_at_end: true`, `cancel_at_schedule`, or `date_cancel_at`. Cancellation is reversible: writing `{ canceled: false }` un-schedules a pending cancellation on a still-active subscription, or reactivates an already-canceled one (stamping `date_uncanceled` and starting a new billing period). Canceling a `draft` or `complete` subscription is rejected with a validation error on `canceled`. `DELETE` is permanent removal — use cancel.
-- Items: `recurring: true` items bill every cycle; non-recurring items bill once on the next invoice and drop off. A **negative item `price` credits** the customer on their next invoice — the idiom for one-off adjustments. `proration: true` marks platform-generated proration items.
-- Money fields read differently than they look: `grand_total` is the **next** invoice's total; `invoice_total` is the **last** billed period. Failed payments retry per store subscription settings (`date_payment_retry`), then mark the subscription `unpaid`; expand `invoices`, `pending_invoices`, `payments`, `orders` to audit history.
 
 ## Products & Variants
 
@@ -189,4 +90,4 @@ The override is a `$force_delete: true` body on the DELETE, and it is bigger tha
 
 Account credit accrues via `/accounts:credits` records (positive or negative `amount`) and pays orders through payments with `method: 'account'`. Refund-to-credit is a refund with `method: 'account'`.
 
-At checkout the platform applies available credit automatically only when **all** of these hold: the order has an `account_id`, `account_logged_in` is not `false`, the `account` payment method is enabled in `/settings/payments/methods`, and `auto_apply_credit` is on in `/settings/orders/features` (or `/settings/subscriptions/features` for subscription orders). Both settings default to on, so a store that has never touched them auto-applies. Override per order with `account_credit_amount`: a positive value caps the amount and bypasses the settings check entirely; `0` or `null` opts out.
+An order spends the customer's credit by itself when it is created: `references/orders-payments.md` has the rule and the field that overrides it.
