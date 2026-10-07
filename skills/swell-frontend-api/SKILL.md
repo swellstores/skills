@@ -44,13 +44,13 @@ Without a session, every server request starts a new (empty-cart) session — an
 
 **Three failure surfaces.**
 
-1. **Resolve with `errors`.** `account.create`/`update`, the address and card sub-resources, and every `swell.subscriptions` write return **field validation** as a resolved `{ errors: { [fieldOrSource]: { code, message } } }` — a 200 you must inspect (gateway failures key on `gateway`). `swell.cart` has both branches, by call: `references/cart-checkout.md`, "How failures arrive".
+1. **Resolve with `errors`.** Account, address, card and subscription writes return **field validation** as a resolved `{ errors: { [fieldOrSource]: { code, message } } }` — a 200 you must inspect: `references/accounts-subscriptions.md`, "How failures arrive". `swell.cart` has both branches, by call: `references/cart-checkout.md`, "How failures arrive".
 2. **Reject with an `Error`** carrying `message`, `status`, `code`, `param` — including every logged-out call to an account-scoped endpoint (`code: 'UNAUTHORIZED'`). Two shapes break naive handlers: an HTTP failure whose body isn't JSON rejects with `code: 'connection_error'` and **no `status`**, so an `err.status >= 500` branch misses it entirely; a network failure rejects with the browser's own `TypeError`, which has none of these fields.
 3. **Neither.** `settings.load()` logs and resolves on failure; `products.variation()` throws synchronously; `swell.payment.authenticate()` resolves `{ error }` instead of rejecting; and `payment.createElements()` for a method the store has disabled logs to the console, drops that method, and resolves normally — nothing renders and no error reaches your code (see `references/payments.md`).
 
 **Generic requests.** `swell.get/put/post/delete(url, data)` hit any `/api/*` path with the same auth and session — for `get` the second argument is a query object, or a string appended as a path segment (`swell.get('/products', 'blue-shoes')`); on writes a string replaces the body, so use `swell.request(method, url, id, data)` when you need both.
 
-This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VII). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
+This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VI). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
 
 Two undocumented query features:
 
@@ -113,38 +113,18 @@ The rules from them that change a design:
 - `capture_total` is the amount to pay. `grand_total` does not subtract gift cards or account credit.
 - An order is read back by its cart's `checkout_id`, which the order does not carry, and anyone who has that id can read the order.
 
-# V. Customer Accounts
+# V. Accounts and Subscriptions
 
-`swell.account.login(email, password)` (or `login(email, { password_token })` — always snake_case, even under `useCamelCase`; the token is single-use and is unset on success), `logout()`, `get()` (null when logged out), `create({ email, password?, first_name?, last_name?, email_optin? })` (attaches to the current session), `update(changes)`.
+`swell.account` signs a customer up and in and holds the profile, addresses, saved cards and order history. `swell.subscriptions` and `swell.invoices` hold what a logged-in customer is billed for.
 
-**`login()` resolves `null` on wrong credentials.** It does not throw and does not return an `errors` object, so a `try`/`catch` or an `if (result.errors)` check treats a failed login as a success. Branch on the return value:
+**Read `references/accounts-subscriptions.md`** for sign-up, login and logout, password recovery, addresses, order history, and creating, pausing, changing and canceling a subscription. The rules from it that change a design:
 
-```js
-const account = await swell.account.login(email, password);
-if (!account) { /* wrong email or password */ }
-```
+- `account.login()` resolves with `null` for wrong credentials. It does not reject.
+- Logged out, `account.get()` resolves with `null` and every other account, subscription and invoice call rejects.
+- A login or a logout changes the cart: read it again.
+- A write resolves with `errors` for a bad value and rejects for a field it does not accept.
+- A subscription is canceled, and a cancellation undone, with `canceled` and `cancel_at_end` together.
 
-`create()` **throws** when a session is already logged in (`You must be logged out to create an account`), and masks duplicate emails: a taken address comes back as `errors.email` with `code: 'INVALID'` and a deliberately generic message, never `UNIQUE` — do not build "that email is already registered" UX on it. Creating an account attaches it to the session either way, but the cart's `account_logged_in` flag is set only when a password was supplied (an email-matched account with a password but no login shows `account_logged_in: false` — prompt for login). Writable fields are `email`, `password`, `first_name`, `last_name`, `name`, `phone`, `email_optin`, `type`, `vat_number`, `metadata`, `shipping`, `billing`, `addresses`, `cards`, `password_reset_url`; anything else is rejected.
-
-**Login and logout mutate the cart.** Logging in claims the visitor's guest cart for the account and re-runs promotions; if the session has no cart, the account's last active cart is adopted instead. There is no merge — with a guest cart present, the account's older cart is left behind. Logging out keeps the cart and its items but detaches the account, clears `shipping.account_address_id` and `billing.account_card_id`, re-runs promotions (totals can change), and returns `{ success: true }`. Re-read the cart after both and drop any UI holding a saved address or card id.
-
-**Most account reads reject when logged out.** Only `account.get()` follows the resolve-to-`null` rule. `update()`, `listOrders()`/`getOrder()`, `listAddresses()`/`listCards()` and their create/update/delete siblings, and everything under `swell.subscriptions`, are hard-gated and **reject with `code: 'UNAUTHORIZED'`** when the session has no `account_id`. Check `await swell.account.get()` (or `(await swell.session.get())?.account_id`) before rendering an authenticated view; don't infer logged-out from an empty result set. The gate is the session's `account_id`, not the cart — a guest cart carrying a customer's email is not logged in.
-
-Password recovery is one dual-mode method: `account.recover({ email, reset_url? })` sends the email (silently succeeds even for unknown addresses; `{reset_key}` substitutes into `reset_url`; keys expire after 24 hours), then `account.recover({ password, reset_key })` performs the reset (`password_reset_key` is accepted as an alias).
-
-Sub-resources: `listAddresses()` / `createAddress` / `updateAddress` / `deleteAddress`; `listCards()` / `createCard` / `updateCard` / `deleteCard` (tokenized cards only — gateway specifics in `references/payments.md`; the default card is `account.billing.account_card_id`, changed via `account.update({ billing: { account_card_id } })`); `listOrders({ limit, page, expand })` / `getOrder(id)`.
-
-# VI. Subscriptions
-
-Two distinct paths:
-
-- **Purchase through checkout**: add the product to the cart with a `purchase_option` of type `subscription` (`references/cart-checkout.md`, "The cart") and submit normally. This is the storefront-native path.
-- **Direct management** (logged-in account): `swell.subscriptions.list()/get(id)/create({ product_id, variant_id?, quantity?, coupon_code?, items? })/update(id, changes)`. Every subscription route requires a logged-in session and rejects with `code: 'UNAUTHORIZED'` otherwise. Writable fields are a fixed whitelist — `paused`, `date_pause_end`, `canceled`, `cancel_at_end`, `coupon_code`, `quantity`, `options`, `product_id`, `variant_id`, `plan_id`, `billing`, `billing_schedule`, `shipping`, and `items.{id,product_id,variant_id,quantity,options}` — and anything outside it is rejected, not ignored. Pause with `update(id, { paused: true, date_pause_end })` (`null` = indefinite). **Cancel by always sending the pair:** `{ canceled: true, cancel_at_end: false }` cancels immediately, `{ canceled: true, cancel_at_end: true }` cancels at the end of the paid period — a portal should offer the second. The platform branches on the request *merged over the stored record*, so a bare `{ canceled: true }` inherits whatever `cancel_at_end` or `cancel_at_schedule` the record already carries and defers silently — and `cancel_at_schedule` is neither readable nor writable from a storefront key, so you cannot see it coming. `cancel_at_end` **on its own cancels nothing, ever**: the entire cancellation path is gated on `canceled` being truthy, and the write still returns 200 with the flag stored. Swap plan with `plan_id`, product with `product_id` (+ `variant_id?`). Invoice line items: `addItem(id, item)`, `updateItem(id, itemId, changes)`, `setItems(id, items)`, `removeItem(id, itemId)`.
-
-**Building the portal.** Subscriptions accept a fixed `expand` set — `product`, `variant`, `orders`, `invoices`, `payments` — and anything else rejects with `You can only expand public fields`. Append `:n` to cap an expanded set: `swell.subscriptions.list({ expand: ['product', 'invoices:5', 'payments:5'] })`.
-
-Billing history also has its own namespace, `swell.invoices.list(query)` / `swell.invoices.get(id)` — present and typed in the library but absent from developers.swell.is. It is account-scoped: results are auto-filtered to the logged-in customer and it rejects when logged out. Narrow to one subscription with `swell.invoices.list({ subscription_id })`. Orders accept `expand: ['shipments', 'payments', 'refunds']` on `account.listOrders()` / `getOrder()` — what an order-detail or tracking view needs.
-
-# VII. Calling App Functions
+# VI. Calling App Functions
 
 `swell.functions.request(method, appId, functionName, data?)` (plus `get/put/post/delete` helpers) invokes an app's HTTP route at `/functions/<app_id>/<name>` with the storefront's key and session. Gateway rules apply — the same for any external caller, detailed in the swell-app skill's `references/functions-routes.md`, §"Calling routes from outside Swell (hosted gateway)": with an empty body, query params arrive in the function's `req.data`; with a body, query params are dropped; a route that isn't marked public needs a secret key, which a storefront must never carry. Case conversion is disabled in **both** directions for function calls: your payload is sent exactly as written (never snake_cased) and the response comes back exactly as the function produced it (never camelCased), even on a `useCamelCase: true` client. Use this for storefront features backed by app logic (custom submissions, computed data) instead of exposing privileged operations publicly.
