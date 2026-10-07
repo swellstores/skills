@@ -1,91 +1,118 @@
-# Catalog & Variants
+# Catalog, Content and Settings
 
-Storefront product reads are computed per request by the gateway — stock status, per-account pricing and attribute expansion are applied to the response, not stored. Nothing below survives being frozen into a build.
+Reading products, categories, content, settings, locales and currencies. These reads need no session, but Swell prices a product and works out its stock for the session at the moment of the read; `clients-sessions.md` owns caching, `$cache: false`, the 1000 limit and built pages.
 
-## What you render
+## Reading products
 
-- `options[]` — `{ id, name, variant, price, values: [{ id, name, price, color, image, images }] }`. `variant: true` marks an option that defines variants; every other option is an add-on whose selected value's `price` is added to the line.
-- `variants` — `{ count, results }`, each `{ id, name, option_value_ids[], price, sale, sale_price, currency, images, purchase_options, stock_level }`. A variant is identified by the **exact set** of `option_value_ids`.
-- `purchase_options` — `{ standard: { price, sale, sale_price, orig_price }, subscription: { plans: [{ id, name, price, billing_schedule, ... }] } }`. The platform copies price fields down to the top level at write time by walking `standard` → `subscription` → `trial`, **each active, priced type overwriting the fields it defines**. A product priced under both therefore reports `subscription.plans[0]`'s `price` at top level while keeping `standard`'s `sale_price` (subscription plans carry only `price`). Read `purchase_options`, not the top-level fields, on any product with more than one purchase type.
-- **Top-level `sale_price` is not in the default public field set** — `sale` is, `sale_price` is not, so `product.sale_price` comes back `undefined` on the Frontend API. Read `purchase_options.standard.sale_price` (which is what `variation()` does) or add `sale_price` to the public key's `products` field permissions.
-- Inactive options, purchase options and plans are filtered out before the response reaches you — render what is present rather than checking `active`.
-- `attributes` are always expanded (the gateway forces it). `categories` are populated only when the query scopes or expands them — see Facets.
+`swell.products.list(query)` takes `{ limit, page, sort, where, search, expand }`; `swell.products.get('<slug-or-id>', query)` reads one.
 
-## `get` expands variants, `list` does not
+- **Only active records are returned**: products, variants, options, purchase options, plans and categories. An inactive product reads as `null`, and `where: { active: false }` is ignored.
+- **`fields` is ignored.** Every read returns the fields the public key allows. Keep a listing small by not expanding.
+- **`search` matches the start of words in `name`, `slug` and `sku`**, and every word must match. Ids and descriptions are not searched; read by id with `get`.
+- **`get` includes `variants`, `list` does not.** Add `expand: ['variants']` to a list only when the page resolves selections: it costs a query per product. On `get` and on `list` it also adds each variant's `sku` and `attributes`.
 
-`swell.products.get(idOrSlug)` always includes variants: the gateway forces the sub-query (limit 1000, active, non-archived) with `currency, name, option_value_ids, price, sale, sale_price, purchase_options, stock_level, images`. Widen that set with `include: { variants: { data: { fields: [...] } } }` — only `fields` merges; url, params and limit are overwritten.
+## What a product carries
 
-`swell.products.list()` returns no variants unless asked: `expand: ['variants']` (the public variant field set — which does **not** include `sale`/`sale_price`) or `$variants: true` (the same set `get` uses). Both cost a sub-query per product; skip them on a listing page and price from the product record.
-
-**`products.variation()` on a product whose variants were not expanded throws a raw `TypeError`** — it dereferences `product.variants.results` — the moment the selection touches a variant option. It throws synchronously; there is no rejected promise to catch.
+- **`price` is what this shopper pays**: the sale price and the price for the logged-in customer's group are already applied. `orig_price` is present only when the price was lowered, and `sale` says a sale is on. There is no top-level `sale_price`.
+- `options[]`: `{ id, name, variant, required, input_type, values: [{ id, name, price }] }`. `variant: true` marks an option that selects a variant; a value of any other option adds its `price` to the line.
+- `variants`: `{ count, results }`, each `{ id, name, option_value_ids, price, orig_price, purchase_options, stock_status, stock_level, images }`. A field without a value is absent.
+- `purchase_options`: `{ standard: { price, sale, sale_price, orig_price }, subscription: { plans: [{ id, name, price, billing_schedule }] } }`, only the types the product sells. On a product with more than one type, the top-level `price` belongs to one of them: take the price from `variation()` with the type the shopper chose.
+- `attributes`: always present, an object keyed by attribute id, each `{ name, type, value, visible, filterable }`.
+- `categories`: absent unless asked for ("Categories and facets").
 
 ## Resolving a selection
 
 ```js
-const product = await swell.products.get('blue-shoes');       // variants included
-const selection = { Size: 'M', Color: 'Blue' };               // or [{ id|name, value }]
-const variation = swell.products.variation(product, selection); // local, synchronous
-if (!variation.variant_id) { /* incomplete selection — keep add-to-cart disabled */ }
+const product = await swell.products.get('blue-shoes');
+const selection = { Size: 'M', Color: 'Blue' };           // or [{ id | name, value }]
+const variation = swell.products.variation(product, selection);
+// variation.variant_id is set only when the selection names one variant
 const cart = await swell.cart.addItem({ product_id: product.id, quantity: 1, options: selection });
-if (cart.errors) { /* server rejected it — cart state is unchanged, surface the message */ }
+// cart.errors is set when Swell refused the selection
 ```
 
-- Options and values match by `id` **or** `name`, as an object map or an array; every form normalizes to `{ id, value }`.
-- `variation()` matches names and values as raw strings; the server lowercases and trims both. `{ Size: 'm' }` therefore resolves no variant locally while `addItem` resolves it fine — normalize casing to the strings in `product.options` before gating a button on `variation.variant_id`.
-- Matching is an exact set match over the variant options. A partial or unknown selection matches nothing and `variation()` quietly returns the **parent** product's price, images and stock. A price coming back is not proof a variant resolved — gate on `variation.variant_id`. The server is stricter about the same selection: see below.
-- Non-variant option values add their `price` to `price`, `sale_price` and `orig_price`. Never price a configured item from `product.price`.
-- `variation.images` is the variant's own images when it has any, otherwise the product's.
-- Third argument selects the purchase option: `'standard'`, `'subscription'`, `{ type }`, `{ plan_id }` or `{ plan }`. It **throws synchronously** — `Product purchase option '<type>' not found or not active`, `Subscription purchase plan '<plan>' not found or not active`. Only non-`standard` types throw; a missing or inactive `standard` option falls back silently to the product's own `price`/`sale_price`/`orig_price`, so a try/catch around the default call buys nothing. Plans match on plan **id**, not name; omitting the plan selects `plans[0]`. A variant that lacks the chosen purchase option silently falls back to the parent's pricing.
+`variation()` is local and synchronous. It returns the product with `price`, `orig_price`, `sale_price`, `stock_status`, `stock_level` and `images` replaced by the variant's, plus `variant_id`.
 
-`options` are validated server-side. Failures resolve as an `errors` object on the response — they are never a thrown request — and the SDK leaves `swell.cart` state untouched when `errors` is present, so branch on the object `addItem`/`updateItem`/`setItems` returns, not on the cart you already hold:
+- **It needs `variants` on the product.** On a product from a list without `expand: ['variants']` it throws a `TypeError`.
+- **A selection that names no variant returns the product's own values**, without an error: an incomplete selection, an unknown value, a combination no variant covers. A price coming back proves nothing: on a product with variant options, enable the button on `variation.variant_id`.
+- **Names and values match exactly.** Options and values are matched by `id` or `name`, case included. The cart ignores case, so `{ size: 'm' }` adds the right variant while `variation()` finds none: use the strings from `product.options`.
+- **Add-on values are added to `price`, `orig_price` and `sale_price`.** Never price a configured item from `product.price`.
+- **The third argument chooses the purchase option**: `'standard'`, `'subscription'` or `{ type: 'subscription', plan_id }`. A plan is matched by its `id`; without one the first plan is used. A type or plan the product does not sell throws at once, except `'standard'`, which falls back to the product's price.
 
-- Unknown option **name** → silently kept on the line and priced at parent. This is the only selection that falls through.
-- Known option, unknown **value** → `errors['items.options']`: `Product option value is not available (<value>)`.
-- Any variant option matched but no complete variant found — a partial selection, or a combination no variant covers → `errors['items.options']`: `Product variant is not available for selected options`. The lookup is the same exact set match `variation()` does (`option_value_ids` `$all` + `$size`).
-- Neither `variant_id` nor `options` on a product that has variant options → `errors['items.variant_id']`: `<name> should be purchased with a variant_id or options`. An unresolvable `variant_id` gives the same key with `Product variant is not available`.
+What `cart.addItem()` answers to a selection on a product with variants:
+
+| Selection | Answer |
+| --- | --- |
+| No `options` and no `variant_id` | Resolves with `errors['items.variant_id']` |
+| An unknown value, an incomplete selection or a combination with no variant | Resolves with `errors['items.options']` |
+| An option name the product does not have | Accepted: a line without a variant, at the product's price |
+| A `variant_id` that does not exist | Rejects with status 404 |
+
+A call that resolves with `errors` changed nothing in the cart.
 
 ## Stock
 
-`stock_status` resolves in strict precedence: `discontinued` → `preorder` → `backorder` → (`stock_tracking` ? `in_stock` / `out_of_stock` : `null`).
+`stock_status` is the first that applies of `discontinued`, `preorder`, `backorder`, then `in_stock` or `out_of_stock` when the product tracks stock, and `null` when it does not.
 
-- **`null` means the product does not track stock.** It is always purchasable — render it as available, never as unknown or out of stock.
-- The first three states come from the *product*, so every variant of a preorder product reads `preorder`. Per-variant `stock_status` is only computed when the product tracks stock, so on an untracked product `variation.stock_status` is `undefined`. Read `variation.stock_status ?? product.stock_status`.
-- `stock_level` on a product with variants is the level of the variant with the **maximum** stock, not the sum — it is not a total and must never be shown as one. After a variant match `variation.stock_level` is that variant's level; with no match it is the product's max-variant number.
-- `discontinued`, `stock_preorder` and `stock_backorder` are stripped from responses under the default public field set — they are fetched only to compute `stock_status`. `stock_status`, `stock_level`, `stock_tracking` and `stock_purchasable` are public.
-- Stock only blocks a purchase when `stock_tracking` is on and `stock_purchasable` is off; subscription products are never stock-checked. The block surfaces at submit as `errors.order`: `<name> is not currently available`.
+- **`null` means the product does not track stock.** It can always be bought: show it as available.
+- **A variant has its own `stock_status` only on a product that tracks stock.** Read `variation.stock_status ?? product.stock_status`.
+- **`stock_level` on a product with variants is the highest variant's level, not the sum.** Never show it as a total; a variant's own level is on the variant.
+- Stock stops a purchase only when the product tracks stock and the store does not sell beyond it. The refusal comes when the order is submitted, so read the product again before checkout.
 
-## Facets
+## Categories and facets
 
-`swell.products.filters(results)` is local and synchronous, and accepts a list response, an array, or a single product:
+`swell.categories.list()` and `swell.categories.get('<slug-or-id>')` read categories; `get` carries `children` and `parent`.
 
-| filter | shape |
+Scope a product list with one of two parameters:
+
+- `category: '<slug-or-id>'`: that category alone, in the order the merchant set for it unless `sort` is passed.
+- `categories: [...]`: those categories and every category below them.
+
+A category that does not exist gives an empty list.
+
+`swell.products.filters(results)` builds facets, locally, from a list answer, an array or one product:
+
+| Filter `id` | Shape |
 | --- | --- |
-| `price` | `type: 'range'`, `options: [{ value: min }, { value: max }]`, plus `interval`. Bounds are `Math.floor` of the lowest price and `Math.ceil` of the highest, and the filter is **omitted only when those two collide** — that is, when every product shares one whole-number price. A set priced entirely at 10.50 still yields a 10–11 range. Derived from `price` only, ignoring sale prices. |
-| `category` | `type: 'select'`, option values are **slugs, not ids**. Absent from the returned array unless the records carry `categories` — not present-but-empty, so branch on presence. |
-| one per attribute | `type: 'select'`, `id` = attribute id, options = the values present in the set. |
+| `price` | `type: 'range'`, `options: [{ value: min }, { value: max }]` and `interval`. The bounds are rounded outward to the interval and come from `price`. Absent when every product has the same price. |
+| `category` | `type: 'select'`, option values are slugs. Absent unless the products carry `categories`. |
+| an attribute id | `type: 'select'`, the values present in the products. |
 
-`filters()` keeps every attribute it finds. For a facet UI use `await swell.products.filterableAttributeFilters(results)` instead — same shapes, but it fetches `attributes.list({ filterable: true })` and keeps only those. (`swell.attributes.list()` returns only visible or filterable attributes, sorted by name.) `products.priceRange()`, `products.categories()` and `products.attributes()` expose the same derivations individually.
-
-Because these derive from the set you passed, they describe that page, not the catalog. Apply selections through `$filters` and let the API do the filtering:
+`await swell.products.filterableAttributeFilters(results)` answers the same, with only the attributes the merchant marked as filterable. Both describe the products passed in, not the catalog. Apply the shopper's choices with `$filters` and let Swell filter:
 
 ```js
 await swell.products.list({
+  category: 'shirts',
   limit: 24,
   page: 2,
-  $filters: { price: [10, 50], category: ['sale'], stock_status: ['in_stock'], size: ['M', 'L'] },
+  $filters: { price: [10, 50], category: ['sale'], stock_status: ['in_stock'], color: ['Red', 'Blue'] },
 });
 ```
 
-- `price: [min, max]` matches `price` **or** (`sale: true` and `sale_price`) within range.
-- `category` values **OR** together: every value is `+`-prefixed into one set that collapses to a single `category_index.id $in [...]` clause, so adding a second value **widens** the result — it never narrows it. They also match those categories **exactly**; unlike the `categories` query param, descendants are not included. The `+` group as a whole ANDs against any `categories` param passed alongside it.
-- `stock_status` (alias `stock`) matches the listed statuses, and also matches untracked products when `in_stock` is listed.
-- Every other key is treated as an attribute: `attributes.<id> $in [values]`.
+- `price: [min, max]` matches a product whose price or sale price is in the range.
+- `category`: any of the listed categories, without the categories below them, and only inside the `category` or `categories` scope of the same query. A value that is no category is ignored and does not empty the list.
+- `stock_status`: the listed statuses. `in_stock` also matches a product with `stock_tracking: false`, and misses one where tracking was never set. For an "available only" switch use `where: { stock_status: { $ne: 'out_of_stock' } }`, which keeps every product that does not track stock.
+- Any other key is an attribute id: any of the listed values, case included. Several attributes must all match.
 
-Category facets need `categories` on the records, which arrives only with `category`/`categories` in the query or `expand: ['categories']`. `$filters: { category: [...] }` does **not** count — the gateway derives the expansion from the top-level params only, so a list filtered that way comes back with no `categories` to build the next level from. What lands there is each product's categories **rolled up to top level** — or, when the list is scoped to a category, that category's direct children, which is what a drill-down facet wants.
+**Products carry `categories` only when the query asks.** `expand: ['categories']` adds each product's top-level categories. A list scoped with `category` or `categories`, without that expand, carries the scoped category's direct children instead, which is what a drill-down facet needs. `$filters: { category }` adds none.
 
-## Listing performance
+## Content
 
-- `limit` defaults to 15 and is capped at 1000; above that the request rejects with `Query limit cannot exceed 1000`. Page with `{ limit, page }` and read `count` from the response.
-- Storefront GETs are served from a 5-second stale-while-revalidate cache keyed by store, environment, path and query, so identical PLP requests across visitors are cheap. Pass `$cache: false` on a read that must not be stale.
-- `category: '<id-or-slug>'` (singular) resolves one category by id **or** slug and scopes to that category alone (`category_index.id = <id>`) — descendants are not included. `categories: [...]` also takes ids or slugs and **does** include every descendant. Either param resolving to nothing returns an empty result set, not the full catalog. Singular `category` additionally applies that category's configured `sorting` unless you pass an explicit `sort`.
-- A `fields` param on a storefront read is **discarded** — the gateway overwrites it with the public field allowlist, so you cannot trim a payload that way (widening variant fields through `include` is the one exception, because an include carrying no `url` skips that validation). Narrow by not expanding: no `expand: ['variants']` or `$variants` on a listing, and reserve variant expansion for the PDP, where `get` gives it to you anyway.
+`swell.content.list('<type>', query)` and `swell.content.get('<type>', '<slug-or-id>', query)` read a content collection: `pages`, `blogs` or a custom content model.
+
+- **`list` returns published records only.** Pass `$preview: true` to include drafts.
+- **`get` returns a draft like a published record.** swell-js sends `$preview` with every `content.get()`, and Swell reads any value, `false` included, as a request for drafts. Check the record's `published` before rendering it; the `previewContent` option changes nothing here.
+- **A missing record or an unknown type resolves with an empty string**, not `null` and not an error. Test the answer for truth before reading `results` or a field.
+
+## Settings and menus
+
+`await swell.settings.load()` once per client fetches the store's settings, menus, payment methods and subscription settings in one request. After it, `settings.get('<path>', default)`, `settings.menus('<id>')`, `settings.payments()` and `settings.subscriptions()` are synchronous; before it they return promises.
+
+- `settings.get('store')` has the store's `name`, `currency`, `locale`, `country`, `url` and support contacts.
+- `settings.menus()` without an id does not return the menus. Read them all with `swell.get('/settings/menus')`.
+
+## Locale and currency
+
+- `swell.locale.list()` and `swell.currency.list()` answer with the store's languages and currencies, and with an empty array for a store that has only one.
+- `await swell.locale.select(code)` and `await swell.currency.select(code)` save the choice in the session and its cookie. Later reads answer in that language and with prices converted at the store's rate, and the cart takes the choice with it to checkout and to order emails. The code is not checked: offer only codes from `list()`.
+- `swell.currency.selected()` and `swell.currency.format(amount, { code, locale, decimals })` are synchronous. Format every price with `format()` after `settings.load()`; without options it uses the session's currency.
