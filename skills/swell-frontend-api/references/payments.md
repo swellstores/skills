@@ -12,7 +12,7 @@ A cart must exist (fetch or add an item) before rendering a card element.
 
 **Every call in this file is browser-only.** `createElements()` calls `stripe.elements()` and mounts into `#<elementId>`; `tokenize()` throws "Stripe payment element is not defined" without that element instance; `handleRedirect()` reads `window.location`. None of them survive a Server Component or Server Action.
 
-So in an SSR framework, split the checkout: read the cart and run `cart.update` / `applyCoupon` / `getShippingRates` server-side (`ssr.md`), and put the payment step in a client component with its own `swell.init(storeId, publicKey)` — the public key has to reach the browser (`NEXT_PUBLIC_*`).
+So in an SSR framework, split the checkout: read the cart and run `cart.update` / `applyCoupon` / `getShippingRates` server-side (`clients-sessions.md`), and put the payment step in a client component with its own `swell.init(storeId, publicKey)` — the public key has to reach the browser (`NEXT_PUBLIC_*`).
 
 Both clients must land on **one** session, and the seam is the `swell-session` cookie:
 

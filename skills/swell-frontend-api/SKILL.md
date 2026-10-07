@@ -38,9 +38,9 @@ const client = swell.create('<store-id>', '<public_key>', {
 });
 ```
 
-Without a session, every server request starts a new (empty-cart) session — and swell-js's default cookie accessors are no-ops on the server, so the returned `X-Session` token is silently dropped unless you pass `session` or wire `setCookie` yourself. `swell.create()` also overwrites library-level module globals: `swell.cache` is one object for the whole process, and the vault key/URL behind `swell.card.createToken()` (`card` is a single shared object hung on every client) plus the options `products.variation()` reads always come from the **most recently created** client. In a multi-store or mixed-`useCamelCase` process that is a silent cross-store mix-up.
+Without a session, every server request starts a new (empty-cart) session — and swell-js's default cookie accessors are no-ops on the server, so the returned `X-Session` token is silently dropped unless you pass `session` or wire `setCookie` yourself.
 
-**Read `references/ssr.md`** for per-request clients, cookie bridging, and the caches that leak across visitors.
+**Read `references/clients-sessions.md`** for client setup outside an app, per-request clients, cookie adapters, and what may be cached.
 
 **Three failure surfaces.**
 
