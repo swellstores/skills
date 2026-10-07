@@ -83,6 +83,13 @@ await req.swell.put(`/orders/${orderId}`, { $app: { [req.appId]: { synced: true 
 
 Calling `req.appValues(...)` instead throws `TypeError: req.appValues is not a function` inside the step, and the step-retry machinery retries that TypeError to exhaustion — the run reads as a flaky integration, not a typo.
 
+Failures of `req.swell` calls also arrive differently than in a function:
+
+- **A write refused by validation resolves with `{ errors: { <field>: { code, message } } }` — it does not throw.** Check `result.errors` after every write, or the step records a success that wrote nothing.
+- **A request the platform refuses throws an error that carries only a message** — a blocked path, a path outside `permissions`, an invalid query. The step fails at once, without the retries it declares. The status and the code (`workflow_operation_blocked`, `permission_denied`) are in `swell logs --type workflow`.
+- **A rate-limited request (429) or a server error throws a retryable error**, and the step retries under its own settings.
+- A read of an id that does not exist resolves empty, as in a function.
+
 `req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `'function'` for `workflows.create()` and `'action'` for a dashboard action. `req.isLocalDev` is always `false`.
 
 ## Deploy-only iteration loop
