@@ -96,7 +96,9 @@ Read `references/orders-payments.md` before scripting orders, shipments, payment
 - **Nothing checks a payment, a shipment or a return against the order.** Amounts and quantities above what the order has are accepted.
 - **`paid` stays true after a refund.** `payment_balance` is what is owed.
 
-Read `references/commerce.md` before scripting products, variants, inventory or accounts: variants are generated from options, stock is a ledger of adjustments that a product must opt into, and deleting an account with history is refused.
+Read `references/products-inventory.md` before scripting products, variants or inventory: variants are generated from options, and stock is a ledger of adjustments that a product must opt into.
+
+Read `references/commerce.md` before scripting accounts: deleting an account with history is refused.
 
 Read `references/promotions-discounts.md` before scripting discounts or stored value — coupons (including bulk code generation), gift cards, promotions, and purchase links.
 

@@ -1,83 +1,68 @@
-# Files & Media
+# Files and media
 
-Binary assets live in one meta collection, `/:files`. Every `"type": "file"` field on every model — product images, option swatches, category images, shipment labels — holds a reference to one of those records.
+Files are records of one collection, `/:files`. Every field of type `file` on any model — product images, option swatches, category images, shipment labels — holds a reference to one of them. Merge rules and operators are in `references/writes.md`.
 
 ## Uploading
 
+`POST /:files` with:
+
 ```js
-const file = await swell.post('/:files', {
-  data: { $base64: buf.toString('base64') },
-  content_type: 'image/jpeg',   // optional
-  filename: 'shirt-front.jpg',  // optional
-});
-// → { id, url, filename, content_type, length, md5, date_uploaded }
+{
+  data: { $base64: buffer.toString('base64') },
+  content_type: 'image/jpeg', // optional
+  filename: 'shirt-front.jpg', // optional
+}
+// answers { id, url, filename, content_type, length, md5, date_uploaded }
 ```
 
-**The `$base64` wrapper is mandatory for binary, and omitting it corrupts silently.** A bare string in `data` is stored as UTF-8 text: hand it a base64 string and the platform writes the base64 *characters* to a text file, returns 200, sets no `errors`, and gives you a working `url` that serves garbage. `md5` and `length` are the only tells — they describe the text, not your bytes. `{ $binary: '...' }` decodes to the same bytes at the storage layer but is **not** a safe substitute: it skips SVG screening entirely (see below). Any other wrapper key fails loudly with `Invalid file data`. Only the bare-string case is quiet. There is no multipart or raw-body upload.
-
-`content_type` and `filename` resolve in this order, and only for values you omit:
-
-1. `content_type` from the **filename extension** when you send a `filename` — the extension beats the bytes, so `filename: 'logo.png'` on JPEG data yields `image/png`.
-2. `content_type` from magic bytes (`file-type` library).
-3. `filename` as `file-{id}.{ext}` — but only when steps 1–2 produced a content type. If the content type ends up null the record gets **no filename at all**, and the url stops at `/{md5}`. A content type with no known extension yields a bare `file-{id}`.
-
-The magic-byte library has no signature for SVG or any text format, so an SVG posted with neither field lands as `content_type: null`, no filename, and a url ending at the md5. Always pass `content_type: 'image/svg+xml'` explicitly.
-
-**Size:** the API rejects any request body of 10,240,000 bytes or more with `Exceeded max request length (10240000)`. Base64 inflates payloads ~33%, so the practical ceiling is roughly 7.5 MB of binary per upload — chunking is not an option, so resize or compress instead. A `Swell-Upload-Exceptional: true` request header raises the cap to 25,600,000 bytes. `maxsize` exists as a per-field option (error code `MAX_FILE_LENGTH`) but no core commerce model declares one.
+- **The bytes go in a `$base64` wrapper.** A bare string in `data` is stored as text. Send base64 without the wrapper and the platform stores the base64 characters, answers with a record and a working `url`, and serves garbage. `length` and `md5` are the only signs: they describe the text, not the bytes. There is no multipart or raw-body upload.
+- **`content_type` comes from the filename's extension when it is not sent**, and from the bytes only when there is no filename. `filename: 'logo.jpg'` on PNG data gives `image/jpeg`.
+- **`filename` defaults to `file-<id>.<ext>`**, and only when a content type was found. Otherwise the record has no filename and its `url` ends at the md5.
+- **An SVG is not recognised from its bytes.** Posted with neither field it gets no content type and no filename. Send `content_type: 'image/svg+xml'`.
+- **A request body is limited to 10,240,000 bytes**, and a larger one is refused with `Exceeded max request length`. Base64 adds a third, so about 7.5 MB of binary fits. An upload cannot be sent in parts: resize or compress the file.
 
 ## The stored record
 
-`id`, `length`, `md5`, `date_uploaded`, and `url` are computed — never write them. `width`/`height` exist on the file shape but the API never measures an image; they hold whatever you send, or nothing. Every other key you send is kept as custom metadata.
-
-The CDN url is `https://cdn.swell.store/{store}/{fileId}/{md5}/{filename}` — content-addressed. Replacing a file's bytes keeps the file id but recomputes `md5`, so the `url` changes: re-read `url` from the record after any data update and treat every cached copy as stale. `{ private: true }` suppresses url generation entirely; those bytes are then reachable only through the API.
-
-**`PUT /:files/{id}` carrying `data` drops every custom field on the record.** A data update is treated as a fresh file, so `alt_text`, `tags`, and anything else you had set are gone. A PUT *without* `data` merges and preserves them. Send new bytes and custom fields in the same request.
+- **`id`, `length`, `md5`, `date_uploaded` and `url` are computed.** `width` and `height` are not measured: they hold what was sent. Any other key sent is kept on the record.
+- **`url` is `https://cdn.swell.store/<store>/<file id>/<md5>/<filename>`**, so new bytes under the same id change it. Read `url` again after an update of `data`, and treat stored copies of the old one as stale.
+- **`private: true` gives a record without a `url`.** Its bytes are reachable only through the API.
+- **`PUT /:files/<id>` with `data` is treated as a new file under the same id.** The filename, `width`, `height` and every custom field are dropped unless the same request sends them again. A `PUT` without `data` merges and keeps them.
 
 ## SVG screening
 
-Content declared `image/svg+xml` is XSS-screened, and a hit **throws** `Invalid SVG file` — one of the few write failures that does not come back as a `result.errors` object. The denylist is wider than the obvious: `<script>`, any `on*=` attribute, `javascript:`/`vbscript:`/`data:text/html` in `href`/`xlink:href`, `<foreignObject>`, `<!ENTITY>`, and also `<use>`, `<animate>`, `<animateMotion>`, `<animateTransform>`, `<set>`. Ordinary icon sprite sheets trip the `<use>` rule — inline the referenced symbols or rasterize.
-
-Three conditions must all hold before a single pattern is tested: `content_type` is exactly `image/svg+xml`, `data` is present, and the decoded payload contains the substring `<svg`. The validator decodes `$base64` and reads bare strings, but it never decodes `{ $binary: '...' }` — that value stays an object, fails the string check, and passes unconditionally while storing identical bytes. `$binary` is a screening hole, not just an alias. And even when it runs this is a denylist against known vectors, not sanitization; do not lean on it for untrusted uploads.
+An upload sent with `content_type: 'image/svg+xml'` is screened for scripting. A hit is refused as an HTTP error with the message `Invalid SVG file`, not as an `errors` map. Beyond `<script>`, `on…=` attributes and `javascript:` links, the screen refuses `<foreignObject>`, `<use>` and the animation elements, so an ordinary icon sprite sheet fails on `<use>`: inline the symbols or rasterise the image. The screen is a list of known patterns, not sanitisation. Do not rely on it for files from untrusted users.
 
 ## Attaching files to records
 
-A `file` field takes either an inline upload or a reference to a file that already exists:
+A `file` field takes an upload in place, or the id of a file that exists. `POST /products` with:
 
 ```js
-await swell.post('/products', {
+{
   name: 'Shirt',
   images: [
-    { file: { data: { $base64: '...' } }, caption: 'Front' },  // uploads, creates the /:files record
-    { file: { id: existingFileId } },                          // reuse, no re-upload
+    { file: { data: { $base64: '…' } }, caption: 'Front' }, // uploads and creates the /:files record
+    { file: { id: existingFileId } }, // points at an existing file
   ],
-});
+}
 ```
 
-**Replacing a file reference deletes the file.** Any existing file whose id disappears from the write's merged result has its `/:files` record deleted, not orphaned. `{ images: { $set: [...] } }`, `$unset`, and writing a `file: { id }` over a different stored id all destroy the bytes. A plain merge PUT never deletes — the merge re-supplies the stored `file` objects — but it is not therefore safe: it can overwrite a kept file's bytes in place (next paragraph). That makes the `{ id }` reuse pattern fragile: a `$set` on product A's gallery deletes files product B still points at. Reuse an id only when you control every writer; otherwise upload per record.
+**A file that leaves a record is deleted.** When a write removes or replaces a file reference, the `/:files` record it pointed to is deleted with its bytes, whether or not another record uses it. That covers a `$set` on `images`, an `$unset`, a different `file: { id }` written over a stored one, and deleting the record itself. A `$set` on product A's gallery deletes a file that product B still shows. Share a file id between records only when every writer is yours. Otherwise upload per record.
 
-**A plain PUT of `images` entries without `id`s overwrites existing slots, it does not append.** Id-less array elements merge **positionally by index**: your first entry merges into the stored `images[0]` — clobbering its caption and uploading your bytes into *that entry's existing file id* — your second into `images[1]`, and only entries past the end of the stored array append. A gallery re-sync therefore silently rewrites the list in place, and a plain PUT never shrinks it. `images[].id` is `auto`, but the id is assigned after the merge, so entries you post carry none and get no id-matching.
-
-Address the three intents explicitly:
+**A plain `PUT` of `images` does not append.** Entries without an `id` merge by position, as `references/writes.md` describes. The first entry lands on the stored first image: it replaces the caption and uploads the new bytes into that image's existing file. A gallery sync by plain `PUT` therefore rewrites images in place and never removes one. State the intent instead, with `PUT /products/<id>` and one of:
 
 ```js
-// Append — $push (alias $post); leaves existing entries untouched
-await swell.put(`/products/${id}`, {
-  images: { $push: [{ file: { data: { $base64: '...' } }, caption: 'Back' }] },
-});
-
-// Edit one entry — send its stored id; id-bearing elements match anywhere in the array
-await swell.put(`/products/${id}`, { images: [{ id: imageId, caption: 'New' }] });
-
-// Replace wholesale — $set, and every file that falls out is deleted
-await swell.put(`/products/${id}`, {
-  images: { $set: [{ file: { id: keepFileId } }, { file: { data: { $base64: '...' } } }] },
-});
+// Append
+{ images: { $push: [{ file: { data: { $base64: '…' } }, caption: 'Back' }] } }
+// Edit one entry, by its stored id
+{ images: [{ id: imageId, caption: 'New' }] }
+// Replace the list; every file left out is deleted
+{ images: { $set: [{ file: { id: keepFileId } }, { file: { data: { $base64: '…' } } }] } }
 ```
 
-Re-send `file: { id }` in a `$set` for every image you intend to keep — omit one and its bytes are gone. `variants[].images` and `options[].values[].images` merge by the same positional rule.
+In a `$set`, send `file: { id }` for each image to keep. `variants[].images` and `options[].values[].images` follow the same rules.
 
-Known file fields: products `images[].file` and `variants[].images[].file` (both localized), `options[].values[].image`, `options[].values[].images[].file`; categories `images[].file` (and the deprecated `image.file`); shipments `label.image`. Elsewhere, read `GET /:models/<collection>` for `"type": "file"` rather than guessing.
+File fields on the standard models: `images[].file` on products, variants and categories, `options[].values[].image` and `options[].values[].images[].file` on products, and `label.image` on shipments. For any other model, read `GET /:models/<collection>` for fields of type `file`.
 
 ## Reading bytes back
 
-`GET /:files/{id}` returns metadata; `GET /:files/{id}/data` returns content. For a binary file that content arrives **base64-encoded inside a JSON string** — swell-node hands you a base64 string, not a Buffer. Send `X-Swell-Raw-Data: true` to get raw bytes with the file's own `Content-Type` instead. Text files come back as their text either way and the response carries no marker distinguishing the two, so branch on the record's `content_type`, never on the payload. Pulling file data through `expand`/`include` or `/:batch` base64-encodes **binary** content only — text comes back as text — and refuses any file over 25,600,000 bytes. For public files the CDN `url` is the cheap path — fetching bytes from the API that the CDN would serve burns rate limit for nothing.
+`GET /:files/<id>` answers with the record, and `GET /:files/<id>/data` with the content. Binary content arrives as a base64 string and text as the text itself. Nothing in the answer says which, so decide from the record's `content_type`. For a public file, fetch the `url`: the CDN serves it without using the store's rate limit.
