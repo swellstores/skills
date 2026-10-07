@@ -27,6 +27,7 @@ The dashboard renders the frontend in a frame at `/app/<app_id>/<path>` and sign
 - **Give visitors a state.** A dashboard-only page still renders for a visitor. Show a short "Open this app from the Swell dashboard" message and read no Backend data for it.
 - **The path is the only thing the dashboard passes in.** `/app/<app_id>/shipments/42` loads `/shipments/42` in the frame; a query string on the dashboard address is dropped. The dashboard's address does not follow navigation inside the frame, so reloading the dashboard returns to the page the link opened. Put what a page needs in the path of the link that opens it.
 - **Open links that leave the app in a new tab.** Inside the frame a plain link replaces the app, not the dashboard page. Use `target="_blank"` for external pages and for raw endpoint links, as the scaffold's home page does.
+- **A link to a record's page in the dashboard is one of those links.** For a record of an app collection the address is `<context.adminUrl>/admin/collections/apps.<app_id>.<collection>/<id>`; in the test environment, where `context.environmentId` is `test`, the path starts with `/admin/test`.
 
 ## Entry points
 
