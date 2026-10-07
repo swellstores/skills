@@ -10,7 +10,7 @@ Webhooks subscribe to async events only — the `before:`/`after:` hook prefix i
 
 ## What the endpoint receives
 
-The payload is the event record plus two `$`-prefixed additions: `id`, `date_created`, `model`, `type`, `data` (record snapshot or changed fields), `app_id`, `req_id`, `user_id`, plus `$type` (fully qualified event type — `<model>/<type>`, or `$app.<app_id>.<model>/<type>` for app events) and `$delivery` (`{ attempts, date_first_failed }`, `attempts` is `0` on first delivery).
+The payload is the event record plus two `$`-prefixed additions: `id`, `date_created`, `model`, `type`, `data` (record snapshot on `created`/`deleted`, `id` plus changed fields on `updated`, and for most other events the `id` alone), `app_id`, `req_id`, `user_id`, plus `$type` (fully qualified event type — `<model>/<type>`, or `$app.<app_id>.<model>/<type>` for app events) and `$delivery` (`{ attempts, date_first_failed }`, `attempts` is `0` on first delivery). In the payload an app id is the app's record id (24 hexadecimal characters), not the `id` from `swell.json`: an app collection's `model` reads `apps/<record id>/<collection>`, and `$type` and `app_id` carry the same id.
 
 - The environment arrives as the `Swell-Env` **request header**, not in the body.
 - **No store identifier is sent at all** — use a per-store endpoint URL if the receiver serves multiple stores.

@@ -61,7 +61,14 @@ The reference also covers the update operators, child records, imports that keep
 
 # V. Events & Webhooks
 
-Read `references/events-webhooks.md` when reacting to store activity: the `/events` log and its payload shapes, event type naming (singular roots — `product.created`, `order.paid`), configuring `/:webhooks` via API (created disabled by default), delivery/retry/auto-disable behavior, and endpoint verification (IP allowlist — there are no payload signatures).
+Read `references/events-webhooks.md` before reacting to store activity. Four of its rules change a design:
+
+- **An event is a notice, not the record.** Most events carry the record's id and little else, so read the record before acting.
+- **Not every change records an `updated` event.** A payment that settles an order records `order.paid` and no `order.updated`.
+- **A webhook created through the API is off** until `enabled: true` is sent, and the event names it lists are not checked.
+- **A webhook request is not signed**, and it can arrive twice or out of order.
+
+The reference also covers the event log and type names, the forms of a webhook's event entries, retries and automatic disabling, reading delivery rows, and reading `/events` in place of a webhook.
 
 # VI. Commerce Lifecycles
 
