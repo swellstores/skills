@@ -66,7 +66,7 @@ The scaffold's home page is a demonstration of three patterns. A storefront keep
 | `app/page.tsx` | Replace with the storefront's home page |
 
 - **Pages are App Router routes**: `app/products/[slug]/page.tsx`, `app/categories/[slug]/page.tsx`. Read the record in the server component with `getStorefront()`.
-- **Nothing found is `null`, not an error.** A product that does not exist, the account of a visitor who is not logged in, and the cart of a shopper who has not added anything all come back as `null`. For a missing record call `notFound()` from `next/navigation`.
+- **Nothing found is empty, not an error.** A product that does not exist, the account of a visitor who is not logged in, and the cart of a shopper who has not added anything all come back as `null`, and a missing product sometimes as an empty string: test for truth, not against `null`. For a missing record call `notFound()` from `next/navigation`.
 - **One browser client, one cart.** `useSwell()` returns the client that `SwellProvider` created. Hold the cart in one client context inside that provider: read it once with `cart.get()` in an effect, and replace it with the cart each change returns. The header count, the add-to-cart button and the cart page are all views of that context, so the count updates without a reload.
 - **Account pages are the storefront's to build.** Login, sign-up and password recovery are forms on the account methods of the browser client. After a login or logout, reload the page so server-rendered parts and the cart context read the new session.
 - **Checkout is Swell's.** Send the shopper to the cart's `checkout_url`; do not build payment forms into the storefront unless the task asks for a custom checkout.

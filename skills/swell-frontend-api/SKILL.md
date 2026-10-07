@@ -6,89 +6,78 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # I. What This Covers
 
-The Frontend API is the session-scoped, public-key-safe subset of Swell used by storefronts. `swell-js` is its universal JavaScript client — safe in browsers and on servers. It reads catalog/content/settings, owns the visitor's cart and checkout, and manages the logged-in customer's account and subscriptions. It cannot administer the store: writes are limited to session-owned resources (cart, account, subscriptions) plus custom models that declare public permissions.
+The Frontend API is the part of Swell a storefront calls with a public key. Every request acts for one shopper's session: it reads the catalog, content and settings, owns that shopper's cart and checkout, and manages the logged-in customer's account and subscriptions. It cannot administer the store: it writes only what the session owns, plus app collections that declare public permissions. Anything that needs a secret key belongs to `swell-backend-api`, behind a server or an app function.
 
-This skill owns Frontend API operations in both Swell apps and independent storefronts. `swell-app` owns app scaffolding, runtime context, resource declarations, hosting and deployment. Use both for a Swell storefront app or when a storefront feature needs an app model or function. Privileged store operations belong to `swell-backend-api`.
+This skill owns Frontend API operations in both Swell apps and independent storefronts. `swell-app` owns app scaffolding, runtime context, resource declarations, hosting and deployment. Use both for a Swell storefront app, or when a storefront feature needs an app model or function.
 
-**Keep the supplied client in a Swell app.** Use the scaffold's Storefront helpers (`getStorefront()` on the Vinext server and `useSwell()` in the browser) and session wiring, as described in the `swell-app` frontend references. Do not replace them with standalone `swell.init()` or hand-built cookie adapters. Identify whether the call uses the SDK Storefront client or swell-js before applying a method signature or error rule; the swell-js-specific details below are not a complete SDK client contract. Read the installed `@swell/apps-sdk` README for SDK-specific behavior.
+# II. Clients and Requests
 
-Outside apps, swell-js and explicitly configured Apps SDK clients can connect directly to the API. An independently configured SDK client does not require app packaging; follow its installed README for setup.
+**Which client.** Every client is a swell-js client or sends the same requests, so the references apply to all of them, and `swell` in their examples stands for the client the code has.
 
-# II. swell-js Setup & Request Model
+- **Inside a Swell app, keep the supplied client**: the scaffold's `getStorefront()` on the Vinext server and `useSwell()` in the browser, with their session wiring, as the `swell-app` skill's `references/frontend-storefront.md` describes. Do not add `swell.init()` or a cookie adapter of your own beside them.
+- **Outside an app**, the reference below says which client fits a browser, a server and a caller without JavaScript.
 
-The explicit initialization below is for an independently configured swell-js client. In an app, use the existing client and its runtime-provided configuration.
+**Read `references/clients-sessions.md`** before setting up a client outside an app, and before any server rendering, caching or static generation. The rules from it that change a design:
 
-```js
-import swell from 'swell-js';
-swell.init('<store-id>', '<public_key>', options);
-```
+- The session is the identity. A token in the `swell-session` cookie carries the cart, the login, the locale and the currency: there is no cart id to keep.
+- A server needs one client per request, with a cookie adapter that saves the token. Without one, each call is a new session with an empty cart, and nothing reports it.
+- Change the cart or the account in a route handler, a server action or the browser, not while a page renders.
+- Swell caches product, category and settings reads for five seconds. Cart and account reads are never cached, and the framework must not cache them either.
 
-Requests hit `https://<store-id>.swell.store/api/*` with `Authorization: Basic base64(public_key)`. Init options (beyond store/key): `useCamelCase` (convert responses to camelCase AND request bodies back to snake_case; default false), `url` (override base), `previewContent`, `session`, `locale`, `currency`, `getCookie`/`setCookie` (server cookie adapters), `headers`, `timeout` (ms, default 20000 — it only aborts **vault** requests: `swell.card.createToken()` and gateway tokenization. Ordinary `/api/*` calls are issued with no abort signal and no timer, so impose your own deadline if you need one).
+Two options the package does not explain: `useCamelCase: true` converts the keys of answers to camelCase and the keys of requests back to snake_case, and `timeout` applies only to card tokenization and payment gateway requests, so an ordinary call has no deadline unless you add one.
 
-**Sessions are the identity.** There is no cart ID to track: the API returns a token in the `X-Session` response header, swell-js stores it in a `swell-session` cookie and replays it as an `X-Session` request header. `await swell.session.get()` is an API round-trip returning the decoded session (`account_id`, `cart_id`, plus `locale`/`currency`), not a local decode; `swell.session.getCookie()`/`setCookie()` are the synchronous local accessors for the raw encoded token.
+**How failures arrive.** A call fails in one of three ways, and which one depends on the call:
 
-**Server-side rule:** `swell.init()` configures a process-wide shared client — concurrent requests would leak one visitor's session into another's. On servers, create a per-request client instead:
+1. **It resolves with `errors`**, `{ errors: { <field>: { code, message } } }` in place of the record, for a value that fails validation.
+2. **It rejects** with an `Error` that has `message`, `status`, `code` and `param`: a field the call does not accept, a missing login, a refused checkout step.
+3. **It resolves empty.** A read of one record that finds nothing resolves with `null` or an empty string, and the same read can give either: test the answer for truth, never against `null`.
 
-```js
-const client = swell.create('<store-id>', '<public_key>', { session: sessionToken });
-// or bridge your framework's cookies:
-const client = swell.create('<store-id>', '<public_key>', {
-  getCookie: (name) => req.cookies[name],
-  setCookie: (name, value) => res.cookie(name, value),
-});
-```
+The cart, payments and accounts references each say which of these their calls do, under "How failures arrive". Two rejections belong to every call. A failing status whose body has no `error` key, such as an HTML error page, rejects with `code: 'connection_error'` and no `status`, so a test of `err.status >= 500` misses it. A network failure rejects with the runtime's own `TypeError`, which has none of these fields. `settings.load()` never rejects: on a failure it logs and resolves.
 
-Without a session, every server request starts a new (empty-cart) session — and swell-js's default cookie accessors are no-ops on the server, so the returned `X-Session` token is silently dropped unless you pass `session` or wire `setCookie` yourself.
+**Generic requests.** `swell.get(path, query)` and `swell.post`, `put` and `delete(path, body)` reach any `/api` path with the same key and session. A string as the second argument is added to the path (`swell.get('/products', 'blue-shoes')`); for an id and a body together use `swell.request(method, path, id, body)`.
 
-**Read `references/clients-sessions.md`** for client setup outside an app, per-request clients, cookie adapters, and what may be cached.
-
-**Three failure surfaces.**
-
-1. **Resolve with `errors`.** Account, address, card and subscription writes return **field validation** as a resolved `{ errors: { [fieldOrSource]: { code, message } } }` — a 200 you must inspect: `references/accounts-subscriptions.md`, "How failures arrive". `swell.cart` has both branches, by call: `references/cart-checkout.md`, "How failures arrive".
-2. **Reject with an `Error`** carrying `message`, `status`, `code`, `param` — including every logged-out call to an account-scoped endpoint (`code: 'UNAUTHORIZED'`). Two shapes break naive handlers: an HTTP failure whose body isn't JSON rejects with `code: 'connection_error'` and **no `status`**, so an `err.status >= 500` branch misses it entirely; a network failure rejects with the browser's own `TypeError`, which has none of these fields.
-3. **Neither.** `settings.load()` logs and resolves on failure; `products.variation()` throws synchronously; `swell.payment.authenticate()` resolves `{ error }` instead of rejecting; and `payment.createElements()` for a method the store has disabled logs to the console, drops that method, and resolves normally — nothing renders and no error reaches your code (see `references/payments.md`).
-
-**Generic requests.** `swell.get/put/post/delete(url, data)` hit any `/api/*` path with the same auth and session — for `get` the second argument is a query object, or a string appended as a path segment (`swell.get('/products', 'blue-shoes')`); on writes a string replaces the body, so use `swell.request(method, url, id, data)` when you need both.
-
-This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VI). Fields an app adds to a standard model cannot be relied on in a storefront read, with any key. Read `references/app-data.md` before exposing any app data to a storefront.
-
-Two undocumented query features:
+- A list resolves with `{ count, page, limit, results }`: 15 records unless `limit` says otherwise, sorted by `id` descending. A query key it does not know is read as a `where` condition.
+- `/carts`, `/accounts` and `/payments` are refused on these routes: use `swell.cart` and `swell.account`.
+- `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`.
+- `include` attaches a second query to each record, in one request:
 
 ```js
-// Attach a related collection in one round trip instead of N+1
-await swell.get('/products', {
+const products = await swell.get('/products', {
   limit: 24,
   include: {
     reviews: {
       url: '/apps/<app_id>/reviews',
-      params: { product_id: 'id' },      // maps a parent field into the sub-query
+      params: { product_id: 'id' },      // the sub-query's product_id is each product's id
       data: { limit: 3, sort: 'date_created desc' },
     },
   },
 });
-
-await swell.account.listOrders({ expand: ['shipments:5'] });  // :n caps an expanded set
+// products.results[0].reviews: { count, results }
 ```
 
-`include` sub-queries are permission-checked in their own right, so they can only reach models that are themselves public. Expanding a field the model doesn't publish rejects with `You can only expand public fields (<field>)`; `limit` above 1000 rejects with `Query limit cannot exceed 1000`. `carts`, `accounts`, and `payments` are blocked on the generic routes entirely — use `swell.cart.*` and `swell.account.*`.
+The sub-query is checked like a request of its own: a collection that is not public rejects the whole call.
 
-**TypeScript.** `swell-js` ships its own declarations (`types/index.d.ts`, wired through both `types` and `exports`) — never install an `@types/swell-js`. `SwellClient` is the type of a `swell.create()` client; `InitOptions` covers the init options above. Every model interface extends **both** spellings (`interface Cart extends CartSnake, CartCamel`, the camel half generated by `ConvertSnakeToCamelCase`), with every field optional — so both spellings compile whatever `useCamelCase` is set to, and the compiler will not tell you which one the runtime wants or flag a name it doesn't have. `account.login(email, { passwordToken })` type-checks and fails at runtime; only `password_token` is read. The declarations are hand-maintained, so cast rather than redesigning working code around them:
+**App data.** The generic requests are how a storefront reaches an app's collections, at `/apps/<app_id>/<collection>`. **Read `references/app-data.md`** before reading or writing app data from a storefront. The rules from it that change a design:
 
-- **Absent entirely:** `swell.cache` and `swell.functions.delete`, both present at runtime.
-- **`currency.format`'s second argument is typed required** though it defaults to `{}`, so `format(19.99)` alone won't compile; `card.validateExpiry` is typed for strings only though it coerces with `String()`.
-- **`products.get` and `content.get` are typed non-nullable**, but a missing slug resolves `null` (§III) — the optional chain you need is the one the compiler won't ask for.
+- A collection answers only what its model declares public. With nothing public, every call is refused.
+- `scope: 'account'` gives ownership, not login: a visitor who is not logged in can still create a record. A write that needs a login, moderation or fields the server sets goes through an app route function ("Calling App Functions").
+- Fields an app adds to a standard model cannot be relied on in a storefront read, with any key.
 
-**GraphQL.** The same Frontend API is also exposed as GraphQL, behind the same store public key and the same `X-Session` handling in both directions:
+**TypeScript.** swell-js ships its own declarations: never install `@types/swell-js`. `SwellClient` is the type of a client. The declarations differ from the runtime in a few places. Where a call the references describe does not compile, cast, and leave the call as it is:
 
-- `https://<store-id>.swell.store/graphql/v2` — **the current endpoint.**
-- `https://<store-id>.swell.store/graphql` and `/graphql/v1` — the **deprecated** first-generation schema. Never use the bare path.
-- `https://<store-id>.swell.store/playground` — an interactive playground, wired to v2.
+- **`products.get()` and `content.get()` are typed as never empty**, so the compiler does not ask for the check that a missing record needs.
+- **A `useCamelCase` client is typed in snake_case** unless it is created as `swell.create<'camel'>(…)`.
+- **`cart.getShippingRates()` is typed as a cart** and resolves with the rating. **`products.variation()` is typed as a product**, without `variant_id`.
 
-The schema is generated per store from that store's own public models (custom content models included) and cached for an hour; send `Cache-Control: no-cache` to force a rebuild after adding a model. Fields are camelCase, and `$`-prefixed query params become `_`-prefixed arguments (`$filters` → `_filters`, `$preview` → `_preview`). It covers queries for session, cart, account, products, categories, attributes, orders, subscriptions, settings, and content, plus the full mutation set for cart, checkout submission, coupons, gift cards, accounts, addresses, cards, and subscriptions. **It has no shipping-rate query and no payment tokenization** — those reach a separate vault service only `swell-js` speaks, so a GraphQL storefront still loads `swell-js` to check out. It is a proxy over the same REST Frontend API, so choose it for query ergonomics, not for speed.
+**GraphQL.** The Frontend API is also served as GraphQL at `https://<store-id>.swell.store/graphql/v2`, with a playground at `/playground`. `/graphql` and `/graphql/v1` serve an older, deprecated schema: always write the `/v2` path.
 
-# III. Reading Data
+- **Send the public key itself as the `Authorization` header.** The `Basic` form that the `/api` routes take answers with status 200 and an `AUTHENTICATION` error on every field.
+- The session travels as on the `/api` routes: save the `X-Session` response header and send it back.
+- A refused field arrives with status 200, as `null` under `data` and the reason under `errors`.
+- The schema is built from the store's public models, its content models included, and kept for an hour: send `Cache-Control: no-cache` once after adding a model. Fields are camelCase, and a product query has no `$filters`.
+- **There is no shipping-rate query and no payment tokenization**, so a GraphQL storefront still loads swell-js to check out.
 
-List methods take `{ limit, page, where, sort, search, expand }` — defaults: limit 15 (max 1000), sort `id desc`. Unrecognized keys fold into `where`. Lists resolve to `{ count, page, limit, results }`; single-record gets resolve to the record or `null` (no error) for missing slugs (an empty string for content), empty carts, and `account.get()` when logged out — but the rest of the account-scoped surface **rejects** instead of resolving null (§V). `expand` accepts an array (`['variants']`) or comma string. Responses are snake_case unless `useCamelCase`.
+# III. Catalog, Content and Settings
 
 **Read `references/catalog.md`** for products, variants and `products.variation()`, stock, categories and facets with `$filters`, content, settings and menus, locales, currencies and price formatting. The rules from it that change a design:
 
@@ -127,4 +116,11 @@ The rules from them that change a design:
 
 # VI. Calling App Functions
 
-`swell.functions.request(method, appId, functionName, data?)` (plus `get/put/post/delete` helpers) invokes an app's HTTP route at `/functions/<app_id>/<name>` with the storefront's key and session. Gateway rules apply — the same for any external caller, detailed in the swell-app skill's `references/functions-routes.md`, §"Calling routes from outside Swell (hosted gateway)": with an empty body, query params arrive in the function's `req.data`; with a body, query params are dropped; a route that isn't marked public needs a secret key, which a storefront must never carry. Case conversion is disabled in **both** directions for function calls: your payload is sent exactly as written (never snake_cased) and the response comes back exactly as the function produced it (never camelCased), even on a `useCamelCase: true` client. Use this for storefront features backed by app logic (custom submissions, computed data) instead of exposing privileged operations publicly.
+`swell.functions.get`, `post`, `put` and `delete(appId, functionName, data)` call an app's route function at `/functions/<app_id>/<name>` with the storefront's key and session. Use one where a storefront feature needs app logic, such as a submission that must be checked, instead of making privileged data public.
+
+- **The route must be marked public.** Any other needs a secret key, which a storefront never carries, and rejects with status 401.
+- **Send data one way.** `get` sends `data` as the query and the other calls send it as the body; a query added to a call that has a body is dropped. The function reads both as `req.data`.
+- **Nothing is case-converted.** On a `useCamelCase` client too, the body is sent as written and the answer comes back as the function produced it.
+- **An answer with an `error` key rejects**, whatever its status, with that status and message. A `SwellError` thrown in the function answers that way. A failing status without the key rejects as the `connection_error` above, so a response the route builds itself needs `{ error: { message, code } }`.
+
+What the function receives, the shopper's session included, is in the `swell-app` skill's `references/functions-routes.md`, "Calling routes from outside Swell (hosted gateway)".

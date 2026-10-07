@@ -6,7 +6,7 @@ Reading products, categories, content, settings, locales and currencies. These r
 
 `swell.products.list(query)` takes `{ limit, page, sort, where, search, expand }`; `swell.products.get('<slug-or-id>', query)` reads one.
 
-- **Only active records are returned**: products, variants, options, purchase options, plans and categories. An inactive product reads as `null`, and `where: { active: false }` is ignored.
+- **Only active records are returned**: products, variants, options, purchase options, plans and categories. An inactive product reads like a missing one, and `where: { active: false }` is ignored.
 - **`fields` is ignored.** Every read returns the fields the public key allows. Keep a listing small by not expanding.
 - **`search` matches the start of words in `name`, `slug` and `sku`**, and every word must match. Ids and descriptions are not searched; read by id with `get`.
 - **`get` includes `variants`, `list` does not.** Add `expand: ['variants']` to a list only when the page resolves selections: it costs a query per product. On `get` and on `list` it also adds each variant's `sku` and `attributes`.
