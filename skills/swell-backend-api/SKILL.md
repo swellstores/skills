@@ -25,9 +25,20 @@ Swell is schema-driven: every collection (standard and custom) is described by a
 - `GET /:models` — list model definitions; `GET /:models/<name>` — full definition with `fields` (types, required, enums, formulas, links), `events`, and query defaults. This is the authoritative field reference for the exact store, including app-installed extensions.
 - Custom models can be created via this endpoint or the dashboard (Developer > Models); model JSON semantics (field types, `public_permissions`, `events.types`, `formula`, `rules`, `increment`) follow the data-models documentation. Apps define models through the swell-app skill's file contract instead.
 
+Paths:
+
+| Records | Path |
+| --- | --- |
+| A standard collection | `/products`, `/products/<id>` |
+| A child collection | `/products/<id>/variants` under one parent, `/products:variants` across all parents |
+| An app's collection | `/apps/<app_id>/<collection>`, with its children at `/apps/<app_id>/<collection>/<id>/<child>` and `/apps/<app_id>/<collection>:<child>` |
+| A child collection an app adds to a standard model | `/products:apps.<app_id>.<name>` |
+
+An app's own function and frontend clients also reach its collections by the short path, `/<collection>`, in a transaction's operations too. An app's fields on a standard record are under `$app.<app_id>` in the record.
+
 Records address by `id`, and many collections also by a secondary field usable in the URL: products/categories/pages/`content/blogs`/`content/blog-categories` → `slug`, orders/carts/invoices/payments/shipments/returns/subscriptions → `number`, accounts/contacts → `email`, gift cards and `coupons:codes` → `code`, coupons/promotions/purchase links → `name`. The lookup is generic, not a fixed list — read `secondary_field` on any model's `/:models/<name>` definition.
 
-List responses use the envelope `{ count, results, page, limit, page_count }`, plus a `pages` map of per-page start/end record numbers **only when the result spans more than one page** — with the default `limit: 15`, any query returning 15 or fewer records has no `pages` key at all, so `res.pages` is `undefined` and any indexing into it (`res.pages[1]`, `Object.keys(res.pages)`) throws — guard before use. Single gets return the record. `page=all` drops the page limit but the result set must still fit under the 1000-record query maximum: more than 1000 matches fails outright with HTTP 400 `Query results cannot exceed 1000` (and omits `pages`), so export by paging with `limit: 1000` or narrowing with `where`. `page=false` returns a bare array with no envelope. Fields are snake_case; dates are ISO-8601 strings.
+A read by id answers with the record, and a list with an envelope that `references/querying.md` describes. Fields are snake_case; dates are ISO-8601 strings.
 
 The commerce object graph in one pass: **products** (with `variants`, options, `purchase_options` for subscriptions, `bundle_items`, stock) are organized by **categories** and **attributes**; **accounts** own `addresses`, `cards`, `credits`; **carts** convert into **orders**, which connect to **payments** (and their **refunds**), **shipments**, **returns**, and **invoices**; **subscriptions** bill on a schedule, generating invoices and optionally orders; **coupons**, **promotions**, and **gift cards** apply discounts and stored value; **content** and **pages** hold structured content; **purchaselinks** define shareable pre-built carts.
 
@@ -35,11 +46,18 @@ Read `references/files-media.md` before uploading or serving images and files �
 
 # III. Querying
 
-Read `references/querying.md` before writing any non-trivial read — it covers the full `where` operator set, sort/pagination details, text search behavior and per-model search fields, `expand` (default 5 per collection, 5 levels max), `include` sub-queries, `group`/`aggregate` pipelines, and reading localized (`$locale`) and multi-currency (`$currency`) data.
+Read `references/querying.md` before writing any read beyond a get by id: filters, sorting and paging, counting, search, `expand` and `include`, aggregation, and localized or multi-currency values. A query returns at most 1000 records, so reading a whole collection is a loop.
 
 # IV. Writing
 
-Read `references/writes.md` before any write — Swell's PUT is a **deep merge** (arrays of objects merge by element `id`, id-less elements positionally by index, and neither shrinks on a plain write; `$set` is the replace operator), update operators (`$inc`, `$push`, `$pull`, `$unset`, …) apply at the top level of the body, linked child records update through the parent, and there is **no rollback** for updates. The reference also covers batch requests (`/:batch`, non-atomic) and transactions (`/:transaction`, atomic against request errors only — validation failures do not roll the rest back), and writing localized/multi-currency values.
+Read `references/writes.md` before any write. Four of its rules change a design:
+
+- **An update merges.** Sending a shorter array does not replace the stored one; replacing takes an operator.
+- **Nothing can be undone**, and a delete is permanent.
+- **Every write sets off the store's webhooks, app functions and notification emails.** The reference says what an import can switch off.
+- **A batch is not atomic, and a transaction only partly:** a write that fails validation inside a transaction does not roll the others back.
+
+The reference also covers the update operators, child records, imports that keep their ids, and localized and per-currency values.
 
 # V. Events & Webhooks
 
@@ -57,6 +75,4 @@ Read `references/clients.md` — the clients do not report failures the same way
 
 # VIII. Operating Guardrails
 
-- Point scripts at the test environment (`sk_test_…`) first; run bulk updates against test records before live. Before any bulk write, print the loaded key's prefix and confirm the environment segment — a bare `sk_` is **live**, not test. `GET /:clients/:self/keys` lists only the keys belonging to the environment the current credentials resolve to, a second way to confirm before writing. There is no undo for update operators or merges.
-- `DELETE` is permanent (orders and subscriptions included). Canceling is a write (`canceled: true`), not a delete — see `references/commerce.md`.
-- Writes fire the store's events — functions, webhooks, and notifications react to script-driven mutations exactly as to dashboard activity. For bulk backfills, consider what each write will trigger. The exception is `/:transaction`: its child ops fire **no** per-record hooks, functions, webhooks, or notifications — only one `transaction.committed` event for the bundle.
+- Point scripts at the test environment (`sk_test_…`) first; run bulk updates against test records before live. Before any bulk write, print the loaded key's prefix and confirm the environment segment — a bare `sk_` is **live**, not test. `GET /:clients/:self/keys` lists only the keys belonging to the environment the current credentials resolve to, a second way to confirm before writing.

@@ -1,131 +1,190 @@
-# Writes, Operators, Batch & Transactions
+# Writes
 
-A completed write cannot be undone — there is no request-level undo and no version history. Run any multi-record or operator-based write against test records first. The one exception is `/:transaction` (below), which rolls back its whole op set when an op fails with a *request* error.
+Creating, updating and deleting records on the Backend API: how an update merges, the update operators, child records, what a write sets off, imports, batch requests and transactions. This reference says what the API does with a request. How a refused write or an error reaches the code differs by client and is in `references/clients.md`. Examples use `swell` for whichever client the code has.
 
-## PUT is a deep merge
+## What a write does
 
-Updating a record merges the body into the stored record — fields you don't send are preserved, and this recurses into nested objects. This is platform-wide (records, `$app` extension data, cart/order items alike).
+- **`POST /<collection>` creates a record** and answers with it.
+- **`PUT /<collection>/<id>` updates a record by merging** the body into what is stored, and answers with the whole record as it is afterwards.
+- **A `PUT` to an id that does not exist creates a record with that id.** It is validated as a new record, so required fields are asked for. Read the record first when the code must not create one.
+- **`DELETE /<collection>/<id>` removes the record for good** and answers with what it removed. Orders and subscriptions are no exception. Canceling one is an update, not a delete: `references/commerce.md`.
+- **A write that fails field validation writes nothing** and answers with `{ errors }`.
+- **Nothing can be undone.** There is no history and no rollback outside a transaction. Run operator writes and writes over many records against test records first.
 
-**Arrays merge too, but only objects carrying an `id` merge by id.** Elements with an `id` are aligned against the stored array by id: a match merges in place, and an id the record doesn't have appends — unless the same-index slot holds an id-less object, which it merges into instead. Elements *without* an `id` — including every scalar array, such as `tags` — merge **by position**: body element 0 lands on record element 0, element 1 on element 1 — a scalar replaces the slot, an id-less object merges into it. The array never shrinks; it grows only where the body is longer than the record.
+## An update merges
+
+Fields the body does not send are kept, at every depth of nested objects. Arrays merge as well, in one of two ways:
+
+- **Elements with an `id` merge by id.** An element whose id is stored merges into that element, wherever it sits. An element with an unknown id is added at the end.
+- **Elements without an `id` merge by position.** This covers every array of plain values, such as `tags`. Element 0 of the body lands on stored element 0, element 1 on element 1: a value replaces what is in the slot, an object merges into it.
+
+An array never gets shorter on a plain update, and sending `[]` changes nothing.
 
 ```js
 // stored: tags === ['new', 'summer', 'x']
-await swell.put('/products/{id}', { id, tags: ['sale'] });
-// → ['sale', 'summer', 'x']   — NOT ['new','summer','x','sale']
+await swell.put(`/products/${id}`, { tags: ['sale'] });
+// → ['sale', 'summer', 'x'], not ['sale'] and not ['new', 'summer', 'x', 'sale']
 ```
 
-To replace values outright, use `$set` — top-level with dotted paths, or nested on the field itself:
+Merging by id is the way to change one element and leave the rest: `{ options: [{ id: optionId, name: 'New label' }] }`. The same body without the `id` renames whichever option is first.
+
+## Replacing and editing
+
+Operators say what the merge cannot. They come in two forms, and both can share a body with plain fields that merge.
+
+**On the field itself**, for arrays:
 
 ```js
-await swell.put('/products/{id}', { id, $set: { 'attributes.materials': ['cotton'] } });
-await swell.put('/products/{id}', { id, tags: { $set: ['a', 'b'] } });   // field-level array replace
+await swell.put(`/products/${id}`, { tags: { $set: ['a', 'b'] } });   // replace the array
+await swell.put(`/products/${id}`, { tags: { $push: 'c' } });         // add at the end
+await swell.put(`/products/${id}`, { options: { $unset: [0, 2] } });  // remove the elements at these indexes
 ```
 
-The same nested form edits arrays in place: `{ items: { $unset: [0, 2] } }` splices those indexes out (an index may also be `':first'` / `':last'`, or a comma-separated string), and `{ items: { $push: {...} } }` appends (`$post` is an alias).
+`$unset` takes indexes, and `':last'` for the last element.
 
-`$app` extension data merges the same way but takes a different operator grammar, and the nested `{ field: { $set: … } }` form is **never** interpreted inside `$app` — it will corrupt the value (`{ tags: { $set: ['a'] } }` stores `{ 0: 'a' }`). Inside `$app`: replace one app's whole subdocument with `{ $app: { $set: { <app_slug>: {...} } } }` (other apps untouched); delete fields with `{ $app: { $unset: ['<app_slug>.nested.field'] } }` — the dotted path is required, a bare app slug is silently ignored, so an entire app cannot be unset this way. Object-level `$set` / `$unset` also work at any depth inside an app's own subdocument.
+**At the top level of the body**, MongoDB-style, with dotted paths and numeric array indexes:
 
-The merge-by-id behavior is also the idiom for targeted element updates: `{ options: [{ id: optionId, name: 'New label' }] }` amends one element in place. Supplied ids (in `$set` payloads or new nested objects) must be BSON ObjectID-formatted where the platform would otherwise generate one.
+| Operator | Does |
+| --- | --- |
+| `$set` | Sets or replaces the value at a path: `{ $set: { 'attributes.materials': ['cotton'] } }` |
+| `$unset` | Removes a field: `{ $unset: { cost: true } }`. On an array element it leaves `null` in the slot; use the form on the field to remove elements |
+| `$inc` | Adds to a number, a negative amount included, and sets it when the field is absent |
+| `$push` | Adds to an array; `{ $push: { tags: { $each: ['a', 'b'] } } }` adds several |
+| `$addToSet` | Adds to an array unless the value is already there |
+| `$pull` | Removes every element that matches a value or a condition: `{ $pull: { tags: { $in: ['a', 'b'] } } }` |
+| `$rename` | Renames a field, and removes a field that already has the new name |
 
-## Update operators
+`$[]` in a path applies an operator to every element of an array: `{ $pull: { 'options.$[].values': { name: 'XL' } } }`.
 
-Passed at the top level of a PUT body, MongoDB-style, with dot notation and numeric array indexes:
+Where an id is supplied instead of generated, in a `$set` or on a new nested element, it must be a 24-character hexadecimal ObjectID.
 
-- `$set` — set/replace value (the array-replace tool above).
-- `$unset` — remove a field. On an array element path it follows MongoDB and leaves `null` in the slot rather than shrinking the array; the nested `{ field: { $unset: [i] } }` form above is what actually splices elements out.
-- `$inc` — increment (negative to decrement); sets the value if absent.
-- `$push` / `$addToSet` — append to array (with/without allowing duplicates); `$each` adds multiple.
-- `$pull` — remove all elements matching a condition (query operators allowed: `$pull: { 'attributes.allergens': { $regex: 'nut', $options: 'i' } }`).
-- `$rename` — rename a field (silently removes an existing field with the target name).
-- `$[]` — apply the operator across all elements of an array (`$pull: { 'options.$[].values': { id: { $exists: false } } }`).
+## App fields on a standard record
 
-## Linked collections through the parent
-
-Records in linked child collections update through the parent by including their `id`: `PUT /accounts/{id}` with `addresses: [{ id, phone }]` updates `accounts:addresses` records; single links work too (`PUT /orders/{id}` with `account: { billing: {...} }` writes through to the linked account). Child collections also have their own endpoints (`/accounts:addresses`, `/products:variants`, …) for direct CRUD.
-
-**The `id` is what makes it an update.** A linked element with no `id` — and no value for the child model's secondary field — is POSTed as a **new** child record and linked to the parent, so `PUT /accounts/{id}` with `addresses: [{ phone: '…' }]` adds an address rather than editing one. Linked writes execute as separate serial requests, so a failure part-way leaves the earlier ones applied.
-
-## Suppressing side effects on bulk writes
-
-Every write fires the store's events, and through them webhooks, app functions, and notifications. For imports and backfills that is usually wrong — you do not want 40,000 order-confirmation emails.
-
-`$events: false` in the request body suppresses event capture for that write:
+An app's fields live under `$app.<app_id>` and merge like the rest of the record. The operators take different forms there:
 
 ```js
-await swell.put('/orders/{id}', { id, $events: false, metadata: { erp_id: 'X-1' } });
+// Replace one field: $set directly inside the app's object
+await swell.put(`/products/${id}`, { $app: { my_app: { $set: { badges: ['new'] } } } });
+// Replace everything the app stores on the record; other apps' data is untouched
+await swell.put(`/products/${id}`, { $app: { $set: { my_app: { badges: ['new'] } } } });
+// Remove a field: a dotted path starting with the app id
+await swell.put(`/products/${id}`, { $app: { $unset: ['my_app.badges'] } });
 ```
 
-`$events: true` forces capture; an object merges into the request's event scope. Child requests inherit the parent's scope, so a `/:batch` op honors `$events: false` placed inside its own `data` and otherwise takes whatever the batch request carried.
+- **The form on the field does not replace inside `$app`.** `{ $app: { my_app: { badges: { $set: ['new'] } } } }` does not leave `['new']`. Use the first form above.
+- **`$unset` with only the app id is ignored.** An app's whole object is replaced, not removed.
+- **The top-level operators reach an app field by its path:** `{ $inc: { '$app.my_app.points': -5 } }`.
 
-It only silences the event pipeline — model features still run, so an order write still consumes stock and a payment still updates its order's balance. Inside `/:transaction` the flag does **not** stop activity/billing capture: the platform ignores it there so revenue tracking can't be bypassed (per-record events are already suppressed for transaction children regardless). To suppress notifications as well, you need `$migrate`.
+## Child records through the parent
 
-## Migrating records between stores
+Records of a child collection can be written through their parent by putting them in the parent's body:
 
-**A supplied value beats a platform-generated one.** `id`, `date_created`, and the `number` sequences on orders/invoices/returns are auto-assigned only when the field is absent, so an export can be replayed with its keys intact:
+- **With an `id` the child is updated:** `PUT /accounts/<id>` with `addresses: [{ id, phone }]` changes that address.
+- **Without an `id` a child is created**, each time: `addresses: [{ address1, city }]` adds an address and never edits one.
+- **A linked record is written the same way:** `PUT /orders/<id>` with `account: { … }` writes those fields to the order's account.
+
+Each child is its own write, made one after another. When one fails, those before it stay written. Child collections also have paths of their own (`/accounts:addresses`, `/products:variants`) for reading and writing them directly.
+
+## What a write sets off
+
+Every write is recorded as an event, and the store's webhooks, app functions and notification emails react to it exactly as they do to a change made in the dashboard. Before an import or a backfill, work out what each write will trigger.
+
+Two flags in the body of a write switch that off, each for its own part:
+
+| Flag | Stops | Does not stop |
+| --- | --- | --- |
+| `$events: false` | The event record, and with it webhooks and app functions | Notification emails |
+| `$notify: false` | Notification emails | The event, webhooks and app functions |
+
+An import that must be silent sends both:
 
 ```js
-await swell.post('/orders', {
-  id: '5f8a1c2e3d4b5a6c7d8e9f01',        // must be BSON ObjectID hex
-  number: '100042',
+await swell.post('/orders', { ...order, $events: false, $notify: false });
+```
+
+- **Neither flag stops the store's own logic.** An order still takes stock and a payment still updates its order.
+- **In a batch the flags go inside each operation's `data`.**
+- **`swell api` cannot switch events off.** A write made with it is always recorded. `$notify: false` works there.
+
+Operations inside a transaction fire no events of their own in any case: see "Transactions".
+
+## Keeping ids and dates on import
+
+A value in the body is used in place of the one the platform would generate. `id` and `date_created` can be supplied on a `POST`, and so can `number` on an order, invoice or return. Keeping ids keeps every reference between imported records valid, so collections can be imported in any order.
+
+```js
+await swell.post('/products', {
+  id: '5f8a1c2e3d4b5a6c7d8e9f01', // 24 hexadecimal characters
   date_created: '2025-11-03T14:22:00Z',
-  account_id, items,
+  name: 'Imported product',
+  price: 20,
 });
 ```
 
-Preserving ids keeps every foreign key in the export valid, so collections can be imported in any order. `number` is `immutable`, which rejects a *change*, not a first assignment — you may set it on insert and never afterward.
+- **An `id` in any other format is dropped without an error**, and the record gets a generated one.
+- **A `POST` with an `id` that already exists writes over that record.** It does not fail and it does not add a second one: the body is merged into the stored record, and `date_created` and fields with defaults are set again. An import that runs twice therefore rewrites what the first run created.
+- **`number` can be set when the record is created and not changed afterwards.**
 
-`$migrate: true` is the heavy tool for a bulk restore, and it turns nearly everything off:
+## Localized and per-currency values
 
-- field validation is skipped entirely — read-only, immutable, required, enum, and rule checks all pass
-- **formulas are not computed** — every derived total, balance, and status keeps exactly the value you supply, or stays empty
-- model/feature event handlers do not run, notifications are not sent, and no events are captured
-- linked-record writes are skipped, so nested child data does not propagate to child collections
-- a `$migrate` POST stamps `migrated: true` on the new record, so migrated rows stay identifiable
+- **`$locale: { fr: { name: 'Chaise' } }`** beside the regular fields sets values for a language. For a nested field, put `$locale` on the object that holds the field.
+- **`$currency: { EUR: { price: 14 } }`** sets a price in a currency, wherever price fields are: the product, its purchase options, options and variants.
+- **Selling in a currency is the `currency` field of the cart or order**, not `$currency`. With a currency the store prices in, the items are priced in it and each needs a price there. With a display currency, the order records `display_currency` and is charged in the base currency. The currency cannot change once a payment exists.
 
-App-extension field types are still applied, so `$app` data still lands typed. That combination lets you land a record exactly as it existed elsewhere — and equally lets you land an internally inconsistent one that no later write repairs, because the formulas that would have fixed it never ran. Reserve it for a full restore where you control every field; for anything short of that, use ordinary writes plus `$events: false`. `$restore: true` turns off the same machinery and additionally waives external validation (the read-only and `$validate` header checks), but two of the above are `$migrate`-only: `$restore` does **not** stamp `migrated: true`, and it does **not** apply app-extension field types, so `$app` data written under it lands untyped. Use `$migrate` for any import you need to identify later.
+## Batch
 
-Nothing in the request path gates these two flags to internal callers, but confirm the behavior on the test environment before committing a live migration to them.
-
-## Writing localized & multi-currency values
-
-- `$locale: { fr: { name: 'Chaise' } }` beside regular fields on POST/PUT sets per-locale values; for nested fields, put `$locale` on the **nearest parent object**. All locale content is optional via the API even when the dashboard requires it.
-- `$currency: { EUR: { price: 14 } }` sets explicit per-currency prices anywhere price fields live (product root, purchase_options/plans, options, variants, `prices` entries). Write responses include the full `$currency` map.
-- Transacting in a currency means setting the **`currency` field** on the cart/order (not `$currency`): a priced currency re-prices items (each needs a price in it), a display currency records `display_currency` while transacting in base. The currency can't change after a payment exists; `currency_rate` snapshots at write time (`currency_rate: null` recomputes it).
-
-## Batch — parallel, independent
+Several requests in one call. They run 10 at a time and independently: one failing does not stop or undo the others.
 
 ```js
 const results = await swell.post('/:batch', [
-  { url: '/products', method: 'post', data: {...} },
-  { url: '/products/5c8f.../', method: 'put', data: {...} },
+  { method: 'post', url: '/products', data: { name: 'A', price: 10 } },
+  { method: 'put', url: `/products/${id}`, data: { active: true } },
+  { method: 'get', url: '/products/:count' },
 ]);
 ```
 
-Up to **1,000 operations**, run **10 at a time**, each independent — one failure doesn't stop the rest. A failed slot carries the failure instead of a record, in one of **two shapes**: `{ $error: 'Resource not found /products/x' }` for routing, permission and not-found failures, and `{ errors: { field: { code, message } } }` for validation failures. Check both keys on every entry — code that only looks for `$error` reads a rejected write as a success. Operations without a `method` inherit the batch request's method. The named-object form (`{ products: { url, data }, ... }`) keys the response identically and lets top-level `$locale`/`$currency` apply to all operations. Collection-scoped form: `/:batch/products` resolves operation urls relative to the collection (an op url can be a bare id). Rate-limit cost = sum of operations.
+- **Up to 1,000 operations**, reads included. An operation without a `method` takes the method of the batch request.
+- **The answer is an array in the order sent**, each entry being what that request would have answered alone, so a read or a delete of a missing id is `null`.
+- **A failed entry has one of two shapes.** `{ errors: { <field>: { code, message } } }` for a write that failed validation, and `{ $error: '<message>' }` for a path that does not exist or a request that is not permitted. Check every entry for both keys: code that looks only for `$error` takes a refused write for a success.
+- **Sent as an object instead of an array**, the answer comes back under the same keys.
+- **`/:batch/<collection>`** resolves each `url` inside that collection, so an operation's `url` can be a bare id.
 
-## Transactions — atomic
+## Transactions
+
+A short set of writes that are committed together.
 
 ```js
-const result = await swell.post('/:transaction', [
-  { method: 'post', url: '/orders', data: {...} },
-  { method: 'put', url: '/accounts/{id}', data: {...} },
+const results = await swell.post('/:transaction', [
+  { method: 'post', url: '/orders', data: { /* … */ } },
+  { method: 'put', url: `/accounts/${accountId}`, data: { /* … */ } },
 ]);
 ```
 
-Up to 10 operations, **write methods only** — every op must be `post`, `put`, or `delete`. A `get` op is rejected with 400 `Transaction supports write methods only (got 'get' at index N)` before anything runs, as is an empty op array; read what you need *before* opening the transaction. An op omitting `method` inherits the parent request's method (`post`).
+A function's `req.swell` and the Apps SDK Backend client have `transaction(ops, { retry })` for the same call; a workflow cannot make it.
 
-**Rollback is not total.** Ops that fail with a *request* error — not found, permission denied, bad URL, write conflict, timeout — abort the whole set. **Field-validation failures do not abort**: that op writes nothing, its result slot carries `{ errors: { field: { code, message } } }`, `transaction.committed` still fires, and every other op still commits. Inspect every entry of the returned array for an `errors` key before treating a 200 as fully applied.
+- **1 to 10 operations, writes only.** Each is a `post`, `put` or `delete`; one without a `method` is a `post`. A `get`, an empty array or an eleventh operation is refused with status 400 before anything runs. Read what the writes need before the transaction.
+- **The answer is an array in the order sent**, each entry being the record that operation wrote. A `delete` of an id that does not exist is `null`, not an error, and a `put` to one creates the record, as outside a transaction.
 
-| code | HTTP | Retryable | Trigger |
-|---|---|---|---|
-| `transaction_conflict` | 409 | yes | write conflict after the retry budget (~2s) |
-| `transaction_throttled` | 429 | yes | per-tenant in-flight transaction cap reached |
-| `transaction_timeout` | 408 | no | per-op or commit time budget exceeded |
-| `transaction_op_failed` | the op's own status | no | an op's request error — the **only** code carrying `op_index` |
-| `transaction_error` | 503, or the original 4xx | no | cluster/driver failure, or a body-level rejection (bad method, bad op shape, >10 ops, empty array) |
+**Not every failure rolls the set back.**
 
-Disambiguate `transaction_error` by its `status`. Do not read `op_index` unconditionally — only `transaction_op_failed` sets it.
+| An operation | The set | The caller gets |
+| --- | --- | --- |
+| is refused or cannot run: a path that does not exist, a permission it lacks, a write conflict, a timeout | **Rolled back.** Nothing is written | An error with a code from the table below |
+| fails field validation | **Not rolled back.** That operation writes nothing and every other one is committed | The array, with `{ errors }` in that operation's place |
 
-Child operations are invisible to the event system: no `/events` record is written for them, so no webhook and no app function fires — including **before** hooks, which means app-side defaulting and `throw req.reject(...)` validation are bypassed for ops inside a transaction. A successful commit emits one `transaction.committed` event (model `transactions`, data `{ correlation_id, app_id, ops }`) that webhooks and functions can subscribe to. Activity/billing capture is deferred to post-commit and dropped on abort.
+So a successful answer does not mean every operation was written. Check each entry for `errors`.
 
-Transactions are for short write bundles, not bulk work: ops run **sequentially** inside one session under per-op and per-commit time budgets on the order of seconds, so latency is additive across all 10, and write conflicts retry only briefly before surfacing as `transaction_conflict`. Use transactions when consistency matters (order + inventory + credit together); use batch for throughput. Rate-limit cost = operations + 1.
+Errors carry a code in their body, `{ error: { code, message, status } }`:
+
+| Code | Status | Retry | When |
+| --- | --- | --- | --- |
+| `transaction_op_failed` | The operation's own, such as 403 or 404 | No | An operation was refused. The only code with `op_index`, the position of that operation |
+| `transaction_error` | 400 | No | The request itself was refused: a `get`, an empty array, too many operations |
+| `transaction_error` | 503 | No | The database could not run the transaction |
+| `transaction_conflict` | 409 | Yes | Another write touched the same records, and about two seconds of retrying inside the platform did not clear it |
+| `transaction_throttled` | 429 | Yes | The store has too many transactions in progress |
+| `transaction_timeout` | 408 | No | An operation or the commit ran out of time |
+
+**The operations fire nothing of their own.** No event is recorded for them, so no webhook, app function or notification runs, and model hooks do not run either: an app's `before:` hook that fills in or rejects a record is skipped for a write made inside a transaction. A committed transaction records one `transaction.committed` event, with every operation's method, collection and resulting record in `data.ops`. A transaction that is rolled back records nothing.
+
+**Keep a transaction short.** Its operations run one after another within a budget of seconds. Use a transaction where the writes must agree with each other, such as an order with its stock and credit, and a batch where the aim is volume.
