@@ -44,13 +44,13 @@ Without a session, every server request starts a new (empty-cart) session — an
 
 **Three failure surfaces.**
 
-1. **Resolve with `errors`.** Cart **item** mutations (`addItem`, `updateItem`, `setItems`, `removeItem`), `account.create`/`update`, the address and card sub-resources, and every `swell.subscriptions` write return **field validation** as a resolved `{ errors: { [fieldOrSource]: { code, message } } }` — a 200 you must inspect (gateway failures key on `gateway`). The checkout-proxied cart calls do the opposite and **reject**: `cart.update`, `removeCoupon`, `removeGiftcard`, `getShippingRates` and `submitOrder` throw `Error{ status: 400, code: 'validation_error', param, message }` built from the **last** error key alone, discarding the others; `applyCoupon`/`applyGiftcard` throw a fixed `invalid_coupon_code` / `invalid_giftcard_code` that never tells you why. One `swell.cart` namespace, two branches — a handler written for either one is wrong on the other.
+1. **Resolve with `errors`.** `account.create`/`update`, the address and card sub-resources, and every `swell.subscriptions` write return **field validation** as a resolved `{ errors: { [fieldOrSource]: { code, message } } }` — a 200 you must inspect (gateway failures key on `gateway`). `swell.cart` has both branches, by call: `references/cart-checkout.md`, "How failures arrive".
 2. **Reject with an `Error`** carrying `message`, `status`, `code`, `param` — including every logged-out call to an account-scoped endpoint (`code: 'UNAUTHORIZED'`). Two shapes break naive handlers: an HTTP failure whose body isn't JSON rejects with `code: 'connection_error'` and **no `status`**, so an `err.status >= 500` branch misses it entirely; a network failure rejects with the browser's own `TypeError`, which has none of these fields.
 3. **Neither.** `settings.load()` logs and resolves on failure; `products.variation()` throws synchronously; `swell.payment.authenticate()` resolves `{ error }` instead of rejecting; and `payment.createElements()` for a method the store has disabled logs to the console, drops that method, and resolves normally — nothing renders and no error reaches your code (see `references/payments.md`).
 
 **Generic requests.** `swell.get/put/post/delete(url, data)` hit any `/api/*` path with the same auth and session — for `get` the second argument is a query object, or a string appended as a path segment (`swell.get('/products', 'blue-shoes')`); on writes a string replaces the body, so use `swell.request(method, url, id, data)` when you need both.
 
-This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VIII). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
+This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VII). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
 
 Two undocumented query features:
 
@@ -88,7 +88,7 @@ The schema is generated per store from that store's own public models (custom co
 
 # III. Reading Data
 
-List methods take `{ limit, page, where, sort, search, expand }` — defaults: limit 15 (max 1000), sort `id desc`. Unrecognized keys fold into `where`. Lists resolve to `{ count, page, limit, results }`; single-record gets resolve to the record or `null` (no error) for missing slugs (an empty string for content), empty carts, and `account.get()` when logged out — but the rest of the account-scoped surface **rejects** instead of resolving null (§VI). `expand` accepts an array (`['variants']`) or comma string. Responses are snake_case unless `useCamelCase`.
+List methods take `{ limit, page, where, sort, search, expand }` — defaults: limit 15 (max 1000), sort `id desc`. Unrecognized keys fold into `where`. Lists resolve to `{ count, page, limit, results }`; single-record gets resolve to the record or `null` (no error) for missing slugs (an empty string for content), empty carts, and `account.get()` when logged out — but the rest of the account-scoped surface **rejects** instead of resolving null (§V). `expand` accepts an array (`['variants']`) or comma string. Responses are snake_case unless `useCamelCase`.
 
 **Read `references/catalog.md`** for products, variants and `products.variation()`, stock, categories and facets with `$filters`, content, settings and menus, locales, currencies and price formatting. The rules from it that change a design:
 
@@ -98,28 +98,22 @@ List methods take `{ limit, page, where, sort, search, expand }` — defaults: l
 - `content.list()` returns published records only, while `content.get()` returns drafts too.
 - `await swell.settings.load()` comes before `settings.get()`, the menus and `currency.format()`.
 
-# IV. Cart
+# IV. Cart and Checkout
 
-```js
-await swell.cart.addItem({
-  product_id, quantity,
-  options: { Size: 'S' },            // or [{ name|id, value }] — both keys accepted
-  purchase_option: { type: 'subscription', plan_id },  // or { type: 'standard' }, or { plan: 'monthly' }
-});
-```
+The cart belongs to the session. `swell.cart` adds and changes items, takes the customer's email, addresses, shipping service, coupon and gift cards, and `cart.submitOrder()` turns the cart into an order.
 
-`cart.get()` (null until first item), `updateItem(itemId, changes)`, `removeItem(itemId)`, `setItems(items)` (replaces all; `setItems([])` empties), `applyCoupon(code)` / `removeCoupon()` (one coupon per cart), `applyGiftcard(code)` / `removeGiftcard(cartGiftcardEntryId)` (multiple allowed; remove takes the `cart.giftcards[].id`, not the code), `cart.recover(checkout_id)` (abandoned-cart links). Active promotions apply automatically — inspect `cart.promotions` (a `{ count, results }` set), never apply them manually. Cart mutations are internally serialized by swell-js — no need to queue them yourself, but don't fire them blindly in parallel and assume ordering.
+- **Read `references/cart-checkout.md`** for the cart, the checkout sequence, guest and logged-in carts, account credit, the checkout settings and reading the order afterwards.
+- **Read `references/payments.md`** for collecting a payment method: payment elements and `tokenize()`, redirect methods, `swell.card.createToken()` and saved cards.
 
-`cart.update({ account, shipping, billing, metadata })` sets checkout state — see `references/checkout.md` for the full flow. Metadata (cart, items, account) is publicly readable and deep-merges on write; arrays merge rather than replace (objects carrying an `id` align by id, elements without one merge positionally by index). To replace one array in place use the per-field form, `metadata: { my_array: { $set: [...] } }`. The top-level form `$set: { metadata: {...} }` is a **shallow overwrite** — it replaces the whole metadata object and silently drops every key you don't resend, so reach for it only when that is what you want.
+The rules from them that change a design:
 
-# V. Checkout & Payments
+- Checkout calls reject, and item calls can also resolve with `errors`: handle both.
+- Payment elements run only in a browser, and a card element exists only for some gateways; the others need a card form of your own.
+- Collect the payment method last: a card authorization is for the amount due when it is made.
+- `capture_total` is the amount to pay. `grand_total` does not subtract gift cards or account credit.
+- An order is read back by its cart's `checkout_id`, which the order does not carry, and anyone who has that id can read the order.
 
-The canonical sequence — customer identity → shipping → rates → payment tokenization → `cart.submitOrder()` — plus gateway-specific element/tokenize/redirect flows live in two references:
-
-- **Read `references/checkout.md`** for the order flow: required cart state, guest vs. logged-in semantics, shipping rates, account credit behavior, submit, and post-order retrieval.
-- **Read `references/payments.md`** for payment methods: `swell.payment.createElements()` / `tokenize()` per gateway, redirect returns (`handleRedirect`, `updateIntent`), direct `swell.card.createToken()`, and saved cards.
-
-# VI. Customer Accounts
+# V. Customer Accounts
 
 `swell.account.login(email, password)` (or `login(email, { password_token })` — always snake_case, even under `useCamelCase`; the token is single-use and is unset on success), `logout()`, `get()` (null when logged out), `create({ email, password?, first_name?, last_name?, email_optin? })` (attaches to the current session), `update(changes)`.
 
@@ -140,17 +134,17 @@ Password recovery is one dual-mode method: `account.recover({ email, reset_url? 
 
 Sub-resources: `listAddresses()` / `createAddress` / `updateAddress` / `deleteAddress`; `listCards()` / `createCard` / `updateCard` / `deleteCard` (tokenized cards only — gateway specifics in `references/payments.md`; the default card is `account.billing.account_card_id`, changed via `account.update({ billing: { account_card_id } })`); `listOrders({ limit, page, expand })` / `getOrder(id)`.
 
-# VII. Subscriptions
+# VI. Subscriptions
 
 Two distinct paths:
 
-- **Purchase through checkout**: add the product to the cart with a `purchase_option` of type `subscription` (see Cart above) and submit normally. This is the storefront-native path.
+- **Purchase through checkout**: add the product to the cart with a `purchase_option` of type `subscription` (`references/cart-checkout.md`, "The cart") and submit normally. This is the storefront-native path.
 - **Direct management** (logged-in account): `swell.subscriptions.list()/get(id)/create({ product_id, variant_id?, quantity?, coupon_code?, items? })/update(id, changes)`. Every subscription route requires a logged-in session and rejects with `code: 'UNAUTHORIZED'` otherwise. Writable fields are a fixed whitelist — `paused`, `date_pause_end`, `canceled`, `cancel_at_end`, `coupon_code`, `quantity`, `options`, `product_id`, `variant_id`, `plan_id`, `billing`, `billing_schedule`, `shipping`, and `items.{id,product_id,variant_id,quantity,options}` — and anything outside it is rejected, not ignored. Pause with `update(id, { paused: true, date_pause_end })` (`null` = indefinite). **Cancel by always sending the pair:** `{ canceled: true, cancel_at_end: false }` cancels immediately, `{ canceled: true, cancel_at_end: true }` cancels at the end of the paid period — a portal should offer the second. The platform branches on the request *merged over the stored record*, so a bare `{ canceled: true }` inherits whatever `cancel_at_end` or `cancel_at_schedule` the record already carries and defers silently — and `cancel_at_schedule` is neither readable nor writable from a storefront key, so you cannot see it coming. `cancel_at_end` **on its own cancels nothing, ever**: the entire cancellation path is gated on `canceled` being truthy, and the write still returns 200 with the flag stored. Swap plan with `plan_id`, product with `product_id` (+ `variant_id?`). Invoice line items: `addItem(id, item)`, `updateItem(id, itemId, changes)`, `setItems(id, items)`, `removeItem(id, itemId)`.
 
 **Building the portal.** Subscriptions accept a fixed `expand` set — `product`, `variant`, `orders`, `invoices`, `payments` — and anything else rejects with `You can only expand public fields`. Append `:n` to cap an expanded set: `swell.subscriptions.list({ expand: ['product', 'invoices:5', 'payments:5'] })`.
 
 Billing history also has its own namespace, `swell.invoices.list(query)` / `swell.invoices.get(id)` — present and typed in the library but absent from developers.swell.is. It is account-scoped: results are auto-filtered to the logged-in customer and it rejects when logged out. Narrow to one subscription with `swell.invoices.list({ subscription_id })`. Orders accept `expand: ['shipments', 'payments', 'refunds']` on `account.listOrders()` / `getOrder()` — what an order-detail or tracking view needs.
 
-# VIII. Calling App Functions
+# VII. Calling App Functions
 
 `swell.functions.request(method, appId, functionName, data?)` (plus `get/put/post/delete` helpers) invokes an app's HTTP route at `/functions/<app_id>/<name>` with the storefront's key and session. Gateway rules apply — the same for any external caller, detailed in the swell-app skill's `references/functions-routes.md`, §"Calling routes from outside Swell (hosted gateway)": with an empty body, query params arrive in the function's `req.data`; with a body, query params are dropped; a route that isn't marked public needs a secret key, which a storefront must never carry. Case conversion is disabled in **both** directions for function calls: your payload is sent exactly as written (never snake_cased) and the response comes back exactly as the function produced it (never camelCased), even on a `useCamelCase: true` client. Use this for storefront features backed by app logic (custom submissions, computed data) instead of exposing privileged operations publicly.
