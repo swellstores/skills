@@ -1,27 +1,32 @@
-# Reading and Writing App Data
+# App Data from a Storefront
 
-Apps extend a store in two shapes. Visibility depends on the model declaration and the public key the storefront actually uses.
+An app adds data as its own collections and as fields on standard models; a storefront can build on the first only. How a model declares what is public is in the app skill's `references/data-models.md`, "Storefront exposure".
 
-## App-defined collections
+## App collections
 
-`/apps/<app_id>/<collection>` and `/apps/<app_id>/<collection>/<id>`, via the generic `swell.get/put/post/delete` methods. The model must declare `public_permissions`; without them every verb fails with `You do not have permission to perform this action on '<model>'`. What the model declares is what the storefront gets — the gateway reads `fields`, `query`, `expands`, `input.fields` and `scope` off the model, and nothing else.
+`/apps/<app_id>/<collection>` and `/apps/<app_id>/<collection>/<id>`, through `swell.get/post/put/delete`. `<app_id>` is the `id` in the app's `swell.json`; the app's record id answers a store's key with an empty list.
 
-- `fields` — the read whitelist. Anything outside it is absent from responses.
-- `query` — a pinned filter (`where`, `limit`, `sort`) the caller cannot widen.
-- `input.fields` — required before any write succeeds; fields outside the list are rejected rather than ignored.
-- `scope: 'account'` — makes records customer-owned.
+- **Nothing public:** every call rejects with status 400, code `permission_error`.
+- **Reads** return `id` and the public fields. Naming another field in `fields` adds nothing; expanding a link that is not public rejects.
+- **A pinned query wins without an error.** A `where` or `limit` the model pins replaces the caller's, so page with `page`. A record the filter excludes resolves by id with an empty string, like any missing record.
+- **Writes** reject with `permission_error` unless the model declares `input`. A field outside `input.fields` rejects the whole write, and `param` names it. Field validation resolves with `errors` instead: `{ errors: { note: { code: 'REQUIRED' } } }`, or `UNIQUE` for a duplicate.
 
-## Choosing the write path
+## Who can write
 
-**Public writes need an owner.** Declaring `input.fields` opens the collection's write verbs to storefront callers generally, not just to the form you had in mind, and an app model cannot restrict which verbs are allowed — `methods` is a property of the API key's own permissions, not something a model can declare. Two supported ways to keep writes safe:
+With `input` and no `scope`, any visitor can create records and change or delete any record by id, those the pinned query hides included, and a write answers with the whole record, not only its public fields.
 
-- **`scope: 'account'`** — reads are auto-filtered to the logged-in account (do **not** add your own `account_id` filter), creates are stamped with it, and updates and deletes re-fetch the record scoped to the caller, 404ing when it belongs to someone else. Scope is only picked up when `public_permissions.input` is also present, so a read-only scoped collection does not establish private ownership. The carried-forward guidance reports that anonymous creates can produce ownerless records; this behavior still needs verification during API-skill revision. A browser check with `swell.account.get()` only controls the UI. Do not treat it as protection against direct API requests or claim account scope alone enforces login.
-- **An authenticated server write path** — omit public `input` entirely and authenticate before writing with app credentials. An app route function checks `req.session?.account_id` (§VIII). In an existing app frontend, an `/app-api` handler can use the supplied Storefront client to identify the customer, then validate inputs and scope Backend writes itself; follow `swell-app/references/frontend.md` and `frontend-storefront.md` for viewer and origin checks. Choose this path when login must be enforced and anonymous rejection by the model is not established, or when submissions need moderation and server-owned fields.
+With `input` and `scope: 'account'`:
 
-Read-only public data — a published reviews list, a store locator — is the case where a bare `fields` + `query` declaration with no `input` is exactly right.
+- **Not logged in:** a create succeeds without an owner, so no storefront caller reaches the record again. Every other call rejects with status 400, code `UNAUTHORIZED`.
+- **Customer:** a create is stamped with their `account_id`, and sending one is refused. A list returns their records only and ignores an `account_id` filter. Another customer's record resolves by id with an empty string, and rejects with 404 on update and delete.
 
-## App extension fields on standard models
+`scope` without `input` is not applied: everyone reads every record.
 
-With a store's own public key, `$app.<app_id>.*` on a standard model such as `products` is absent from the default Frontend API field allowlist, regardless of a field's `public` declaration. An installed app's key is a different access context; do not infer its visibility from a store-key test, or the reverse. The app skill's `references/data-models.md`, "Storefront exposure", owns the declaration and key-specific guidance. Verify through the client and key the storefront will actually use.
+So scope gives ownership, not login, and a `swell.account.get()` check only hides the form.
 
-For portable storefront-visible ratings, use an app-defined collection with explicit public reads or a route function. Do not depend on a standard-model extension field being published merely because a Backend read returns it.
+- **Customer-owned data where a record without an owner does no harm**, such as a wishlist: direct writes with `scope: 'account'`.
+- **Login required, or moderation and fields the server sets**, such as reviews: no `input`. The storefront posts to an app route function that checks `req.session?.account_id` (`SKILL.md`, "Calling App Functions"), or in an app's own frontend to an `/app-api` handler (the app skill's `references/frontend.md`).
+
+## App fields on standard models
+
+Do not build a storefront on `$app.<app_id>.*` fields of products or other standard models. A store's own key and another app's key never return them, whatever the field declares. The app's own key returns its public fields only on the first read of a path in about five seconds, so a single test passes and a page under traffic rarely gets the value. Put such values in an app collection, or return them from a route function.

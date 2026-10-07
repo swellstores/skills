@@ -50,7 +50,7 @@ Without a session, every server request starts a new (empty-cart) session — an
 
 **Generic requests.** `swell.get/put/post/delete(url, data)` hit any `/api/*` path with the same auth and session — for `get` the second argument is a query object, or a string appended as a path segment (`swell.get('/products', 'blue-shoes')`); on writes a string replaces the body, so use `swell.request(method, url, id, data)` when you need both.
 
-This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VI). Standard-model app fields are absent from store-key reads by default; installed-app keys are a different access context. Read `references/app-data.md` before exposing any app data to a storefront.
+This is how storefronts reach app-defined collections: `/apps/<app_id>/<collection>`. The model must declare `public_permissions` or every verb is refused, and what it declares is exactly what the storefront gets. Public **writes** need an owner — either `scope: 'account'` so records are customer-owned, or no `input` at all and submissions routed through an app route function that checks `req.session?.account_id` (§VI). Fields an app adds to a standard model cannot be relied on in a storefront read, with any key. Read `references/app-data.md` before exposing any app data to a storefront.
 
 Two undocumented query features:
 
