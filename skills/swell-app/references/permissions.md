@@ -27,7 +27,7 @@ The CLI validates only that the value is an array — there is no enum, so a typ
 | `req.swell.transaction([...])` | `write_:transaction`, plus the scope of every operation inside |
 | `POST /:batch` | `write_:batch` — also for a batch of reads — plus the scope of every operation inside |
 
-- **Settings are all or nothing.** The app's own settings are exempt only when addressed by the app's 24-character record id, and `settings()` sends the app's slug, so the call is checked as `read_settings`. That scope also opens every other app's settings (`references/settings.md`).
+- **Settings are all or nothing.** `read_settings` is needed for the app's own settings, and it also opens every other app's settings (`references/settings.md`).
 - **The wrapper scope does not cover what is inside.** Each operation of a transaction or batch is checked on its own. In a transaction an operation outside the app's scopes aborts the set with `transaction_op_failed` and status 403; in a batch the call succeeds and that operation's slot holds `{ "$error": "The client does not have the required permissions" }`.
 
 ## Changing permissions
