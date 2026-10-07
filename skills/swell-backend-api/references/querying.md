@@ -61,7 +61,7 @@ Every other model, app collections included, is searched across all its string f
 
 `fields: 'name, slug, items.product_id'` keeps only those fields, as a comma-separated string or an array, with dot notation. `id` always comes back.
 
-`expand: ['account', 'items.product', 'variants:50']` replaces links with the records they point to, on a list for every record. A link to one record becomes that record. A link to many records becomes a list envelope of its own, holding **5 records by default**: raise the number per path with `<field>:<limit>`. A path can be at most **5 levels** deep, and a deeper one fails the request.
+`expand: ['account', 'items.product', 'variants:50']` replaces links with the records they point to, on a list for every record. A link to one record becomes that record. A link to many records becomes a list envelope of its own, holding **5 records by default**: raise the number per path with `<field>:<limit>`. A path can be at most **5 levels** deep, and a deeper one fails the request. With `fields`, name the link's id field as well (`fields: 'number, account_id'` with `expand: ['account']`): without it the expanded link comes back `null`.
 
 ## include
 

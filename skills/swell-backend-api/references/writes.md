@@ -76,7 +76,7 @@ An app's fields live under `$app.<app_id>` and merge like the rest of the record
 Records of a child collection can be written through their parent by putting them in the parent's body:
 
 - **With an `id` the child is updated:** `PUT /accounts/<id>` with `addresses: [{ id, phone }]` changes that address.
-- **Without an `id` a child is created**, each time: `addresses: [{ address1, city }]` adds an address and never edits one.
+- **Without an `id` a child is created**: `addresses: [{ address1, city }]` adds an address and never edits one. Only an address equal in every field to a stored one is not added again.
 - **A linked record is written the same way:** `PUT /orders/<id>` with `account: { … }` writes those fields to the order's account.
 
 Each child is its own write, made one after another. When one fails, those before it stay written. Child collections also have paths of their own (`/accounts:addresses`, `/products:variants`) for reading and writing them directly.
@@ -165,6 +165,8 @@ A function's `req.swell` and the Apps SDK Backend client have `transaction(ops, 
 | fails field validation | **Not rolled back.** That operation writes nothing and every other one is committed | The array, with `{ errors }` in that operation's place |
 
 So a successful answer does not mean every operation was written. Check each entry for `errors`.
+
+**An app's fields are not written in a transaction.** A value under `$app.<app_id>` in an operation's body is dropped without an error, and the rest of that body is stored. Write an app's fields in a direct request or a batch.
 
 Errors carry a code in their body, `{ error: { code, message, status } }`:
 

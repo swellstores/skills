@@ -32,7 +32,7 @@ An order created without `draft: true` is submitted at once, and the platform ac
 
 - **Stock is taken** for products that track it, whether the order is paid or not.
 - **The customer's account credit is spent.** When the customer has a balance and the store has the `account` payment method and the order setting `auto_apply_credit` on, which is the default, the platform pays as much of the order as the balance covers. Send `account_credit_amount: 0` to keep the credit, or a positive number to spend exactly that much: an amount above the balance refuses the order.
-- **The billing method is charged for the rest.** A card or another gateway method in `billing` is authorized before the order is stored and captured right after. A failed authorization refuses the order with an error on `billing.method`. A manual method such as cash or a bank transfer creates no payment: record one when the money arrives.
+- **The billing method is charged for the rest.** A card or another gateway method in `billing` is authorized before the order is stored and captured right after. A failed authorization refuses the order with an error on `billing.method`. A manual method such as cash or a bank transfer creates no payment, so the order stays unpaid until code records one with `POST /payments`.
 - **The shipping address, `billing` and a card are saved to the account.** `account_info_saved: false` on the order leaves the account as it is.
 - **`order.submitted` is recorded and the order emails are sent**, unless the write carries the import flags in `references/writes.md`.
 
@@ -122,7 +122,7 @@ An invoice is an amount an account owes. A subscription creates one for each bil
 
 - **`items` are extra lines.** A line with `recurring: true` is billed every period. Any other line is billed on the next invoice and then removed. A negative `price` is a credit on that invoice.
 - **A change of plan, product, variant or price is prorated.** The platform adds two one-time lines for the next invoice: a credit for the unused time and a charge for the remaining time. Send `prorated: false` with the change to skip them.
-- **A change to a plan with another interval starts a new period at once**, with a new invoice.
+- **A change to a plan with another interval starts a new period at once**, with a new invoice. During a trial it does neither: the trial end stays and nothing is charged.
 
 ### Pausing and canceling
 
