@@ -39,23 +39,16 @@ The cart, payments and accounts references each say which of these their calls d
 - A list resolves with `{ count, page, limit, results }`: 15 records unless `limit` says otherwise, sorted by `id` descending. A query key it does not know is read as a `where` condition.
 - `/carts`, `/accounts` and `/payments` are refused on these routes: use `swell.cart` and `swell.account`.
 - `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`.
-- `include` attaches a second query to each record, in one request:
+- `include` attaches a second query to each record, in one request: `include: { <key>: { url: '<path>', params: { <query field>: '<record field>' }, data: { limit: 3 } } }` puts `{ count, results }` under `<key>`. A sub-query on a collection that is not public rejects the whole call.
+- **Do not `include` an app's collection.** The call works when tried once; sent again within about five seconds it is refused with `permission_error`, or answers without the key. Read the collection in a second request:
 
 ```js
-const products = await swell.get('/products', {
+const products = await swell.get('/products', { category: 'sale', limit: 24 });
+const ratings = await swell.get('/apps/<app_id>/product-ratings', {
+  where: { product_id: { $in: products.results.map((p) => p.id) } },
   limit: 24,
-  include: {
-    reviews: {
-      url: '/apps/<app_id>/reviews',
-      params: { product_id: 'id' },      // the sub-query's product_id is each product's id
-      data: { limit: 3, sort: 'date_created desc' },
-    },
-  },
 });
-// products.results[0].reviews: { count, results }
 ```
-
-The sub-query is checked like a request of its own: a collection that is not public rejects the whole call.
 
 **App data.** The generic requests are how a storefront reaches an app's collections, at `/apps/<app_id>/<collection>`. **Read `references/app-data.md`** before reading or writing app data from a storefront. The rules from it that change a design:
 

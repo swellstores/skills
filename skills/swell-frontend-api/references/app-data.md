@@ -8,7 +8,7 @@ An app adds data as its own collections and as fields on standard models; a stor
 
 - **Nothing public:** every call rejects with status 400, code `permission_error`.
 - **Reads** return `id` and the public fields. Naming another field in `fields` adds nothing; expanding a link that is not public rejects.
-- **A pinned query wins without an error.** A `where` or `limit` the model pins replaces the caller's, so page with `page`. A record the filter excludes resolves by id with an empty string, like any missing record.
+- **A pinned query wins without an error.** A `where` condition or a `limit` the model pins replaces the caller's value for it, while the caller's other conditions still apply. Page with `page`. A record the filter excludes resolves by id with an empty string, like any missing record.
 - **Writes** reject with `permission_error` unless the model declares `input`. A field outside `input.fields` rejects the whole write, and `param` names it. Field validation resolves with `errors` instead: `{ errors: { note: { code: 'REQUIRED' } } }`, or `UNIQUE` for a duplicate.
 
 ## Who can write
