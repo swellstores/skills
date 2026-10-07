@@ -1,6 +1,6 @@
 # Orders, payments and subscriptions
 
-How an order is paid, shipped, returned and refunded, and how subscriptions and their invoices bill. Merge rules and import flags are in `references/writes.md`, what an event carries in `references/events-webhooks.md`, and the events of each model in `GET /:models/<collection>`. Coupons and gift cards are in `references/promotions-discounts.md`, stock in `references/products-inventory.md`, and account credit in `references/commerce.md`.
+How an order is paid, shipped, returned and refunded, and how subscriptions and their invoices bill. Merge rules and import flags are in `references/writes.md`, what an event carries in `references/events-webhooks.md`, and the events of each model in `GET /:models/<collection>`. Coupons and gift cards are in `references/promotions-discounts.md`, stock in `references/products-inventory.md`, and account credit in `references/accounts.md`.
 
 ## State is derived
 

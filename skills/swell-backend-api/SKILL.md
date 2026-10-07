@@ -1,6 +1,6 @@
 ---
 name: swell-backend-api
-description: "Use this skill for Swell Backend API operations: querying, writes, batch requests and transactions, commerce lifecycles, files, events, errors and rate limits. Applies inside Swell apps through function and workflow clients or the Apps SDK Backend client, and to independent integrations using swell-node, explicitly configured Apps SDK clients, direct HTTP or one-off swell api commands. Pair with swell-app for app packaging, runtime setup, models, triggers, permissions and deployment; reuse the client that runtime supplies. Shopper-session operations belong to swell-frontend-api. Proxima / Liquid theme authoring and other platforms are outside scope."
+description: "Use this skill for Swell Backend API operations: querying and aggregation, writes, imports, batch requests and transactions, orders, payments, refunds and subscriptions, products and inventory, accounts, coupons, promotions and gift cards, files, events and webhooks, errors and rate limits. Applies inside Swell apps through function and workflow clients or the Apps SDK Backend client, and to independent integrations using swell-node, explicitly configured Apps SDK clients, direct HTTP or one-off swell api commands. Pair with swell-app for app packaging, runtime setup, models, triggers, permissions and deployment; reuse the client that runtime supplies. Shopper-session operations belong to swell-frontend-api. Proxima / Liquid theme authoring and other platforms are outside scope."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -38,8 +38,9 @@ The clients send the same paths, queries and bodies, so the references give a wr
 
 Swell is schema-driven: every collection (standard and custom) is described by a live model definition. Discover instead of guessing:
 
-- `GET /:models` — list model definitions; `GET /:models/<name>` — full definition with `fields` (types, required, enums, formulas, links), `events`, and query defaults. This is the authoritative field reference for the exact store, including app-installed extensions.
-- Custom models can be created via this endpoint or the dashboard (Developer > Models); model JSON semantics (field types, `public_permissions`, `events.types`, `formula`, `rules`, `increment`) follow the data-models documentation. Apps define models through the swell-app skill's file contract instead.
+- `GET /:models` — list model definitions; `GET /:models/<name>` — full definition with `fields` (types, required, enums, formulas, links), `events`, and query defaults. It is the authoritative field reference for this store, with what apps and the merchant added.
+- The name is not always the collection's path. A collection under `content/` is `/:models/content_<name>`, and an app's collection is `/:models/app_<record id>.<collection>`; the bare name can answer with another model of the same name. A child collection has no definition of its own: it is described on its field in the parent (`fields.addresses` of `accounts`).
+- Custom models and fields are made in the dashboard (Developer > Models) or by an app (`swell-app`).
 
 Paths:
 
@@ -51,6 +52,8 @@ Paths:
 | A child collection an app adds to a standard model | `/products:apps.<app_id>.<name>` |
 
 An app's own function and frontend clients also reach its collections by the short path, `/<collection>`, in a transaction's operations too. An app's fields on a standard record are under `$app.<app_id>` in the record.
+
+`<app_id>` is the `id` in the app's `swell.json`. The paths above also take the app's record id, 24 hexadecimal characters; `/:models` and the longer forms of a webhook's event entries take only that one. Read it from `app_id` on the collection's entry in `GET /:models`.
 
 Records address by `id`, and many collections also by a secondary field usable in the URL: products/categories/pages/`content/blogs`/`content/blog-categories` → `slug`, orders/carts/invoices/payments/shipments/returns/subscriptions → `number`, accounts/contacts → `email`, gift cards and `coupons:codes` → `code`, coupons/promotions/purchase links → `name`. The lookup is generic, not a fixed list — read `secondary_field` on any model's `/:models/<name>` definition.
 
@@ -98,9 +101,9 @@ Read `references/orders-payments.md` before scripting orders, shipments, payment
 
 Read `references/products-inventory.md` before scripting products, variants or inventory: variants are generated from options, and stock is a ledger of adjustments that a product must opt into.
 
-Read `references/commerce.md` before scripting accounts: deleting an account with history is refused.
+Read `references/accounts.md` before scripting accounts: deleting an account with history is refused.
 
-Read `references/promotions-discounts.md` before scripting discounts or stored value — coupons (including bulk code generation), gift cards, promotions, and purchase links.
+Read `references/promotions-discounts.md` before scripting coupons, promotions, gift cards or purchase links: a cart or an order written through this API gets no promotions unless the write asks for them.
 
 # VII. Errors, Rate Limits, Retries
 
@@ -124,4 +127,4 @@ The app clients differ among themselves too: a function's `req.swell` throws on 
 
 # VIII. Operating Guardrails
 
-- Point scripts at the test environment (`sk_test_…`) first; run bulk updates against test records before live. Before any bulk write, print the loaded key's prefix and confirm the environment segment — a bare `sk_` is **live**, not test. `GET /:clients/:self/keys` lists only the keys belonging to the environment the current credentials resolve to, a second way to confirm before writing.
+Point scripts at the test environment (`sk_test_…`) first; run bulk updates against test records before live. Before any bulk write, print the loaded key's prefix and confirm the environment segment — a bare `sk_` is **live**, not test.

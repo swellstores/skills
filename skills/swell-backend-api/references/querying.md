@@ -1,22 +1,6 @@
 # Querying
 
-Reads on the Backend API: filtering, sorting, paging, counting, search, related records, aggregation, and localized or multi-currency values. Every list endpoint takes the same parameters. How a missing record or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
-
-## Parameters
-
-| Parameter | Does |
-| --- | --- |
-| `where` | Filters the records |
-| `sort` | Orders them |
-| `limit`, `page` | Page size, 1 to 1000 with a default of 15, and page number |
-| `search` | Text search |
-| `fields` | Keeps only the named fields in each record |
-| `expand` | Resolves linked records in place |
-| `include` | Attaches the result of another query to each record |
-| `group`, `aggregate` | Aggregate instead of listing |
-| `$locale`, `$currency` | Return localized values, or prices in a currency |
-
-A top-level key that is not one of these parameters is a filter: `{ active: true }` is `{ where: { active: true } }`.
+Reads on the Backend API. Every list endpoint takes the same parameters: `where`, `sort`, `limit`, `page`, `search`, `fields`, `expand`, `include`, `group`, `aggregate`, `$locale` and `$currency`. A top-level key that is not one of them is a filter: `{ active: true }` is `{ where: { active: true } }`. How a missing record or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
 
 ## where
 
@@ -26,7 +10,7 @@ MongoDB-style conditions. Several keys must all match, and one field can carry s
 - **Logical:** `$and`, `$or`, `$nor`, `$not`.
 - **Arrays:** `$all`, `$size`, and `$elemMatch` for several conditions on the same element.
 
-Dot notation reaches nested fields and the elements of an array. An app's fields on a standard record are filtered by their path, `'$app.<app_id>.<field>'`.
+Dot notation reaches nested fields and the elements of an array.
 
 ```js
 await swell.get('/products', {
@@ -46,41 +30,14 @@ Values in `where` are converted to the field's type: write a date as an ISO stri
 
 `sort: '<field> <asc|desc>'`, with several fields separated by commas (`'price desc, name asc'`). The value must be a string; an array is ignored. The default is `id desc`, newest first.
 
-A list answers with `{ count, results, page, limit, page_count }`. `count` is the total number of matches, not the size of the page.
+`limit` is the page size, 1 to 1000 with a default of 15, and `page` the page number. A list answers with `{ count, results, page, limit, page_count }`. `count` is the total number of matches, not the size of the page.
 
-- **`pages` is present only when there is more than one page.** It maps page numbers to the record numbers they start and end at, for ten pages around the current one. Test for it before reading it.
+- **`pages` is present only when there is more than one page.** It maps page numbers to the record numbers they start and end at. Test for it before reading it.
 - **`limit` above 1000 fails with status 400.**
 - **`page: 'all'` returns every match in one answer, and fails with status 400 when there are more than 1000.** Use it only where the number of matches is known to stay small.
 - **`page: false` returns a bare array with no envelope.** It still returns one page: 15 records unless `limit` says otherwise.
 
-To read a whole collection, do not page by number through tens of thousands of records. Sort by `id` and continue from the last one read:
-
-```js
-let last;
-for (;;) {
-  const { results } = await swell.get('/orders', {
-    where: last ? { id: { $gt: last } } : {},
-    sort: 'id asc',
-    limit: 1000,
-  });
-  if (!results.length) break;
-  // …process results
-  last = results[results.length - 1].id;
-}
-```
-
-## Counting
-
-- **How many match.** `count` of any list answer, or `GET /<collection>/:count` with the same filter, which answers with the bare number.
-- **How many per value of a field.** `group` with the field and a sum:
-
-```js
-const { results } = await swell.get('/orders', {
-  where: { date_created: { $gte: '2026-01-01T00:00:00Z' } },
-  group: { status: true, orders: { $sum: 1 } },
-});
-// [{ status: 'complete', orders: 3508 }, { status: 'canceled', orders: 217 }, …]
-```
+To read a whole collection, do not page by number: sort by `id` and continue from the last one read, with `where: { id: { $gt: lastId } }`, `sort: 'id asc'` and `limit: 1000`, until a page comes back empty.
 
 ## Search
 
@@ -104,11 +61,7 @@ Every other model, app collections included, is searched across all its string f
 
 `fields: 'name, slug, items.product_id'` keeps only those fields, as a comma-separated string or an array, with dot notation. `id` always comes back.
 
-`expand: ['account', 'items.product', 'variants:50']` replaces links with the records they point to. On a list it applies to every record.
-
-- **A link to one record** becomes that record.
-- **A link to many records** becomes a list envelope of its own, `{ count, results, … }`, holding **5 records by default**. Raise the number per path with `<field>:<limit>`.
-- **A path can be at most 5 levels deep.** A deeper one fails the request.
+`expand: ['account', 'items.product', 'variants:50']` replaces links with the records they point to, on a list for every record. A link to one record becomes that record. A link to many records becomes a list envelope of its own, holding **5 records by default**: raise the number per path with `<field>:<limit>`. A path can be at most **5 levels** deep, and a deeper one fails the request.
 
 ## include
 
@@ -127,17 +80,11 @@ await swell.get('/accounts', {
 });
 ```
 
-Each key of `params` is a filter on the included query, and its value names the field of the parent record to take the value from. `data` is a query as written, and `conditions` is tested against the parent record. The value under `open_orders` is whatever that query answers: a list envelope here, a number for a `/:count` url. A record that does not meet `conditions` gets `null`.
+The value under `open_orders` is whatever that query answers: a list envelope here, a number for a `/:count` url. A record that does not meet `conditions` gets `null`.
 
 ## group and aggregate
 
-`group` aggregates the records that `where` selects. Each key is one of three things:
-
-- **A field to group by:** `status: true`.
-- **An accumulator:** `$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, `$addToSet`.
-- **A date part to group by:** `$year`, `$month`, `$dayOfMonth`, `$dayOfWeek`, `$hour`.
-
-Field names inside `group` are written without a `$` prefix.
+`group` aggregates the records that `where` selects. Each key is a field to group by (`status: true`), an accumulator (`$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, `$addToSet`) or a date part to group by (`$year`, `$month`, `$dayOfMonth`, `$dayOfWeek`, `$hour`). Field names inside `group` are written without a `$` prefix.
 
 ```js
 await swell.get('/orders', {
@@ -149,7 +96,7 @@ await swell.get('/orders', {
 
 With accumulators only there is nothing to group by, and the answer is `{ results: [{ … }] }` with a single entry and no `count`.
 
-`aggregate` runs a MongoDB pipeline, in MongoDB's own syntax with `$`-prefixed field references. It takes two forms:
+`aggregate` runs a MongoDB pipeline, in MongoDB's own syntax with `$`-prefixed field references:
 
 - **An object of named stages** adds them, in the order written, after the filter from `where`. The names are labels of your choice, and each value is one stage:
 
@@ -167,11 +114,11 @@ With accumulators only there is nothing to group by, and the answer is `{ result
 
 - **An array** is the whole pipeline. `where` is ignored, so the pipeline needs its own `$match`, and values in it are not converted to field types: an ISO date string matches nothing in a date field and gives an empty result with no error. Write the date as `{ $date: '2026-01-01T00:00:00Z' }`, or keep the filter in `where` and use the object form. `id` in a `$match` is the exception and is converted.
 
-An `aggregate` answers with `{ count, results }`, where `count` is the number of rows. The keys of an object `_id` become fields of the row, and any other `_id` comes back as `id`.
+An `aggregate` answers with `{ count, results }`. The keys of an object `_id` become fields of the row, and any other `_id` comes back as `id`.
 
 `sort`, `limit`, `page` and `fields` do not apply to the rows of a `group` or an `aggregate`, and `expand` and `include` are not available on them. To order, cut or trim the rows, use `aggregate` with `$sort`, `$limit` and `$project` stages.
 
-Every collection also has `/:first` and `/:last`, which answer with the oldest and the newest record that matches the query.
+Every collection also has `/<collection>/:count`, which answers a query with the bare number of matches, and `/:first` and `/:last`, which answer with the oldest and the newest record that matches.
 
 ## Localized and multi-currency reads
 
@@ -179,4 +126,4 @@ Every collection also has `/:first` and `/:last`, which answer with the oldest a
 - **`$currency: 'EUR'`** returns price fields in that currency and sets the record's `currency`. An array leaves the base prices in place and returns the `$currency` map with those currencies. Expanded and included records follow.
 - A currency the store prices in uses its stored prices. A display currency is converted from the base price at a rate that is refreshed hourly. `GET /:currencies` returns the base currency, the rates and the store's currency configuration.
 
-Reading in a currency changes nothing that is stored. Selling in a currency is a write: `references/writes.md`.
+Selling in a currency is a write: `references/writes.md`.

@@ -1,90 +1,86 @@
-# Discounts & Stored Value
+# Coupons, promotions, gift cards and purchase links
 
-Coupons and promotions carry the same `discounts[]` rule shape and the same discount engine; they differ only in how they attach. Gift cards are stored value, not a discount — they pay, they don't reduce totals.
+Coupons and promotions share one rule shape and differ in how they reach a cart or an order. A gift card is stored value: it pays, and it does not reduce a total. Field shapes are in `GET /:models/coupons`, `/:models/promotions`, `/:models/giftcards` and `/:models/purchaselinks`.
 
-## Coupons vs promotions
+## Coupons and promotions
 
-|                | Coupons | Promotions |
+|  | Coupons | Promotions |
 | --- | --- | --- |
-| Attaches via   | `coupon_code` on the cart/order — **one at a time** | `promotion_ids` array — many |
-| Applies when   | a valid code is written | the write asks (below) |
-| Codes          | `/coupons:codes` child collection; `multi_codes: true` for campaigns | none |
-| Date window    | `date_valid` / `date_expired` | `date_start` / `date_end` |
-| Limits         | `limit_uses`, `limit_code_uses` (per code), `limit_account_uses`, `limit_subscription_uses` (invoices per subscription), `limit_account_groups`/`_segments` | `limit_uses`, `limit_account_uses`, groups/segments, plus `exclusions[]` (product/category) |
-| Use ledger     | `/coupons:uses` | `/promotions:uses` |
+| Attached by | `coupon_code` on the cart or order, one at a time | `promotion_ids`, several |
+| Applied when | a valid code is written | the write asks for it (below) |
+| Codes | the child collection `/coupons:codes` | none |
+| Date window | `date_valid`, `date_expired` | `date_start`, `date_end` |
+| Use ledger | `/coupons:uses` | `/promotions:uses` |
 
-**`active` defaults to `false` on both**, and it is independent of the date window — a coupon inside its dates with `active: false` is dead. Rule shape on both: `type` (`total | shipment | product | category | buy_get`), `value_type` (`fixed | percent`), `value_fixed`/`value_percent` (`value` is a deprecated alias for `value_fixed`), plus gates `total_min`, `price_min`, `quantity_min`, `quantity_max`, `discount_max`, `product_id`/`category_id`/`exclude_category_ids`, `purchase_option` (+ `subscription_plan_id`), and `buy_items`/`get_items` for `buy_get`.
+**`active` defaults to `false` on both**, whatever the dates say: a coupon inside its dates with `active: false` is refused.
 
-## Applying to carts, orders & subscriptions
+A rule is an entry of `discounts`, such as `{ type: 'total', value_type: 'percent', value_percent: 10 }`. The other types (`shipment`, `product`, `category`, `buy_get`), the conditions of a rule and the use limits are in the model.
+
+## Applying to a cart or an order
+
+`PUT /carts/<id>` with:
 
 ```js
-await swell.put(`/carts/${id}`, { coupon_code: 'SUMMER10', $promotions: true });
+{ coupon_code: 'SUMMER10', $promotions: true }
 ```
 
-- **The applied code is uppercased and stripped of every non-alphanumeric character before lookup**, while `/coupons:codes` stores the code with uppercasing only. A stored code containing `-` or a space can therefore never be applied — keep codes and generation patterns alphanumeric.
-- One coupon per record. Writing a different code swaps it (removing the old `/coupons:uses` record); writing `coupon_code: null` removes it. Failures land in `errors.coupon_code` as plain messages: `Not found`, `Coupon not active`, `Coupon not valid`, `Coupon expired`, `Coupon use limit reached (N)`, `Coupon code use limit reached (N)`, `Coupon customer use limit reached (N)`, `Coupon not applicable to customer group`/`segment`.
-- **Promotions are not automatic on the Backend API.** They are evaluated only when the write body carries `$promotions: true`, sets `promotion_ids` explicitly, or the record already has `promotion_ids` (or the currency changed). The storefront gateway sends `$promotions: true` on every cart mutation, so storefront carts look automatic; a cart or order you build directly gets no promotions unless you send it too. Sending it alongside an explicit `promotion_ids` array unions the two.
-- Discounts are stored on the record and recomputed on write — a cart written before a promotion started keeps its old `discounts` until it is written again.
-- `discount_total` is **line items only** (`sum(items.discount_total)`). Shipping discounts sit in `shipment_discount` and are already netted inside `shipment_total`. Total value given away = `discount_total + shipment_discount`.
+- **Promotions are not applied unless the write asks.** They are evaluated only when the body carries `$promotions: true` or sets `promotion_ids`. A storefront cart has them because the Frontend API sends the flag with every cart change. A cart or an order created through the Backend API has none without it.
+- **A cart keeps the discounts it was given.** Each entry of `discounts` holds a copy of its rule. A coupon or a promotion that was changed later, and a promotion that has ended, stay on the cart as they were through every other write. `$promotions: true` evaluates the promotions again, and a coupon is read again when `coupon_code` is written as `null` and then as the code.
+- **A code is looked up in upper case with everything but letters and digits removed**, while `/coupons:codes` stores it in upper case only. A stored code with a hyphen or a space can never be applied. Keep codes, and generation patterns, to letters and digits.
+- **One coupon per record.** Another code replaces it, and `coupon_code: null` removes it. A refused code is an error on `coupon_code` with code `INVALID`, so the message tells the cases apart: `Not found`, `Coupon not active`, `Coupon not valid` (before `date_valid`), `Coupon expired`, `Coupon use limit reached (N)`, `Coupon code use limit reached (N)`, `Coupon customer use limit reached (N)`, and `Coupon not applicable to customer group` or `segment`.
+- **A use is recorded when an order is placed**, not on a cart or a draft order, so the limits count orders. `use_count` on the coupon and on each code follows `/coupons:uses`: read it, never write it.
+- **`discount_total` is line items only.** A shipping discount is in `shipment_discount` and is already taken out of `shipment_total`. The total given away is `discount_total + shipment_discount`.
 
 ## Bulk coupon codes
 
-Set `multi_codes: true` on the coupon, then hand the job to the generator instead of looping POSTs:
+For a campaign of single-use codes, set `limit_code_uses: 1` on the coupon and do not loop over `POST /coupons:codes`. `POST /coupons:generations` with:
 
 ```js
-const gen = await swell.post('/coupons:generations', {
+{
   parent_id: couponId,
-  count: 5000,               // immutable, max 10,000; omit → 0 → dead run
+  count: 5000,               // at most 10,000
   pattern_type: 'custom',    // or 'default'
-  pattern: 'SUMMER{00000}',  // each {…} → uppercase alphanumerics of that length
-});
+  pattern: 'SUMMER{00000}',  // each {…} becomes that many random letters and digits
+}
 ```
 
-Generation is **asynchronous**. The POST returns immediately with `complete: false`; a background worker writes codes one at a time and finishes by setting `complete: true`, which is what emits `coupon.generation.completed`. Poll `GET /coupons:generations/{id}` for `complete` or a populated `error`, then read the batch with `GET /coupons:codes?gen_id={genId}`. `active_generations` on the coupon links whatever is still incomplete.
-
-- **Generated codes emit no events.** The worker writes each one with `$events: false`, so a webhook or poller watching for code creation sees nothing — watch `coupon.generation.completed`.
-- The worker only picks up generations where `complete` is false **and** `error` is null. Re-saving an incomplete one resumes it: it counts existing codes for that `gen_id` and produces only the shortfall, so a stalled run restarts without duplicating. A run that ended in `error` stays parked until the error is cleared.
-- Collisions retry silently; the 26th (`codeErrors > 25`) aborts the run with `error: 'Too many duplicate codes in pattern'`. Give a 5,000-code run more entropy than `{000}`.
-- **The two count failures land in different places.** `count` is capped by the model, so `count: 20000` fails the POST itself — `errors.count = { message: 'Must not exceed 10000', code: 'MAXVAL' }`, no generation record created, nothing to poll. The runtime `error: 'Invalid generation count (maximum 10,000)'` only ever comes from the other half of that guard: `count` defaults to `0`, and carrying a default waives its `required`, so a POST that omits `count` succeeds and the record parks with that error on the worker's first pass. `count` is immutable either way — repost, don't patch.
-- Without an explicit code, `/coupons:codes` auto-assigns five random alphanumerics plus an incrementing counter from 100001.
-- **Codes are unique across every coupon in the store**, not per coupon — the lookup takes the last matching code globally.
-- `use_count` on the coupon and on each code are maintained from `/coupons:uses` records by internal triggers. Read them; never write them.
+- **Generation runs in the background.** The answer has `complete: false`. Poll `GET /coupons:generations/<id>` until `complete` is true or `error` is set, then read the codes with `GET /coupons:codes?gen_id=<id>`.
+- **Generated codes record no events.** React to `coupon.generation.completed`.
+- **Always send `count`.** Over 10,000 the `POST` is refused with code `MAXVAL`. Left out, the `POST` succeeds with `count: 0` and the run stops with `error: 'Invalid generation count (maximum 10,000)'`. `count` is immutable, so post a new generation.
+- **Give the pattern room.** After 25 collisions the run stops with `error: 'Too many duplicate codes in pattern'`.
+- **A code is unique across every coupon in the store.** A code another coupon has is refused with `UNIQUE`.
+- `multi_codes: true` on the coupon makes the dashboard show its codes as a list. The API does not require it.
 
 ## Gift cards
 
-`amount` is required (min 0.01). Omit `code` and the platform generates one from `/settings/giftcards.code_pattern` (default `{XXXX} {XXXX} {XXXX} {XXXX}`) using an unambiguous alphabet — digits `34679` and A–Z without `I`/`O` — retrying up to 10 times on collision. A pattern with no `{…}` segment, or one yielding fewer than 5 characters, fails the create. `code` is stored normalized (uppercase, separators stripped) with the display form in `code_formatted` and `last4` derived from it; it is immutable and 4–20 characters. `date_expired` is filled from gift card settings only when `features.auto_expire` is on (`expire_count`/`expire_interval`, defaults 12 months).
+`POST /giftcards` with `{ amount: 50 }` creates a card. Without `code` the platform generates one from the pattern in the store's gift card settings. `code` is stored in upper case without separators, and `code_formatted` has the form to show. It is immutable and has 4 to 20 characters. `date_expired` is filled in only when the store's gift card settings switch expiry on.
 
-Issue a batch with `$bulk_count` on a single POST:
+**Spending.** Attach cards to a cart or an order as `giftcards: [{ code }]`. Each entry comes back with the card's `id` and its balance as `amount`. An unknown, disabled or expired code is an error on `giftcards.code`.
 
-```js
-await swell.post('/giftcards', { $bulk_count: 200, amount: 50, bulk_description: 'Holiday 2026' });
-```
+- **An order that is not a draft charges its gift cards when it is created**, with one payment of `method: 'giftcard'` per card. When the cards cover `grand_total`, `billing.method` becomes `giftcard`.
+- A payment can also be posted with `method: 'giftcard'` and `giftcard_id`. It is refused above the card's balance.
+- Every charge and refund is a record in `/giftcards:debits`, and `amount_spent` is their sum. The first debit fixes the card's currency.
 
-`$bulk_count` is 1–1,000 and **includes the card created by the request itself** — 200 yields 200 cards, all sharing one `date_bulk_generated`, which is how you query the batch back out. Above 1,000 throws; split larger runs.
+**Writing `account_id` on a card turns it into account credit.** The whole remaining balance becomes an `/accounts:credits` record for that account, `redeemed` turns true and `balance` reads 0. Nothing undoes it. To let a customer spend a card, leave `account_id` empty and apply the code. To stop a card, write `disabled: true`. `balance`, `amount_spent` and `redeemed` are read-only.
 
-Spending: attach codes to a cart/order as `giftcards: [{ code }]`. Each resolves to `{ id, code, code_formatted, last4, amount }` with `amount` defaulting to the card's balance; an unknown, disabled, or expired code errors as `errors['giftcards.code'] = 'Not found'`, and a card in another currency errors on `giftcards.currency`. When gift cards cover `grand_total`, `billing.method` is set to `giftcard` automatically. Charging happens through a payment with `method: 'giftcard'` and `giftcard_id`; exceeding the card errors `Payment cannot exceed gift card balance`. Every charge, refund, and void posts a `/giftcards:debits` record, and `amount_spent` is recomputed as the sum of debits — that ledger is the audit trail. The **first debit locks the card to that currency**; a later debit in another one is rejected.
-
-**Writing `account_id` does not assign a card to a customer — it liquidates it.** Setting it on a card that does not already have one converts the entire remaining balance into an `/accounts:credits` record for that account and sets `redeemed: true`, after which the `balance` formula (`if(redeemed, 0, amount - amount_spent)`) reads 0. There is no undo. To let a customer spend a card, leave `account_id` null and apply the code. To kill a card, write `disabled: true`. `balance`, `amount_spent`, and `redeemed` are all read-only.
-
-Gift card items issue their own cards when the order becomes **paid**, not on any fulfillment or shipment action — a background task gated on `paid: true` + `giftcard_delivery: true` + `item_quantity_giftcard_deliverable > 0`. It posts **one `/giftcards` record per unit of quantity**, each carrying `order_id`, `order_item_id`, the order `currency`, and an `amount` resolved from a `value` option's price when the product has one, falling back to `item.price`; the item's `send_email` (defaulting to the account email) and `send_note` options ride along, and the items are then marked delivered. Watch for the cards with `GET /giftcards?order_id={id}` — waiting on a fulfillment event never fires.
+**A gift card item issues its cards when the order becomes paid**, not when it is fulfilled. There is one card per unit, with `order_id` and `order_item_id`, for the price of the chosen value option or else the item's price. The item's options with the ids `send_email` and `send_note` set the recipient and the message. Read the cards with `GET /giftcards?order_id=<id>`.
 
 ## Purchase links
 
-A pre-built cart behind a shareable URL — the tool for social/email "buy this now" flows without a storefront page.
+A cart template behind an address that can be shared. `POST /purchaselinks` with:
 
 ```js
-const link = await swell.post('/purchaselinks', {
-  name: 'summer-tee',     // required, unique
+{
+  name: 'summer-tee',   // required and unique
   items: [{ product_id, variant_id, quantity: 1, price: 19 }],
-  active: true,           // defaults FALSE — an inactive link only 404s
-});
-// → link.id === 'a7f3k2m9'
+  active: true,         // false by default
+}
+// the answer's id is 8 letters and digits, such as 'a7f3k2m9'
 ```
 
-- **`id` is an 8-character alphanumeric string, not an ObjectID** (auto, unique, immutable). The `id: { $gt: lastId }` cursor idiom from `querying.md` sorts lexically here, not chronologically — paginate purchase links by `date_created`.
-- **`active` defaults to `false`.** Toggling it emits `purchaselink.activated` / `purchaselink.deactivated`.
-- The shareable URL is served from the storefront gateway root: `https://{store}.swell.store/buy/{id}`, or your configured storefront domain. No API key is involved — the store resolves from the request host. `/buy/test/{id}` follows the link against the test environment.
-- Following it **creates a fresh cart on every visit** and 302s to that cart's `checkout_url`; a link is a template, not a stable cart, so two visitors get independent carts. Send `Accept: application/json` to get `{ checkout_url }` back instead of a redirect — that is how to resolve a link server-side.
-- The cart is the link record minus `id`/`name`/`active`/dates, stamped with `purchase_link_ids`. **If an item or promotion fails validation the gateway drops it and retries**, so the visitor gets a partial cart with a 200 — the reasons land in `cart.purchase_links_errors`, never in an error response. Check that array when a link "works" but the cart is short.
-- A missing, inactive, or empty-`items` link redirects to `custom_error_url` from `/settings/purchaselinks` (default `https://{host}/404`) and returns 404 to JSON callers, with no reason given. `/settings/purchaselinks` holds only that field and a `domains` link.
-- `coupon_id` and `promotion_ids` on the link carry into the cart. `item.price` overrides list price at follow time, and `item.purchase_option` (`{ type: 'standard' | 'subscription' | 'trial', plan_id }`) lets a link start a subscription. `metadata` rides through.
+- **The address is `https://<store>.swell.store/buy/<id>`**, or the same path on the store's own domain, and `/buy/test/<id>` for a link in the test environment. No key is involved.
+- **Every visit creates a new cart** and redirects a browser to its `checkout_url`. A request with `Accept: application/json` gets `{ checkout_url }` instead, which is how a server resolves a link.
+- **An item that is no longer valid is left out without an error.** The visitor gets a cart with the rest, and the reason is in the cart's `purchase_links_errors`.
+- **A missing or inactive link, and one without items, answers 404** to a JSON request and sends a browser to the store's error page.
+- `coupon_id`, `promotion_ids` and `metadata` on the link carry into the cart. `items[].price` replaces the product's price, and `items[].purchase_option` starts a subscription.
+- **`id` is not an ObjectID**, so paging by `id` does not follow the order of creation. Page by `date_created`.
