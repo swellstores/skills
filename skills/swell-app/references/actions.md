@@ -12,7 +12,7 @@ Run `swell schema content --format=dts` (and `setting`, `function`) for every pr
 | a view's `extra_actions[]` | item in the Actions menu | `list` or `record` | `record_id` on a record view |
 | a list view's `bulk_actions[]` | button in the bar shown when rows are selected | `bulk` | `selection` |
 | a field with `"type": "action"` in a content file | button among the record's fields | `field` | `record_id` |
-| `actions[]` in a settings file | item at the top of the Actions menu on the app's page | `settings` | `settings` (the file name) |
+| `actions[]` in a settings file | item at the top of the Actions menu on the app's page | `settings` | `settings` (the settings group name) |
 | a field with `"type": "action"` in a settings file | button among the app's settings | `field` | `settings` |
 
 - **An action has `function` or `link`, never both.** Bulk actions and action fields take `function` only. A function action needs an `id`, unique within its group: a settings file, a view's `actions` and `extra_actions` together, or a view's `bulk_actions`.

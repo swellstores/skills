@@ -85,6 +85,8 @@ For local testing, forward caller headers via repeatable `-H 'Name: value'` on `
 
 Direct invocation — `swell api`, or any backend `PUT /:functions/{id}` with `$call` — bypasses the cache entirely, so local testing never reproduces the storefront's stale-response window.
 
+An app's functions can call each other the same way: `` await req.swell.put(`/:functions/app.${req.appId}.<name>`, { $call: { method: 'post', data } }) ``. The key accepts the app slug (`req.appId`) as well as the app's record id, and a body containing only `$call` needs no `permissions` entry, even when the app's `permissions` are scoped. A missing function fails with `function_not_found` (404) and a disabled one with `function_disabled` (400); action functions and workflows refuse `$call` (`action_not_callable`, `workflow_not_callable`).
+
 ## Return values
 
 - Plain object → JSON 200.
