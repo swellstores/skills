@@ -23,7 +23,7 @@ swell create app <id> -t storefront --frontend swell-vinext -y
 
 The scaffold sets `type: "storefront"` and `frontend.hosting: "managed"`. Configure `permissions` for the Backend operations the app actually uses before deployment — see `references/permissions.md`, including the case where no scopes are needed. The scaffold's empty array grants full store access; using only the Storefront client does not remove those Backend credentials.
 
-Run `swell app push` once before the first preview: it installs the app in the test environment, Swell creates a storefront for it, and the push prints the storefront's address. The scaffold's demo page is what goes up; that is fine in the test environment.
+Run `swell app push` once before the first preview: it installs the app in the test environment, Swell creates a storefront for it, and the push prints the storefront's address with `--preview` after the storefront id. The same storefront answers with and without that suffix. The scaffold's demo page is what goes up; that is fine in the test environment.
 
 The scaffold's README and demo page are written for every app type. Their `--store-user` advice does not apply here: the flag is refused for storefront apps.
 
