@@ -1,6 +1,6 @@
 # App Data from a Storefront
 
-An app adds data as its own collections and as fields on standard models; a storefront can build on the first only. How a model declares what is public is in the app skill's `references/data-models.md`, "Storefront exposure".
+An app adds data as its own collections and as fields on standard models. Any storefront can build on the first; only the app's own frontend can read the second. How a model declares what is public is in the app skill's `references/data-models.md`, "Storefront exposure".
 
 ## App collections
 
@@ -29,4 +29,4 @@ So scope gives ownership, not login, and a `swell.account.get()` check only hide
 
 ## App fields on standard models
 
-Do not build a storefront on `$app.<app_id>.*` fields of products or other standard models. A store's own key and another app's key never return them, whatever the field declares. The app's own key returns its public fields only on the first read of a path in about five seconds, so a single test passes and a page under traffic rarely gets the value. Put such values in an app collection, or return them from a route function.
+`$app.<app_id>.*` fields of products and other standard models are returned only to the key of the app that declares them, and only the fields it marks public. A store's own key and another app's key never return them, whatever the field declares; the field is absent, with no error. So an app's own frontend can read its public fields, and an independent storefront cannot: for that, put the values in an app collection, or return them from a route function.
