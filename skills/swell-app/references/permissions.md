@@ -15,6 +15,7 @@ The CLI validates only that the value is an array — there is no enum, so a typ
 ## What needs no scope
 
 - **The app's own collections.**
+- **The app's own settings.** `settings()` with no argument, or `/settings/<app_id>` with the app's own id.
 - **The app's own functions.** An app can call its own functions, as `backend.functions.call(context.appId, …)` does from a frontend, whatever its scopes.
 - `/:details` and `/:logs`.
 
@@ -22,12 +23,11 @@ The CLI validates only that the value is an array — there is no enum, so a typ
 
 | The app does | Declare |
 | --- | --- |
-| `await req.swell.settings()`, or the Backend client's `settings()` — its own settings included | `read_settings` |
+| reads the store's settings or another app's settings from `/settings/...` | `read_settings` |
 | reads who a store user is from `/:users/<id>` (a dashboard frontend, an action's `$action.user_id`) | `read_:users`, colon included |
 | `req.swell.transaction([...])` | `write_:transaction`, plus the scope of every operation inside |
 | `POST /:batch` | `write_:batch` — also for a batch of reads — plus the scope of every operation inside |
 
-- **Settings are all or nothing.** `read_settings` is needed for the app's own settings, and it also opens every other app's settings (`references/settings.md`).
 - **The wrapper scope does not cover what is inside.** Each operation of a transaction or batch is checked on its own. In a transaction an operation outside the app's scopes aborts the set with `transaction_op_failed` and status 403; in a batch the call succeeds and that operation's slot holds `{ "$error": "The client does not have the required permissions" }`.
 
 ## Changing permissions

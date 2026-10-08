@@ -31,12 +31,12 @@ Scaffold with the CLI:
 swell create app my_payment --type integration --integration-type payment --integration-id my-method -y
 ```
 
-Manifest for an extension that reads its provider configuration from app settings (add scopes for other Backend operations as required by `references/permissions.md`):
+Manifest for an extension whose functions read only their own settings, which needs no scope. `permissions` lists the scopes of the implementation's other Backend operations (`references/permissions.md`); with none, the array stays empty and grants full access, the limitation `references/permissions.md` explains:
 
 ```json
 {
   "id": "my_payment", "name": "My Payment", "type": "integration", "version": "1.0.0",
-  "permissions": ["read_settings"],
+  "permissions": [],
   "extensions": [{ "id": "my-method", "type": "payment" }]
 }
 ```
