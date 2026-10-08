@@ -4,6 +4,52 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.7.0] - 2026-10-08
+
+The set is restructured around what is being built. `swell-app` owns the app — scaffolding, resources, runtime clients, frontends, deployment — and two API skills own what the Backend and Frontend APIs do, inside an app or outside one. Each skill was verified by fresh agents building from it alone on a test store: four apps, eight standalone backend integrations, four independent storefronts and three apps that use all three skills.
+
+Baseline: `@swell/cli` 2.9.25, `swell-js` 5.9.2, `swell-node` 6.0.5, `@swell/apps-sdk` 2.0.0-alpha.4 (`next`).
+
+### Changed
+- **`swell-backend` is replaced by `swell-backend-api` and `swell-storefront` by `swell-frontend-api`.** The old skills are removed. Claude Code: `claude plugin marketplace update swell`, then `claude plugin update swell@swell`. `npx skills`: `npx skills remove swell-backend swell-storefront`, then `npx skills add swellstores/skills`; `npx skills update` alone does not install the new skills.
+- The API skills apply inside Swell apps as well as to independent integrations and storefronts, and compose with `swell-app`: the app skill supplies the runtime clients, the API skills explain their operations.
+- `swell-app` now covers code-based storefront apps, with managed frontends as the default (Vinext for storefront and dashboard apps, React for dashboard apps without SSR). Proxima / Liquid themes stay out of scope.
+- `swell-app/SKILL.md` is rewritten around the building blocks an app is made of; authoring and debugging detail moved into references (`data-models.md`, `functions.md`, `permissions.md`, `settings.md`, `webhooks.md`). `actions.md` is rewritten from runs on a test store.
+- API examples are client-neutral: a single write is given as method, path and body.
+- Each rule is stated once, in the reference that owns it. Both API skills stay near their previous size.
+
+### Added
+- `swell-app`: `frontend-dashboard.md` (embedding, navigation, store-user authorization, preview), `frontend-storefront.md` (storefront association, addresses, shared sessions), a redesigned `frontend.md` (templates, runtime boundaries, frontend endpoints against app functions, self-hosting on Cloudflare and switching from managed hosting).
+- `swell-app`: third-party callbacks through a route function addressed with the app's public key, what reaches `req.rawBody` from an outside caller, cron syntax and time zone, and one permissions policy for scoped apps.
+- `swell-backend-api`: `orders-payments.md` (orders, shipments, payments, refunds, returns, invoices, subscriptions), `products-inventory.md` and `accounts.md`, split out of `commerce.md`; standalone client rules for `swell-node`, the Apps SDK Backend client and direct HTTP on the entry page; how an app's collections and fields are addressed from outside the app.
+- `swell-frontend-api`: `clients-sessions.md` (replaces `ssr.md`: clients, cookie adapters, sessions, caching), `cart-checkout.md` (replaces `checkout.md`, with one statement of how failures arrive) and `accounts-subscriptions.md`.
+
+### Fixed
+- Backend API: the object form of `aggregate` takes named stages; a `PUT` to a missing id creates the record; a `/:transaction` drops `$app` values without an error; events recorded while a webhook is switched off are never delivered; `paid` stays true after a refund; a subscription cancel needs `cancel_at_end` in the body in both directions; a `PUT` that changes a stock adjustment's `quantity` is refused; a cart keeps the discounts it was given until `$promotions: true` or a rewritten code.
+- Frontend API: `swell.create()` clients are isolated from swell-js 5.9.0, so the shared-state warnings are gone; a product's `price` is already the sale or customer-group price; cart item calls can reject as well as resolve with `errors`; a second `cart.submitOrder()` returns the order; card elements exist for Stripe, Quickpay and ConvesioPay only; `{ cancel_at_end: false }` alone cancels a scheduled subscription at once; a missing record reads `null` or an empty string; GraphQL takes the public key bare in `Authorization`; the TypeScript notes match the 5.9.2 declarations.
+- `swell-app`: model event names use the short form only (the model-qualified form is refused at push); the note on JSON-manifest validation in CLIs before 2.9.24 is removed; `config.extension` is required on functions serving an extension slot.
+
+### Removed
+- `swell-backend` and `swell-storefront`.
+- Undocumented request flags and internals, except where developers.swell.is documents them or a common task needs them.
+- Workarounds for defects fixed in current `swell-js`, `swell-node` and CLI releases.
+
+## [0.6.0] - 2026-10-06
+
+Covers platform and CLI changes through 2026-10-06, plus the fixes merged since 0.5.0.
+
+### Added
+- `swell-app`: `references/actions.md`, covering app actions (dashboard buttons that run app functions or workflows): where they render (the settings Actions menu, view `actions`/`extra_actions`, list `bulk_actions`, `type: "action"` fields), the `action: true` trigger, the `$action` context and the bulk `selection.query`, dialogs, how view defaults merge or get replaced, permissions (admin users only, refused through `$call` and the storefront gateway, role checks), local-dev behavior and testing, push and run-time error codes, the minimum `@swell/cli` (2.9.23) and `@swell/app-types` (1.2.6) versions, and an id-cursor recipe for bulk actions whose writes change what the list filters on.
+
+### Changed
+- `swell-app`: workflows are available on every store. The beta feature gate and its `workflow_beta_*` errors are gone. Workflows can declare `action: true` to be started by app actions, can read and update their own app's settings at `/settings/<req.appId>`, and their runs are listed in a Workflows tab on the app's dashboard page.
+- `swell-app`: content-model actions are no longer links only. Function actions, bulk actions, and action fields write data from the dashboard, on app collections and on standard pages. A view's `actions` made entirely of function actions are added after the defaults instead of replacing them.
+- `swell-app`: `swell app dev` also runs action functions locally; workflows started by actions run the pushed version.
+- `swell-app`: JSON-manifest validation works again from `@swell/cli` 2.9.24, which validates against draft 2020-12; the workaround now applies only to older CLIs. Tests scaffolded by 2.9.24 also define a `SwellResponse` global.
+- `swell-app`: the new `secret` settings field type masks the input in App Preferences but stores plain text, so settings are still not a secret store.
+- `swell-app`: an app's functions can call each other with `PUT /:functions/app.<app slug or id>.<name>` and a `$call`-only body, with no `permissions` entry needed.
+- `swell-app`: always declare `permissions` (#5); `req.isLocalDev` no longer needs a cast, and the tests-scaffold vitest pin note is removed (#6); the frontend reference is corrected for admin and integration app frontends (#9).
+
 ## [0.5.0] - 2026-08-29
 
 Source-verification pass: 1,128 factual claims across all three skills were checked against platform, CLI, and SDK source, then the result was adversarially reviewed and re-verified. 437 corrections and additions applied across two rounds; where developers.swell.is and the platform's source disagreed, the source won.

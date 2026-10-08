@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: routing-standalone-storefront-no-app
+prompt_file: prompt.md
+runs: 3
+tags: [routing, storefront, negative]

@@ -168,7 +168,12 @@ ${output}`;
     proc.stdout.on('data', (d) => (out += d));
     proc.on('close', () => {
       let verdict = '', cost = 0;
-      try { const j = JSON.parse(out); verdict = j.result || ''; cost = j.total_cost_usd || 0; } catch {}
+      // Newer CLIs print the whole event array for `--output-format json`; older ones the result object.
+      try {
+        const parsed = JSON.parse(out);
+        const j = Array.isArray(parsed) ? parsed.find((e) => e.type === 'result') || {} : parsed;
+        verdict = j.result || ''; cost = j.total_cost_usd || 0;
+      } catch {}
       resolve({ pass: /^\s*PASS/i.test(verdict), detail: verdict.split('\n').slice(0, 2).join(' ').trim(), cost });
     });
     proc.stdin.end(prompt);
@@ -211,12 +216,14 @@ for (const c of cases) {
   const entry = { name: c.name, tags: c.meta.tags || [], arms: {} };
   for (const withPlugin of arms) {
     const armKey = withPlugin ? 'with' : 'without';
-    const scores = [], details = [];
+    const scores = [], details = [], skillsFired = [];
     for (let i = 0; i < runs; i++) {
       let run;
       try { run = await runClaude(c.prompt, { withPlugin }); }
       catch (e) { details.push(`run ${i + 1}: ERROR ${e.message}`); scores.push(0); continue; }
       totalCost += run.cost;
+      // Which skills each run loaded: a routing miss is unreadable without it.
+      skillsFired.push(run.toolUses.filter((t) => t.name === 'Skill').map((t) => /"skill"\s*:\s*"([^"]+)"/.exec(t.input)?.[1] ?? '?'));
       if (!withPlugin && !warnedContaminated) {
         const leaked = (run.loadedSkills || []).filter((s) => /swell/i.test(s));
         if (leaked.length) {
@@ -236,7 +243,7 @@ for (const c of cases) {
       details.push(...results.filter((r) => !r.pass).map((r) => `run ${i + 1}: ${r.grader} — ${r.detail}`));
     }
     const score = scores.reduce((a, b) => a + b, 0) / scores.length;
-    entry.arms[armKey] = { score, runs, failures: details };
+    entry.arms[armKey] = { score, runs, failures: details, skillsFired };
     const bar = '█'.repeat(Math.round(score * 10)).padEnd(10, '·');
     console.log(`${score >= CFG.threshold ? '✓' : '✗'} ${c.name.padEnd(34)} ${armKey.padEnd(8)} ${bar} ${(score * 100).toFixed(0)}%`);
     for (const d of details.slice(0, 3)) console.log(`    ${d}`);

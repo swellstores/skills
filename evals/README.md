@@ -47,6 +47,8 @@ a model gets wrong about Swell when nobody tells it otherwise.
 
 [App workflow builds](app-workflows/cases.md) are the deployed-workflow tests: manual end-to-end cases in which a fresh agent builds and deploys an app from a user-style request and a separate verifier checks the result against the listed acceptance checks. They need a store with a test environment and are not run by the scripts above.
 
+[Standalone backend cases](backend-standalone/cases.md), [standalone storefront cases](frontend-standalone/cases.md) and [composed app cases](composed-apps/cases.md) are manual builds of the same kind for `swell-backend-api` alone, `swell-frontend-api` alone, and the three skills together.
+
 **Routing** (`--tag routing`) — does the right skill fire, and stay quiet when it shouldn't?
 Trigger descriptions are the only routing surface, so these guard against both misses and
 false positives.
@@ -54,9 +56,12 @@ false positives.
 | case | asserts |
 |---|---|
 | `routing-app-hook` | app-function debugging fires `swell-app` |
-| `routing-backend-import` | a swell-node import script fires `swell-backend` |
-| `routing-storefront-cart` | swell-js cart work fires `swell-storefront` |
-| `routing-cli-api-call` | `swell api` routes to `swell-backend`, not `swell-app` |
+| `routing-backend-import` | a swell-node import script fires `swell-backend-api` |
+| `routing-storefront-cart` | swell-js cart work fires `swell-frontend-api` |
+| `routing-cli-api-call` | `swell api` routes to `swell-backend-api`, not `swell-app` |
+| `routing-app-function-orders` | an app cron function that aggregates orders fires `swell-app` and `swell-backend-api` |
+| `routing-storefront-app-checkout` | cart and checkout in a storefront app fire `swell-app` and `swell-frontend-api` |
+| `routing-standalone-storefront-no-app` | an independently hosted swell-js storefront fires `swell-frontend-api` and NOT `swell-app` |
 | `routing-theme-negative` | a Proxima **theme** question does NOT fire `swell-app` |
 | `routing-other-platform-negative` | a Shopify question mentioning Swell fires no Swell skill |
 
