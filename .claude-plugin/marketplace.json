@@ -3,19 +3,19 @@
   "owner": { "name": "Swell Commerce" },
   "metadata": {
     "description": "Swell Commerce skills and tooling",
-    "version": "0.5.0"
+    "version": "0.7.0"
   },
   "plugins": [
     {
       "name": "swell",
-      "description": "Swell development for AI agents: apps, backend API, and storefronts",
-      "version": "0.5.0",
+      "description": "Swell development for AI agents: apps, the Backend API and the Frontend API",
+      "version": "0.7.0",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/swell-app",
-        "./skills/swell-backend",
-        "./skills/swell-storefront"
+        "./skills/swell-backend-api",
+        "./skills/swell-frontend-api"
       ]
     }
   ]

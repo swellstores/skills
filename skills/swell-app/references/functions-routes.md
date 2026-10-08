@@ -48,13 +48,13 @@ export default {
 
 `req.data` on a route is the parsed body merged with the query params, with **query keys overwriting body keys**. When that precedence matters (security-sensitive handlers, conflicting names), use the layer-specific accessors:
 
-- `req.body` — parsed JSON object, or the raw text string when the body isn't JSON.
+- `req.body` — the parsed JSON object. Only JSON gets through from an outside caller: a form-encoded body arrives converted to an object, and any other body (XML, plain text) arrives empty.
 - `req.query` — URL parameters as `{ [key]: string }`.
-- `req.rawBody` — untouched body text. Use for HMAC and webhook signature verification — re-stringifying `body` won't byte-match the original.
+- `req.rawBody` — the body as text; "Signature verification" says when it is the caller's exact text.
 
 ## Authentication
 
-`route.public: true` exposes the endpoint without auth. `public: false` (or omitted) requires the store's secret key in the request — except when the function's **own app's component** calls it through `props.fetch`: the platform accepts the component's token instead, so a route needs neither `public: true` nor a secret key for that caller (route functions only, not hooks or cron; other apps' functions still need the key). That call carries a platform-signed context, exposed as `req.swellContext` (`{ appId, installationId, storeId, storeUser, surface }`, `null` unless the platform forwarded a signed context); `surface` is `'admin'` for admin content field components and `storeUser` holds the admin. `req.swellContext` is the caller's identity only if you check it: a route that must serve merchants only **must** test both, exactly:
+`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request — except when the function's **own app's component** calls it through `props.fetch`: the platform accepts the component's token instead, so a route needs neither `public: true` nor a secret key for that caller (route functions only, not hooks or cron; other apps' functions still need the key). That call carries a platform-signed context, exposed as `req.swellContext` (`{ appId, installationId, storeId, storeUser, surface }`, `null` unless the platform forwarded a signed context); `surface` is `'admin'` for admin content field components and `storeUser` holds the admin. `req.swellContext` is the caller's identity only if you check it: a route that must serve merchants only **must** test both, exactly:
 
 ```ts
 if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
@@ -68,7 +68,15 @@ if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
 
 ## Calling routes from outside Swell (hosted gateway)
 
-External callers (storefronts, third-party webhooks) reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`. Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
+External callers reach routes through the storefront gateway at `https://<store>.swell.store/functions/<app_id>/<function_name>`, and every call carries a Swell public key. A storefront sends it in the `Authorization` header. A third-party service that only takes a callback address, such as a provider's webhook, gets the key in the address, and its HTTP client sends it as Basic credentials:
+
+```
+https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<function_name>
+```
+
+Use the installed app's own public key. A function reads it as `req.publicKey` and the store id as `req.storeId`, so the app can build the address for the store and environment it runs in when it registers the callback with the provider. To call the route from a terminal, read the key from the app's installation: `swell api get '/:clients/:self/apps'` lists it as `public_key`. A public key selects the store environment; it does not authenticate the sender. Make the route `public: true` and verify the provider's own signature before acting (see "Signature verification"). If a provider posts a body that is not JSON, signs a form-encoded body, or rejects or drops credentials in an address, receive the call on an `/app-api` endpoint of the app's frontend (`references/frontend.md`) or on the developer's own service.
+
+Two behaviors differ from direct invocation (`swell api`, `swell app dev`):
 
 - **A public key is required even for `public: true` routes** — send it in the `Authorization` header. Any valid public key for the environment where the app is installed works: the store's storefront public key (`pk_…`, what `swell-js` sends) or the app's own `app_pk_…` key. The key selects the environment (`…_test_…` routes to test) and populates the gateway's installed-app list; the slug in the URL is resolved against that list, not against the key's app identity. Without a resolvable key the gateway returns 404 `Function app.<slug>.<name> not found` — a key/environment-resolution symptom, not a deployment problem. Non-public routes additionally require the store's secret key.
 - **Query parameters are forwarded only when the request body is empty** — the gateway sends `$call.data = body || query`, so a non-empty body drops the query string entirely. On a **GET** the platform re-materializes that data as real URL query parameters, so `req.query` and `req.data` are both populated and `req.body` is an empty string. On **non-GET** methods the data goes out as the JSON body and `req.query` is always empty. For externally-called non-GET routes, read inputs from `req.data` / `req.body` and put everything in the body.
@@ -85,6 +93,8 @@ For local testing, forward caller headers via repeatable `-H 'Name: value'` on `
 
 Direct invocation — `swell api`, or any backend `PUT /:functions/{id}` with `$call` — bypasses the cache entirely, so local testing never reproduces the storefront's stale-response window.
 
+An app's functions can call each other the same way: `` await req.swell.put(`/:functions/app.${req.appId}.<name>`, { $call: { method: 'post', data } }) ``. The key accepts the app slug (`req.appId`) as well as the app's record id, and a body containing only `$call` needs no `permissions` entry, even when the app's `permissions` are scoped. A missing function fails with `function_not_found` (404) and a disabled one with `function_disabled` (400); action functions and workflows refuse `$call` (`action_not_callable`, `workflow_not_callable`).
+
 ## Return values
 
 - Plain object → JSON 200.
@@ -96,7 +106,7 @@ The platform's HTTP client stops reading a function response at 75,000 bytes mid
 
 ## Signature verification (HMAC, third-party webhooks)
 
-When verifying a third-party webhook signature, hash `req.rawBody` — re-stringifying `req.body` won't byte-match the original payload and signatures will never match.
+When verifying a third-party webhook signature, hash `req.rawBody`. For a JSON body on a call through the storefront gateway it is the exact text the caller sent; re-stringifying `req.body` won't byte-match it. A form-encoded body arrives rewritten, so a signature over one cannot be verified in a route. `swell api` rewrites the body as well: test a signature check with a real HTTP request to the gateway address.
 
 Functions run on Cloudflare Workers **without** Node compatibility: use the Web Crypto API (`crypto.subtle.importKey` + `crypto.subtle.verify`), not Node's `crypto` module. Rely on `subtle.verify` for the comparison — it runs in constant time. Never compare signatures with `===`, which leaks timing information.
 

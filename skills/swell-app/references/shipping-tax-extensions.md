@@ -29,6 +29,8 @@ Declare `model.fields` for every top-level field returned. Return only fields th
 
 ## Manifest
 
+These excerpts show extension fields. Start with the scoped manifest in `app-integrations.md` and declare permissions for the implementation's Backend operations.
+
 Shipping:
 
 ```json

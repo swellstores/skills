@@ -1,83 +1,88 @@
 # Frontend
 
-Optional `./frontend/` directory: a web app that Swell builds, hosts, and connects to the store where the app is installed. `swell app push` deploys it and the Swell dashboard embeds it for `admin` and `integration` apps. No Cloudflare account or separate hosting is involved.
+Optional `./frontend/` directory: a web app connected to the store where the app is installed. `swell app push` deploys it. With the default managed hosting, Swell builds and hosts it and no Cloudflare account is needed. Hosting the frontend in the developer's own Cloudflare account retains the same Swell connection and app lifecycle — see "Self-hosting on Cloudflare".
 
-Scope of this reference: `admin` and `integration` apps that need custom UI beyond content-model views. A `storefront` app uses the same folder and templates for the storefront itself; building a storefront is not covered here.
+This reference covers what every frontend shares: the template, the connection to Swell, endpoints, local development, deployment and hosting. Read it first, then the reference for what is being built:
 
-## When to use
+| Building | App type | Viewers | Then read |
+| --- | --- | --- | --- |
+| Pages for store users, shown inside the Swell dashboard | `admin` or `integration` | Store users | `references/frontend-dashboard.md` |
+| The store's own site | `storefront` | Shoppers | `references/frontend-storefront.md` |
 
-Pick a frontend over content-model views when:
-
-- The UI cannot be expressed as `list`/`edit`/`new` views — multi-step flows, embedded third-party widgets, custom dashboards.
-- The app needs its own server endpoints next to that UI.
-
-Otherwise prefer content-model views: cheaper to build, free admin chrome, no build step.
-
-The frontend is **orthogonal to `components/`**, not an alternative. Integration apps may ship both — `components/` for checkout payment components and admin content field components, `frontend/` for dashboard-context admin UI managing the same data.
+The frontend is separate from `components/`, which holds checkout UI for payment extensions and components for admin content fields (`references/components.md`). An app may ship both.
 
 ## Scaffold from a template
 
-For a new frontend, scaffold from a Swell template. The Swell templates carry the hosting profile, the connection helpers, and a working example of every pattern this reference describes.
+Start from a Swell template. It carries the hosting profile, the connection helpers and a working example of each pattern these references describe.
 
-- `--frontend swell-vinext` Vinext — the Next.js App Router API on Vite: server and client components, route handlers, `next/*` imports. **Default choice.**
-- `--frontend swell-react` React + Vite rendered in the browser, plus a small Worker for server endpoints. No server rendering, no router.
+| `--frontend` | What it is | Use for |
+| --- | --- | --- |
+| `swell-vinext` | Vinext — the Next.js App Router API on Vite: server and client components, route handlers, server actions | **The default**, for dashboard and storefront apps |
+| `swell-react` | React + Vite rendered in the browser, plus a small Worker for server endpoints. No server rendering, no router | A dashboard app that is a browser app from end to end |
 
 ```bash
+swell create app <id> -t admin --frontend swell-vinext -y   # new app with a frontend; -t storefront for a storefront
 swell create frontend --frontend swell-vinext -y            # add a frontend to the app in the current directory
-swell create app <id> -t admin --frontend swell-vinext -p bun -y   # new app with a frontend
 ```
+
 Always pass `--frontend` together with `-y`.
 
-The scaffold writes `frontend/`, makes the app root a package workspace that includes it (dependencies install from the app root), and sets `"frontend": { "hosting": "managed" }` in `swell.json`.
+The scaffold writes `frontend/`, makes the app root a package workspace that includes it, and sets `"frontend": { "hosting": "managed" }` in `swell.json`. Dependencies install from the app root, so installed packages and their READMEs are in the app root's `node_modules`.
 
-The home page is a demonstration: replace it, keep the helpers. In the Vinext template, `next/*` imports come from Vinext — do not install the `next` package.
-
-The remaining `--frontend` values (`nextjs`, `astro`, `nuxt`, `react`, `hono`, `angular`) are self-hosted starters without any of this. Use one only when the user explicitly asks for it — see "Self-hosted frontends" at the end.
+- **The home page is a demonstration.** Replace it and keep the helpers.
+- **Vinext is not the `next` package.** `next/*` imports come from Vinext; do not install `next`. `params` and `searchParams` are promises to `await`. `redirect()`, `notFound()`, `next/link`, `router.refresh()`, route handlers and server actions work as in Next.js. Pages render on each request: response caching, prerendering and image optimization are off.
+- **The other `--frontend` values** (`nextjs`, `astro`, `nuxt`, `react`, `hono`, `angular`) are plain Cloudflare starters with none of this — see "Self-hosting on Cloudflare".
 
 ## How the frontend connects to Swell
 
-Swell supplies request context containing store configuration, app credentials, and viewer identity. `@swell/apps-sdk` verifies the context and provides server-side API clients.
+Swell sends a signed context with every request it routes to the frontend: the store, the environment, the app's credentials and who is viewing. `@swell/apps-sdk` verifies it on the server and provides the API clients; `swell-js` is the browser client.
 
-Before changing the frontend, read `frontend/README.md` and the relevant example code it points to. Reuse the scaffold's connection helpers and follow its existing patterns for server-side reads, browser interactions, and protected endpoints. Do not recreate header parsing, session validation, or client initialization.
+Before changing the frontend, read `frontend/README.md` and the example code it points to. Reuse the scaffold's connection helpers and follow its patterns for server-side reads, browser interactions and protected endpoints. Do not recreate header parsing, session validation or client initialization. For SDK capabilities beyond the examples, read `node_modules/@swell/apps-sdk/README.md` in the app root.
 
-For SDK capabilities beyond the examples, consult the installed `@swell/apps-sdk` README.
+There are two clients. The **Storefront client** works on the viewer's own session — catalog, cart, account — on the server and in the browser. The **Backend client** runs on the server only and acts as the app.
 
-The rules that hold whichever template is used:
+The rules that hold for every template and every app type:
 
-- **The context is server-only.** Never expose the full context or its credentials to the browser, or log them. Initialize the browser client with the SDK's public configuration; expose other fields only when intentionally needed by the UI. `@swell/apps-sdk` itself is a server library: importing it from browser code fails the build.
-- **Verify once per request and reuse the result.** Keep server context and clients scoped to that request. Use the scaffold's helpers to share the verified context throughout the request.
-- **No context and a bad context are different things.** Missing context means the frontend is not connected to Swell. Invalid or expired context is a verification failure — surface the error instead of continuing as a visitor.
-- **The Backend client acts as the app, not as the viewer.** It uses the app's access token, scoped by `swell.json` `permissions`, and it works the same for an anonymous visitor as for the store owner. The frontend's address is public, so an endpoint or page that returns Backend data without checking who is asking is open to the internet. Authorize first; let the server choose the endpoint and query, and take from the browser only the inputs the operation needs.
-- **Backend write-validation failures throw.** `SwellBackendAPI` throws on write-validation failures; follow the SDK's error handling rather than swell-node's `result.errors` pattern.
-- **Store users.** `context.storeUser` is `{ userId, storeId }` when the viewer is signed in to the store's dashboard and `null` for a visitor. `requireStoreUser` returns it or throws a `SwellError` with status 401 and code `store_user_required`. Anyone with dashboard access counts — including partners and Swell support, who may not appear in the store's own user list. Swell only answers "is this a store user"; which store user may do what is the app's decision.
-- **App component calls carry a token, not the cookie.** An admin content field component calls the frontend with `props.fetch('/app-api/…')`; its request has no admin cookie but a component token, and the proxy signs a context from the token: `admin` is the token's admin (so `context.storeUser` is set) and `surface` is `'admin'`. On every other request `context.surface` is `undefined`. A verified context proves only that Swell signed it — the proxy signs one for anonymous requests too (`storeUser: null`). So a handler that serves component calls **must** check both before returning store data, exactly. Use the request's verified context (`verifySwellContext` throws on a missing or invalid one, which also means reject):
+- **The context is server-only.** Never expose the full context or its credentials to the browser, or log them. Initialize the browser client with the SDK's public configuration, as the scaffold does. `@swell/apps-sdk` itself is a server library: importing it from browser code fails the build.
+- **Verify once per request, through the scaffold's helper.** The signed context is valid for about a minute, so verifying it again late in a slow request fails. Keep the context and the clients inside the request: no module-level client. For managed hosting, leave the helper file as scaffolded (`lib/swell.ts` in Vinext, `worker/swell.ts` in React). For self-hosting, apply the context-verification options described under "Self-hosting on Cloudflare"; keep the helper's per-request lifecycle.
+- **No context and a bad context are different things.** A missing context means the frontend is not connected to Swell. An invalid or expired context is a verification failure — surface the error instead of continuing as a visitor.
+- **The Backend client acts as the app, not as the viewer.** It uses the app's access token, scoped by `swell.json` `permissions`, and returns the same data whoever asks. Every address of the frontend is public, so a page or endpoint that returns Backend data without checking who is asking is open to the internet. Authorize first; let the server choose the endpoint and query, and take from the browser only the inputs the operation needs.
+- **Find out who is viewing from Swell, never from what the browser sends.** Swell identifies two kinds of viewer and each has its own rules: a store user, in `context.storeUser` (`references/frontend-dashboard.md`, "Authorize store users"), and a customer, in the Storefront client's session (`references/frontend-storefront.md`, "Who is viewing"). Everyone else is a visitor. An id in a path, query or body is input anyone can type.
+- **Server code changes data only in POST/PUT/DELETE handlers or server actions, never in GET handlers or page renders.** Another site can make a viewer's browser send a `GET` with their identity attached, and a page render cannot save cookies. Changes the browser client makes on the viewer's session are a separate matter, covered in the storefront reference.
+- **Backend failures throw.** The Backend client rejects with a `SwellError` (`status`, `code`, `body`), including on a write that fails validation — not the `result.errors` object swell-node returns. A read of an id that does not exist is not a failure: it resolves empty, so test `if (!record)`.
+- **Endpoints live under `/app-api`.** Swell answers `/api`, `/graphql`, `/playground`, `/checkout/` and `/functions/` itself on every address it routes to the frontend, so declare no page or handler under them. Push warns about Vinext route files under `/api`, and cannot see routes declared any other way.
+- **Swell sets the caching, framing and cross-origin headers.** Every response of a managed frontend goes out as `Cache-Control: private, no-store`, except the build's content-hashed assets, and with Swell's own `Access-Control-Allow-Origin` and frame policy in place of the app's. Do not design around response caching, and do not rely on headers of that kind set in app code. The `Cache-Control: private, no-store` that the scaffold's examples send is harmless; keep it.
+- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI explicitly excludes `.dev.vars*` from uploads; `.env*` exclusion relies on the scaffold's `.gitignore`. Read merchant configuration with the Backend client's `settings()`. Settings are not a secret store (`references/settings.md`), and the read needs the `read_settings` scope once `permissions` is non-empty (`references/permissions.md`).
 
-  ```ts
-  if (!(context.surface === 'admin' && context.storeUser)) {
-    return Response.json({ error: 'admin_component_only' }, { status: 403 });
-  }
-  ```
+## Frontend endpoint or app function
 
-  `storeUser` without `surface` is an admin browsing the app frontend with their dashboard cookie, not a component call. See `references/components.md`.
-- **Writes go in POST/PUT/DELETE handlers or server actions, never in GET handlers or page renders.** Swell withholds the store user's identity on any cross-origin request that is not `GET`/`HEAD`/`OPTIONS`, which is what protects a store-user-only write from being triggered by another site. A `GET` that changes data has no such protection. Start every store-user-only write with `requireStoreUser`, then validate input, then apply the app's own permissions.
-- **Endpoints live under `/app-api`.** Swell owns `/api` and `/functions` on the frontend's address: a handler declared there is never reached. Push warns about Vinext route files under `/api`, but cannot see routes declared any other way.
-- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI explicitly excludes `.dev.vars*` from uploads; `.env*` exclusion relies on the scaffold's `.gitignore`. Read merchant configuration with the Backend client's `settings()`; what SKILL.md says under "Settings" (not a secret store) and "App Permissions" (`read_settings` once `permissions` is non-empty) applies here too.
-- **Responses that depend on the viewer are never cached.** Send `Cache-Control: private, no-store` from endpoints, as the scaffold's examples do.
+Both run server code for the app. They are different runtimes with different jobs:
+
+| | `/app-api` handler in `frontend/` | Function in `functions/` |
+| --- | --- | --- |
+| Runs when | a page or external caller requests its URL | a model event or hook fires, on a schedule, on a dashboard action, or on a call to its route, including a provider callback |
+| Knows the viewer | A store user or shopper when present | Not the frontend's viewer |
+| Reaches Swell through | the SDK clients | `req.swell` |
+| Logs | the `swell app dev` terminal; a deployed managed frontend's logs are not available, and are not in `swell logs` | `swell logs` |
+
+- **Put background work in a function**: reacting to store events, schedules and dashboard actions. A route function also receives external calls, including a provider's callback with the public key in its address (`references/functions-routes.md`). See `references/functions-*.md` and `references/actions.md`.
+- **A provider callback goes to a route function first.** Use an `/app-api` handler only for a sender a route cannot take (`references/functions-routes.md` says which); do not add a frontend to an app just to receive callbacks a route can take. When a handler is needed, it can be the frontend's only feature, with no custom UI. No viewer is attached. Verify Swell's context first; if signature verification needs a merchant-provided secret, read only the app settings needed for that check. Authenticate the provider and validate the payload before reading or changing business records. This credential lookup does not authorize business operations. Developer-owned secrets follow `references/settings.md`.
+- **Put work in a handler when it only serves the frontend's own pages.** A handler already has the Backend client; do not route a page's request through a function to reach the Backend API.
+- **Calling a function from a handler.** `backend.functions.call(context.appId, '<name>', data)` runs the function with the app's authority. Nothing about the viewer is forwarded: authorize in the handler first and pass what the function needs as data. The call resolves with the function's return value, and a function that fails rejects it with a `SwellError` carrying the function's status.
 
 ## Local development
 
 Run from the app root, not from `frontend/`:
 
 ```bash
-swell app dev                # preview as a visitor
-swell app dev --store-user   # preview as the store user logged in to the CLI
+swell app dev
 ```
 
-`swell app dev` pushes the app's configs, starts the frontend's own dev server (`npm run dev` on the first free port in 4000–4100; pin it with `--frontend-port`), and routes it through Swell so requests carry a real context. It prints `View it at https://<storeId>--<sessionId>--local.swell.store` followed by `Visitor preview.` or `Store-user preview.` Edits reload in place.
+`swell app dev` pushes the app's configs, starts the frontend's own dev server (`npm run dev` on the first free port in 4000–4100; pin it with `--frontend-port`), and routes it through Swell so requests carry a real context. It prints `View it at https://<storeId>--<id>--local.swell.store`, where the id is the CLI session's for a dashboard app and the storefront's for a storefront app. Edits reload in place, and the frontend's output appears in the same terminal. Use this command also where the scaffold's own output suggests `swell app frontend dev`.
 
-- **The default preview is a visitor.** `context.storeUser` is `null` and store-user-only endpoints answer 401 — that is the expected result, not a bug.
-- **`--store-user` is how a dashboard app is previewed.** Requests are signed as the store user logged in to the CLI. Anyone who has the preview address gets the same access while the session runs, so do not share it. Not available for storefront apps.
-- **The dashboard shows the deployed build**, not the dev session. To see the app inside the dashboard, `swell app push` first.
+- **The preview opens as a visitor.** Previewing as a store user (`--store-user`, dashboard apps only) and the storefront preview are covered in the two specialized references.
+- **Do not share the preview address.** Anyone who has it sees what the session shows, for as long as it runs.
+- **The session serves only its preview address.** The dashboard and the deployed addresses keep serving the last push.
 - Running `npm run dev` inside `frontend/` starts the frontend without Swell. The scaffold's home page then says "Not connected to a store" and helpers that need a store throw — expected; use `swell app dev`.
 - `frontend/.dev.vars` holds local-only variables, including the `SWELL_VERIFY_HEADERS` switch for signature verification; the file documents it. It is never deployed, and deployed frontends always verify.
 
@@ -86,8 +91,8 @@ Everything `swell app dev` does to functions still applies while it runs — see
 ## Deploy
 
 ```bash
-npm run check     # in frontend/: typecheck (and lint) and build
-swell app push    # from the app root: build and deploy
+npm run check     # in frontend/: the template's checks and a build
+swell app push    # from the app root: build and deploy; the command has no -y flag
 ```
 
 `swell app push` uploads the app's files, then builds the frontend locally, packages the Worker and its assets, and hands the package to Swell, which deploys it. The lines that prove it:
@@ -95,62 +100,45 @@ swell app push    # from the app root: build and deploy
 ```
 Building managed <framework> frontend...
 Deployed managed frontend package <digest>.
-View the <app name> app in your dashboard at <url>.
 ```
 
 - A managed frontend is built and deployed on **every** unscoped `swell app push` — there is no "unchanged, skipped" case. A scoped push of `frontend/`, any file or directory under it, or the root `package.json` also rebuilds and deploys the frontend. Pushes scoped to other paths leave the frontend deployment alone. `--no-deploy` uploads sources without building or deploying, so the previous build stays live.
 - Push always targets the **test** environment. Releasing to other environments and stores goes through `swell app version` / `install` — see `references/app-publishing.md`.
-- The deployed frontend is served at `https://<storeId>--<installedAppId>--app.swell.store` and, for store users, inside the dashboard.
-- **The Worker profile is fixed.** Keep `compatibility_date` and `compatibility_flags` in `frontend/wrangler.jsonc` as scaffolded and add no bindings or `vars`; a changed profile is rejected. Node.js built-ins are available as is.
+- **Where it is served.** Every deployed frontend answers at the app address, `https://<storeId>--<installedAppId>--app.swell.store`; the id is the one of the app's installation in that environment, not the `id` in `swell.json` and not the app record's id in `.swellrc`: it is the `id` of the app's entry in `swell api get '/:clients/:self/apps'`. A host built with the record id redirects to the dashboard, which is not the app refusing a visitor. A dashboard app is opened from the dashboard; a storefront app is opened at its storefront's address. The specialized references say which address to give people.
+- **The Worker profile is fixed.** Keep `compatibility_date` and `compatibility_flags` in `frontend/wrangler.jsonc` as scaffolded and add no bindings or `vars` to the ones it has; a changed profile is rejected. Node.js built-ins are available as is.
 - The built package (Worker plus assets) is limited to 8 MiB.
 - Managed hosting supports Vinext and client-side React + Vite. Next.js with OpenNext is refused with a message pointing to self-hosting.
 
-There is no `swell inspect frontend` resource type — the push output above, then opening the app, is the confirmation.
-
-`swell.json`'s `frontend.hosting` selects this pipeline. Moving a deployed app to self-hosting later is a legitimate choice, made by setting `"hosting": "self-hosted"` explicitly — deleting the block instead is rejected with `Set frontend.hosting to self-hosted explicitly to change hosting.`
-
-## In the dashboard
-
-The dashboard renders the frontend in a frame at `/app/<app_id>/...` and signs the store user in to it; the app implements nothing for this and sees the result as `context.storeUser`.
-
-There is no automatic navigation entry. Link to the frontend from content models with `frontend://path/{id}` in `nav.link` and `actions[].link`. By default the link opens inside the dashboard; with `target: "blank"` it opens the frontend's own address in a new tab. `{id}` and other placeholders expand against the current record before the link fires.
-
-```json
-{
-  "views": [
-    {
-      "id": "edit",
-      "actions": [
-        "save",
-        { "id": "open-app", "label": "Open in app", "link": "frontend://records/{id}/edit" }
-      ]
-    }
-  ]
-}
-```
-
-A non-empty `actions` array **replaces** the view's default actions — it does not append. Record views default to `actions: ["save"]` with `extra_actions: ["delete"]`; list views default to `actions: ["new"]`, and `extra_actions` replaces the same way. Declaring only `open-app` on an edit view ships a record the merchant can open in your app but can no longer save, so re-declare every default you still want.
+There is no `swell inspect frontend` resource type — the push output above, then opening the frontend, is the confirmation.
 
 ## Gate alignment
 
-The skill's five-gate dev cycle applies with these deviations:
+Apply the skill's five gates to the requested frontend change. For a new frontend, or changes to identity, sessions, hosting or entry points, exercise the relevant viewer paths end to end. For a narrow edit, reuse checks of unchanged behavior and verify the part affected. The frontend-specific adaptations are:
 
 - **Gate 2 (Schema)** — n/a, no schema-backed manifest. The scaffold's README and the SDK's README are the references.
 - **Gate 3 (Author & Validate)** — `npm run check` in `frontend/` must pass.
-- **Gate 4 (Deploy & Verify)** — confirm `Deployed managed frontend package <digest>.` in the push output. There is no frontend inspect command; verify the deployed app.
-- **Gate 5 (Test)** — exercise both viewers:
-  1. `swell app dev`, open the printed address: public pages render, store-user-only UI shows its visitor state, and store-user-only endpoints answer 401.
-  2. `swell app dev --store-user`: the same pages and endpoints now work.
-  3. After `swell app push`, open the app from the dashboard and repeat the store-user checks against the deployed build.
-  4. Open the deployed frontend's own address in a private browser session without dashboard authentication: public pages render, store-user-only UI shows its visitor state, and store-user-only endpoints answer 401.
+- **Gate 4 (Deploy & Verify)** — confirm `Deployed managed frontend package <digest>.` in the push output. There is no frontend inspect command; verify the deployed frontend.
+- **Gate 5 (Test)** — use the "Preview and verify" checklist of the specialized reference for the affected behavior. Full frontend delivery checks every kind of viewer the app has, first under `swell app dev` and again against the deployed build. Local-only work leaves deployment checks unverified; architecture and read-only reviews do not start dev or push.
 
-  Test store-user-only writes from the page itself. A bare `curl -X POST` has no `Origin` header, so Swell treats it as cross-origin and withholds the store user — it returns 401 even under `--store-user`. To script it, send `-H "Origin: https://<the preview host>"`.
+## Self-hosting on Cloudflare
 
-## Self-hosted frontends
+The frontend runs as a Worker in the developer's own Cloudflare account. Swell still routes the app's addresses to it and sends the same signed context, so the rules under "How the frontend connects to Swell" apply unchanged. Use it when the user asks for it, and propose it when the app needs what managed hosting refuses: bindings, `vars` or secrets, a different Worker profile, a framework other than Vinext or React + Vite, or a package over 8 MiB. It needs the developer's Cloudflare account, so the choice is theirs. A frontend hosted anywhere else is not an app frontend: Swell does not route to it or send it a context. It is built on the APIs with its own credentials, outside this skill.
 
-Use only on explicit request. The self-hosted `--frontend` values scaffold plain Cloudflare starters into `frontend/` and set `"hosting": "self-hosted"`. What changes:
+**Starting self-hosted.** The other `--frontend` values scaffold plain Cloudflare starters into `frontend/` and set `"hosting": "self-hosted"`. No Swell patterns are included: add the SDK — `npm install @swell/apps-sdk@next swell-js` (the `latest` tag is still the 1.x theme SDK, a different API) — and build the helpers the managed scaffolds have.
 
-- **No Swell patterns are included.** Add the SDK yourself — `npm install @swell/apps-sdk@next swell-js` (the `latest` tag is still the 1.x theme SDK, a different API) — and follow the same rules as above: verify the context, keep it on the server, check the store user, serve endpoints under `/app-api`.
-- **Deploys go to the developer's own Cloudflare account** through Wrangler. `wrangler login` and a `CLOUDFLARE_ACCOUNT_ID` environment variable are required; without them push uploads the sources and then fails at the Wrangler step.
-- **Unchanged frontends are skipped.** Build and deploy run only when the hash of `frontend/**` plus the root `package.json` changed, or with `--force`. Only `Updating frontend deployment...` → `Updated frontend deployment.` confirms a deploy; `View your app at …` prints either way.
-- **Link only to the Swell addresses.** The raw `*.workers.dev` URL receives no context, so the app is not connected to a store there.
+**Switching from managed.** Moving a deployed app to self-hosting is a legitimate choice. The scaffold's code stays as it is:
+
+1. Set `"frontend": { "hosting": "self-hosted" }` in `swell.json`. Deleting the block instead is rejected with `Set frontend.hosting to self-hosted explicitly to change hosting.`
+2. Give the Worker its own `name` in `frontend/wrangler.jsonc`. The profile is now the developer's to change.
+3. Run `npm run build` in `frontend/`. For Vinext and React + Vite the CLI runs no build step of its own before deploying, so build before every push that changes the frontend.
+4. Run `swell app push`. The managed build keeps serving until the new address answers; if it does not, the push fails with `Frontend URL check failed; managed frontend remains active`.
+
+Like any other change, the switch reaches other environments and stores with the next version — see `references/app-publishing.md`.
+
+What is different once self-hosted:
+
+- **Deploys go through Wrangler.** `wrangler login` and a `CLOUDFLARE_ACCOUNT_ID` environment variable are required; without them push uploads the sources and then fails at the Wrangler step. The Worker needs its `workers.dev` address enabled: push reads it from Wrangler's output.
+- **Unchanged frontends are skipped.** The deploy runs only when the hash of `frontend/**` plus the root `package.json` changed, or with `--force`. Only `Updating frontend deployment...` → `Updated frontend deployment.` confirms a deploy; the `View your … at` line prints either way.
+- **Caching is the app's job.** Swell does not force `Cache-Control` on a self-hosted frontend: send `private, no-store` from every page and endpoint whose answer depends on the viewer.
+- **Link only to the Swell addresses.** The raw `*.workers.dev` URL receives no context, so the app is not connected to a store there. It is still reachable by anyone: once the Worker holds secrets of its own, pass `appId` to `verifySwellContext` as the SDK README's "Request context options" describes, so that a context issued for another app is refused.
+- **`swell app dev` is unchanged.** It runs the frontend's dev server and routes it through Swell in the same way.

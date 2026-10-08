@@ -115,7 +115,7 @@ const preview = await props.fetch('/app-api/risk'); // the app's frontend, if it
 - **Functions** see the minted context as `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface, storefrontId? }` — and `null` unless the platform forwarded a signed context. The runtime does not verify the signature (only the platform can set the header); call `verifySwellContext(req.headers)` from `@swell/apps-sdk` when a function needs proof.
 - **A route function called with its own app's context does not need `route.public: true`**, and a secret key is not required. Only route functions qualify (not hooks or cron), only of the token's own app. Calls for another app's function fall back to the normal secret-key rule.
 - **GET responses for such calls are not cached.**
-- **The app frontend** verifies the context with `verifySwellContext` (see `references/frontend.md`). `surface` is absent on contexts the proxy mints for ordinary requests, and `'admin'` for a component call.
+- **The app frontend** verifies the context with `verifySwellContext` (see `references/frontend.md`, and "Authorize store users" in `references/frontend-dashboard.md`). `surface` is absent on contexts the proxy mints for ordinary requests, and `'admin'` for a component call.
 - **A verified context is not proof of an admin.** The proxy signs a context for **every** request through the app origin, anonymous visitors included, with `admin: null`. A route that returns or changes store data **must** check both `surface` and `storeUser`, exactly:
 
   Function:
