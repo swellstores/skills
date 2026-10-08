@@ -24,6 +24,8 @@ Two-phase auth/capture requires all three: the order's billing method is in the 
 
 ## Manifest
 
+These excerpts show extension fields. Start with the scoped manifest in `app-integrations.md` and declare permissions for the implementation's Backend operations.
+
 Alternative payment method:
 
 ```json

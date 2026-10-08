@@ -6,13 +6,15 @@ Install once and your agent picks up what it needs to work with Swell the way an
 
 ## What's included
 
-- **`swell-app`** — Build and modify [Swell Apps](https://developers.swell.is/apps/overview): data models, content views, settings, permissions, notifications, webhooks, edge functions, dashboard actions, workflows, payment / shipping / tax integration extensions, and the version → install → release publishing lifecycle.
-- **`swell-backend`** — Server-side integration with the [Backend API](https://developers.swell.is/backend-api/introduction): querying and write semantics, batch and transactions, events and webhooks, files and media, discounts and gift cards, and the commerce lifecycles (orders, payments, returns, invoices, subscriptions, inventory) via `swell-node` or direct HTTP.
-- **`swell-storefront`** — Headless storefronts on the [Frontend API](https://developers.swell.is/frontend-api/introduction) with `swell-js`: catalog and variant resolution, cart and checkout, payments, customer accounts, subscriptions, localization, and server-side rendering.
+- **`swell-app`** — Build, deploy and publish [Swell Apps](https://developers.swell.is/apps/overview) with the `swell` CLI: admin, integration and code-based storefront apps. Covers data models, dashboard views and actions, settings, permissions, notifications, webhooks, functions and workflows, payment / shipping / tax extensions, and app frontends on managed Swell hosting or self-hosted on Cloudflare.
+- **`swell-backend-api`** — [Backend API](https://developers.swell.is/backend-api/introduction) operations: querying and aggregation, write semantics, batch and transactions, events and webhooks, files, coupons, promotions and gift cards, and the commerce lifecycles (orders, payments, refunds, returns, invoices, subscriptions, inventory, accounts). Applies inside an app and to independent integrations using `swell-node`, the Apps SDK or direct HTTP.
+- **`swell-frontend-api`** — [Frontend API](https://developers.swell.is/frontend-api/introduction) operations: catalog and content, shopper sessions, cart and checkout, payments, customer accounts, subscriptions, localization and public app data. Applies inside an app frontend and to independently hosted storefronts using `swell-js`.
 
-Every factual claim in these skills is verified against the platform's own source, not just its documentation — where the two disagree, the source wins and the skill says so.
+The skills compose. `swell-app` covers the app around the code — scaffolding, runtime clients, resources, deployment — and the API skills cover what a query, a write, a cart or an order does. An independent integration or storefront uses an API skill on its own.
 
-More surfaces are in active work — themes and hosted storefront apps are next.
+Claims in these skills are checked against the platform's own source and run on a live store, not just read from the documentation — where the two disagree, the platform wins and the skill says so.
+
+Proxima / Liquid theme authoring is not covered.
 
 ## Example
 
@@ -31,6 +33,13 @@ The agent picks the right model shape, scaffolds the `review.approved` event, bu
 /plugin install swell@swell
 ```
 
+Upgrading from 0.6.0 or earlier: `swell-backend` and `swell-storefront` are replaced by `swell-backend-api` and `swell-frontend-api`.
+
+```
+claude plugin marketplace update swell
+claude plugin update swell@swell
+```
+
 Previously installed `swell-app@swell`? It's now part of the `swell` plugin — run `/plugin uninstall swell-app@swell`, then install `swell@swell`.
 
 **Cursor, Codex, Claude Desktop, and other agents** — skill files only
@@ -39,11 +48,18 @@ Previously installed `swell-app@swell`? It's now part of the `swell` plugin — 
 npx skills add swellstores/skills
 ```
 
+Upgrading from 0.6.0 or earlier: remove the two retired skills, then add the set again. `npx skills update` alone does not install the new skills.
+
+```
+npx skills remove swell-backend swell-storefront
+npx skills add swellstores/skills
+```
+
 ## Prerequisites
 
 - A [Swell](https://www.swell.is) store
 - For app development: the `swell` CLI installed and authenticated (`npm install -g @swell/cli`)
-- For backend work: a store secret key; for storefront work: a store public key
+- Outside an app: a store secret key for Backend API work, a store public key for Frontend API work
 
 ## Feedback
 

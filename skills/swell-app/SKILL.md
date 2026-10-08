@@ -1,40 +1,182 @@
 ---
 name: swell-app
-description: Use this skill for building, modifying, or debugging a Swell App — modular extension packages for the Swell headless e-commerce platform deployed via the `swell` CLI. Triggers include `swell.json`; use of app-lifecycle `swell` CLI commands (`swell app push`, `swell app dev`, `swell app pull`, `swell create`, `swell inspect`, `swell schema`); Swell-specific app directories (`./models/`, `./content/`, `./functions/`, `./settings/`, `./notifications/`, `./webhooks/`); FQN shapes like `apps/<app_id>/<collection>` or `$app.<app_id>.*`-namespaced fields; Swell event conventions (`review.created`, `before:`/`after:` model hooks, model schedules, cron, HTTP routes at `/functions/<app_id>/<name>`, `action: true` functions behind dashboard action buttons and `bulk_actions`, `kind: 'workflow'` workflows); or integration apps with payment / shipping / tax extension slots and Preact checkout components. Covers the `admin` and `integration` app types only — do NOT use for `theme` or `storefront` apps (Proxima, `swell theme *`, storefront visual editor / locales / publishing), other e-commerce platforms, or generic Cloudflare Workers questions unrelated to Swell; for storefront code built on `swell-js` and the Frontend API use the swell-storefront skill, and for Backend API work with a secret key (swell-node, one-off `swell api` data reads/writes against a store, data scripts, integrations without an app) use the swell-backend skill.
+description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions and frontends. Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
-# I. System Architecture & Environment
+# Swell apps
 
-A Swell App is a modular extension package for the Swell headless e-commerce platform, deployed via CLI to inject custom data schemas, admin interfaces, serverless logic and other resources into a store environment.
+A Swell app is a package of files that the `swell` CLI installs and versions in a store. It adds data, dashboard screens, server logic and, optionally, a web frontend. Managed hosting is the recommended default: Swell hosts the resources and issues the app's credentials, with no server or store API key for the developer to manage. An app frontend can also run in the developer's own Cloudflare account while retaining Swell's app lifecycle, addresses and signed request context — see `references/frontend.md`, "Self-hosting on Cloudflare".
 
-## The File System Contract
+Independent integrations and storefronts that connect directly to the APIs, without the Swell app lifecycle and supplied runtime context, use `swell-backend-api` and `swell-frontend-api` respectively. Hosting on Cloudflare alone does not make a site a Swell app. The API skills also own the commerce operations an app performs — what a cart or an order contains, how queries and writes behave. This skill covers the app around them.
 
-The file system acts as a rigid configuration contract. The existence and naming of a file directly determines its runtime behavior, API endpoint, and whether it creates a new resource or modifies an existing one.
+`<app_id>` below is the `id` in `swell.json`.
 
-- **App Identity.** The `./swell.json` manifest defines the App ID (referenced as `<app_id>` throughout this document), name, type, version, and the `permissions` scope array — **always declare it explicitly**, because empty or absent means **full** access (see "App Permissions"), plus optional billing (`price`, `price_interval`, `price_trial_days`, `price_external`) and marketing fields used at release time — see `references/app-publishing.md`. Apps with `"type": "integration"` and/or `extensions[]` declare platform integration slots — see "Integration Apps & Extensions" below.
+## App types
 
-- **Assets.** `./assets/` is the app's only **public** directory: asset files are stored non-private and served from an unauthenticated CDN URL, while every other file `swell app push` uploads (functions, models, settings, `package.json`, tests) is stored private with no URL. Put nothing in `assets/` you would not publish. Image assets bind to app-record fields **by filename**, so a rename silently unbinds them: `assets/icon.*` → `logo_icon` (dashboard + release icon), `assets/image.*` → `cover_image`, `assets/preview.*` → `preview_image`, `assets/preview-mobile.*` → `preview_mobile_image`. Non-image content types upload but bind to nothing. Ship app icons with **square corners** — the dashboard applies its own corner rounding, so a pre-rounded icon renders double-rounded. Override a path with `swell.json`'s `logo_src` / `preview_src` / `preview_mobile_src`; `highlights[].image_src` resolves the same way into `highlight_assets[].image`. None of this is validated locally — verify after any rename.
+| `type` in `swell.json` | What the app is |
+| --- | --- |
+| `admin` | Extends a store: data, dashboard views and actions, server logic, and optionally custom dashboard pages |
+| `integration` | The same blocks, for an app that connects the store to an outside service. It can declare extension slots that plug into Swell's own payment, shipping or tax flows — see "Integration apps and extensions" |
+| `storefront` | The store's own site for shoppers, written in code in `frontend/`; managed hosting by default, with Cloudflare self-hosting supported |
+| `theme` | A Proxima / Liquid theme. Not covered by this skill or by another Swell skill — say so instead of answering from app rules |
 
-- **Data.** The `./models/` directory defines the database schema. Files named after standard entities (e.g., `products.json`, `accounts.json`) function as extensions—they merge new fields into the existing platform model, namespaced at runtime as `$app.<app_id>.*`. Files with unique names (e.g., `vendor-profiles.json`) create new app-specific collections. Use strict kebab-case for new collections naming. Reference custom models using their Fully Qualified Name (FQN): `apps/<app_id>/<collection>`. This FQN applies to API endpoints, relationship links, and SDK queries.
+## Choose the building block
 
-- **App Configuration.** The `./settings/` directory defines the app's global configuration schema. These files generate the "App Preferences" UI in the Dashboard, and their values become accessible in functions via `const settings = await req.swell.settings();`. Use this for credentials, feature flags, and runtime configuration.
+An app is assembled from the blocks below. Start from the need, pick the smallest block that covers it, and read that block's entry under "Building blocks" for its limits before designing around it.
 
-- **User Interface.** The `./content/` directory configures Admin Dashboard views: input widgets, list columns, conditional visibility rules, and action buttons that run app functions. These files map to standard or custom data model, not strictly a local file: you can create `content/products.json` to customize the standard product editor without re-defining standard `products` data model. Content models define UI logic only (labels, views, help text, layout); data logic (types, events, permissions, formulas) belongs in `./models/`.
+| Need | Block |
+| --- | --- |
+| Keep extra data on products, orders, customers or another standard record | Model that extends the standard collection |
+| Keep a new kind of record | Model for an app collection, or a child collection of a parent |
+| Let merchants list, filter, create and edit that data in the dashboard | Content views |
+| A dashboard button that does something to a record, to selected rows or for the app | Action |
+| React after a record changes | Function on a model event (async) |
+| Validate, change or reject a write before it is saved | Function as a `before:` hook (sync) |
+| Do something at a date stored on a record, or on a fixed schedule | Function with a model schedule, or a cron function |
+| An HTTP endpoint for a storefront or another system to call | Route function |
+| Background work in several steps that is long, waits, or must survive a failure | Workflow |
+| Tell an external service that something happened | Webhook; a function when the call needs logic, signing or a custom payload |
+| Send an email when a record is created or changes | Notification |
+| Let the merchant configure the app, including provider credentials | Settings |
+| A dashboard screen that views and actions cannot express | Frontend of an `admin` or `integration` app |
+| The store's own site for shoppers | Frontend of a `storefront` app |
+| A payment method, shipping rates or tax calculation inside Swell's checkout | Integration extension |
+| Put the app in the live environment or in other stores, or list it in the App Store | Versions and releases — `references/app-publishing.md`. `swell app push` reaches the test environment only |
 
-- **Notifications.** Transactional emails reside in `./notifications/` using a paired-file convention: a JSON file defines metadata and event triggers (e.g., `review.created`), while a corresponding `.tpl` file contains the Liquid template for the email body.
+## Building blocks
 
-- **Logic.** Serverless functions reside in `./functions/`. Top-level TypeScript files become API endpoints or event handlers. Shared code—helpers, types, libraries—must be placed in subdirectories (e.g., `./functions/lib/`) to prevent exposure as a standalone function. Functions run on the Edge (Cloudflare Workers), not Node.js.
+Each folder holds one kind of block, and a file's name decides what it becomes: its collection, its endpoint, its settings group. Push removes a deployed resource whose file is gone, so renaming a file replaces the resource.
 
-- **Components.** Browser UI for **payment checkout extensions only** — no admin, storefront, or shipping/tax host loads app components today. Top-level `./components/*.{jsx,tsx}` bundle as Preact and must export `config` (with `config.extension` matching a `swell.json` extension of `type: "payment"`) AND a default Preact component. The bundler validates only `config`; a missing default export deploys cleanly and renders nothing at runtime. Details in `references/payment-extensions.md`.
+### Manifest — `swell.json`
 
-- **Testing.** The `./test/` directory contains the Vitest suite. It includes `./test/unit/` and `./test/integration/` directories, plus helpers: `mock-request.ts` for mocking function context, `swell-client.ts` for data operations. Its Swell client uses CLI authentication to reach platform resources without client auth configuration.
+The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and marketing fields are used at release time — `references/app-publishing.md`.
 
-- **Frontend.** Optional `./frontend/` directory: a web app that Swell builds, hosts, and connects to the store, deployed by `swell app push` and embedded in the Swell dashboard for `admin` and `integration` apps. Use when the UI cannot be expressed as content-model `list`/`edit`/`new` views — multi-step flows, embedded third-party widgets, custom dashboards. A button that only runs server logic (sync now, approve, bulk update) needs no frontend: declare an action instead (`references/actions.md`). Orthogonal to `components/`: integration apps may ship both. Scaffold it from a Swell template — `swell create frontend --frontend swell-vinext -y` by default, `swell-react` for a client-rendered app — and build on the scaffold's helpers and `@swell/apps-sdk` instead of hand-rolling the connection. Reachable through `frontend://path/{id}` links from content-model `nav.link` / `actions[].link` — no automatic top-level nav. The frontend's address is public and every request reaches it with the app's backend credentials attached server-side — anonymous visitors included. Require a store user for dashboard-only operations. Use the Storefront API for visitor/customer operations; authorize access before exposing private Backend data. Endpoints live under `/app-api` (Swell owns `/api` and `/functions`). A `storefront` app uses the same folder and templates for the storefront itself; building a storefront is not covered by this skill. Read `references/frontend.md` before touching `frontend/`.
+### Data models — `models/*.json`
 
-- **Webhooks**. `./webhooks/` directory contains JSON manifests which are configured to call a URL when a particular event occurs, enabling outgoing calls to external services.
+The database schema. Three shapes:
 
-## Integration Apps & Extensions
+- **Extend a standard model** (`models/products.json`; `models/accounts.json` for customers): the app's fields merge into the standard record under `$app.<app_id>.*`. Use when the data belongs to an existing entity. `swell inspect models` lists the standard collections.
+- **A new app collection** (`models/vendor-profiles.json`, kebab-case): lives at `apps/<app_id>/<collection>` — its Fully Qualified Name, used in API paths, links and queries. Use when the data has its own lifecycle, events or public access.
+- **A child collection** inside either: records that exist only under a parent.
+
+Models also declare relationships (links), formulas, and the custom events that functions, webhooks and notifications subscribe to. Data logic belongs here; how the data looks in the dashboard belongs in content views.
+
+**Nothing is visible to a storefront by default.** An app collection is closed to the Frontend API until the model declares what is public. The declaration can open reads, pin a filter, allow writes to listed fields, and scope a customer's reads and writes to their own records. Start with these model capabilities for customer-owned data such as a wishlist. Scoping gives ownership, not login: a visitor who is not logged in can still create a record, stored without an owner. A feature that requires login, and data that everyone reads and customers submit, such as reviews, need an authenticated server write path; read "Storefront exposure" in `references/data-models.md` and the Frontend API skill's `references/app-data.md`. Fields added to a standard model are different: only the app's own frontend reads them, and only those marked public. Any other storefront never does, whatever the field declares — for it, plan the data as an app collection or behind a route function.
+
+Read `references/data-models.md` before authoring a model.
+
+### Content views — `content/*.json`
+
+Dashboard screens for a collection: list columns, record forms, tabs, navigation. A content file maps to a standard or an app collection — `content/products.json` adds fields, tabs and columns to the native product screens without replacing them, and merchants can reorder or hide the additions. Content holds UI only: a content field must match a data-model field.
+
+- An app collection appears in the sidebar only when its list view declares `nav`. An app cannot create a new sidebar section.
+- Views are lists and record forms. A multi-step flow, a chart or summary across records, a custom layout or an embedded third-party widget needs a frontend.
+
+Read `references/content-models.md` before authoring views; `swell schema content --format=dts` lists every field type and property.
+
+### Actions — declared in content views and settings files
+
+A dashboard button or menu item that runs one of the app's functions or workflows: on a record, on selected rows, among a record's fields, or on the app's own page, optionally after a dialog that asks for inputs. This is how a merchant triggers an operation without a custom frontend.
+
+- Swell authenticates the store user on the action invocation path, used by the dashboard and by the CLI's equivalent request. Ordinary function calls and storefront callers cannot invoke an action function. The handler still checks record state and any finer access rules — `references/actions.md` owns the invocation and authorization contract.
+- The merchant waits for the result, within the function timeout. Longer work, or a bulk action over many records, runs as a workflow.
+
+Read `references/actions.md` before adding one.
+
+### Functions — `functions/*.ts`
+
+Server logic. Each top-level file is one function with exactly one trigger; shared code goes in subdirectories (`functions/lib/`).
+
+| Trigger | Runs | Scope and limits |
+| --- | --- | --- |
+| Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure |
+| Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Apart from the extension events of integration apps, hooks exist for `created`, `updated` and `deleted` only; a prefix on any other event does not behave as it reads. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. → `references/functions-hooks.md` |
+| Model schedule | At a date taken from a record field | Re-schedules when the field changes |
+| Cron | On a fixed schedule | No record context |
+| HTTP route | On a call to `/functions/<app_id>/<function_name>` | Fixed path, no path parameters. Callers need a key — see below. → `references/functions-routes.md` |
+| Dashboard action | On an authenticated store-user action request | Dashboard click or equivalent CLI request; not a route call. → `references/actions.md` |
+
+Calling a route from outside Swell:
+
+- The address is `https://<store>.swell.store/functions/<app_id>/<name>`, and the caller **must send a valid public key in `Authorization` even when the route is `public`**. A storefront sends it as a header. A third-party service that only takes a callback address, such as a provider's webhook, gets the app's public key in the address, which its HTTP client turns into that header: `https://<store>:<public key>@<store>.swell.store/functions/<app_id>/<name>`. A sender whose body is not JSON, or that will not keep credentials in an address, needs another receiver: an `/app-api` endpoint of the app's frontend, or the developer's own service.
+- `req.session` holds the shopper's session only when a storefront calls the route at that address.
+
+Limits that hold for every function:
+
+- **Edge runtime (Cloudflare Workers), not Node.js**: Web APIs such as `fetch` and Web Crypto, no Node built-ins.
+- **A 10-second limit**, detailed in `references/functions.md`. A response is cut off at 75,000 bytes. Work that does not fit is a workflow; large results are paginated.
+- **No environment variables or secrets.** Configuration comes from the app's settings only (see "Configuration and secrets").
+- **A function acts as the app**, with the app's `permissions`, whoever or whatever triggered it. `req.swell` is its client to the store's data and follows Backend API semantics.
+
+Read `references/functions.md` before writing a function — the `req` object, payload shapes per trigger, errors, local testing — and the trigger's own reference where the table names one. When a deployed function, hook or webhook does not fire, start with "When a function does not run" there — except for an extension function of an integration app, where `swell inspect extensions` comes first (see "Integration apps and extensions").
+
+### Workflows — `functions/*.ts` with `kind: 'workflow'`
+
+A durable background process: a sequence of steps, each with its own timeout and retry policy, recorded so a completed step never runs twice, and able to sleep for long periods. Use it for work that outlives a function timeout or must survive a failure between steps — a sync to an external system, a long bulk operation, a delayed follow-up.
+
+- Started by another function or by a dashboard action. Nothing else starts one, and a workflow cannot start another workflow.
+- Its store client is narrower than a function's: no transactions, and only the app's own settings.
+- Workflows do not run under `swell app dev`; they are tested after a push.
+
+Read `references/functions-workflows.md` before writing one.
+
+### Settings — `settings/*.json`
+
+The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; model and content conditions can read it as `$settings`. Settings files can also carry actions.
+
+- Values belong to one store and environment. An installed app starts with empty values.
+- Settings are the only configuration channel for functions and managed frontends, and they are not a secret store (see "Configuration and secrets").
+
+Read `references/settings.md` before authoring a settings file.
+
+### Webhooks — `webhooks/*.json`
+
+A manifest that makes Swell POST an event to an external URL. Use it when the handling logic lives outside Swell; for logic hosted by Swell, use a function.
+
+- Async events only: a webhook cannot validate or block a write.
+- The endpoint must answer within 10 seconds. A failed delivery is retried for days, then the webhook is disabled.
+- **Created disabled**: `enabled` is `false` unless the manifest sets it.
+- Requests are unsigned and carry no store identifier. The receiver identifies the store by its own URL and re-fetches the record before acting.
+
+Read `references/webhooks.md` before adding one.
+
+### Notifications — `notifications/<name>.json` + `<name>.tpl`
+
+A transactional email: a manifest that binds to a model event, and a Liquid template with the same basename. Sent to an address taken from the record (`contact`) or to the store's administrators.
+
+- Sent on record create and update only. `deleted` is accepted by the schema and never sends; use a function or webhook for that.
+- **Once per record by default**: a notification bound to an update sends on the first qualifying update and never again for that record unless `repeat` is set.
+- A custom `event` must be declared in the collection's data model. An undeclared one deploys silently and never sends.
+
+Read `references/notifications.md` before authoring one.
+
+### Frontend — `frontend/`
+
+A web app connected to the installed app through Swell's signed request context; `swell app push` deploys it. Swell builds and hosts it by default, with Cloudflare self-hosting also supported. What it is depends on the app type:
+
+- In an `admin` or `integration` app: custom pages for store users, shown inside the dashboard and opened through links the app declares in its content views and settings. It is the most expensive way to put something in the dashboard — content views and actions come first.
+- In a `storefront` app: the store's own site, served at the storefront's address. Commerce calls go through the Frontend API (the `swell-frontend-api` skill).
+
+What decides whether it fits:
+
+- **Scaffold it from a Swell template** and build on its helpers and `@swell/apps-sdk`; do not hand-roll the connection. `swell-vinext` (the Next.js App Router API on Vite, rendered on the server) is the default for both kinds; `swell-react` is for a dashboard app rendered in the browser, with a small Worker for its endpoints.
+- **Every address of a frontend is public, and its server code holds the app's credentials.** A dashboard frontend is shown inside the dashboard and also answers at its own address to anyone. Pages and endpoints must check who is viewing — a store user, a customer or a visitor — before returning store data.
+- **Managed hosting has a fixed profile**: no custom variables, bindings or secrets, Vinext or React + Vite only, a package of up to 8 MiB. An app that needs more, secrets of its own included, can host its frontend in the developer's own Cloudflare account and stay an app. A site hosted anywhere else is not an app frontend.
+- A frontend can also have server endpoints, under `/app-api`. Work that must happen with nobody looking at the frontend — reacting to store events, schedules — belongs in a function.
+
+Read `references/frontend.md` before touching `frontend/`, then `references/frontend-dashboard.md` or `references/frontend-storefront.md` for what is being built.
+
+### Checkout components — `components/*.{jsx,tsx}`
+
+Browser UI for **payment checkout extensions only**: Preact components that Swell's checkout loads for a `payment` extension. No admin, storefront, or shipping/tax host loads app components today. Unrelated to `frontend/`; an integration app may ship both. Read `references/payment-extensions.md` before writing one.
+
+### Assets and tests
+
+- **`assets/`** is the app's only **public** directory: its files are served from an unauthenticated CDN address, while every other file push uploads is stored private. Put nothing there you would not publish. The app's icon and listing images are picked up from it by filename (`icon.*`, `image.*`, `preview.*`), so a rename silently unbinds them — `references/app-publishing.md`.
+- **`test/`** holds the Vitest suite: `test/unit/` and `test/integration/`, plus helpers — `mock-request.ts` mocks the function context, and `swell-client.ts` reaches the store through the CLI's login, with no credentials to configure. Scaffold it with `swell create tests`.
+
+## Integration apps and extensions
 
 Integration apps declare extension slots in `swell.json` that the platform binds into native payment, shipping, or tax flows. Branch here when the requested feature is a payment method, shipping service, or tax service, or when `swell.json` has `type: "integration"` or `extensions[]`, when functions set `config.extension`, or when `components/` has top-level `.tsx`/`.jsx` files. Generic integrations (`type: "integration"` without `extensions[]`) need only `references/app-integrations.md`'s manifest section — skip the type-specific references.
 
@@ -45,7 +187,40 @@ Two non-obvious traps distinguish extension work from ordinary app work:
 
 **Read** `references/app-integrations.md` **first**. **Then** load exactly one of `references/payment-extensions.md` (for `payment`) or `references/shipping-tax-extensions.md` (for `shipping`/`tax`). Do not load the other type's reference.
 
-# II. CLI Reference
+## Rules that cut across blocks
+
+### Who the code runs as
+
+Functions, workflows and a frontend's Backend client all act as **the app**: they use the credentials Swell issued to the installed app and return the same data whoever triggered them. The person is known separately, and only in some places — a store user in a dashboard frontend and in an action's `$action.user_id`, a customer in a storefront's session and in `req.session` of a route called through the storefront address. Decide what a person may do from that identity, never from an id in the request.
+
+### API clients and operations
+
+Use the client the runtime supplies. Pair this skill with the API skill when implementing queries, writes or commerce operations; do not replace the app's connection with standalone key setup.
+
+| Runtime client | Identity and boundary | Runtime reference | Operations |
+| --- | --- | --- | --- |
+| Function `req.swell` | The app; Backend access within its permissions | `references/functions.md` | `swell-backend-api` |
+| Workflow `req.swell` | The app, with a smaller method and endpoint surface | `references/functions-workflows.md` | `swell-backend-api`, within those workflow limits |
+| Frontend Backend client (`getBackend()` in Vinext) | The app; server code authorizes business operations for the caller | `references/frontend.md` and the relevant viewer reference | `swell-backend-api` |
+| Frontend Storefront clients (`getStorefront()` / `useSwell()` in Vinext) | The shopper's session, shared between server and browser | `references/frontend.md` and `references/frontend-storefront.md` | `swell-frontend-api` |
+
+Clients share API operations, not necessarily initialization, methods or error behavior. Follow the selected client's contract: for example, a function's `req.swell` and the frontend Backend client throw on a write refused by validation, whereas a workflow's `req.swell` resolves with an `errors` object. Workflow restrictions still apply when reading Backend API guidance.
+
+### Permissions
+
+`permissions` in `swell.json` limits the app's credentials. **An empty or absent array means full access to the store**, including when the app uses only its own collections or the Storefront client. Always declare the scopes the app uses and nothing more; do not treat the scaffold's empty array as a restricted configuration.
+
+Read `references/permissions.md` before declaring or changing permissions. It owns scope names, exemptions, wrapper calls, verification and the unresolved case where the app needs no scopes. A successful push does not prove the scope set is correct.
+
+### Configuration and secrets
+
+- Settings are the configuration channel for deployed functions and managed frontends; local environment files do not provision runtime variables or bindings. A frontend self-hosted on Cloudflare can use its own bindings and secrets.
+- A `secret` settings field hides the value in the dashboard. It is stored and returned like any other setting, and other installed apps with access to settings can read it.
+- A secret the merchant must not see cannot live in settings, functions or a managed frontend. Keep it in the developer's own service, or in a frontend hosted in the developer's own Cloudflare account. Never put one in app code or in `assets/`.
+
+`references/settings.md` owns configuration and credential handling; `references/frontend.md` owns provisioning through Cloudflare self-hosting.
+
+## CLI
 
 The CLI runs the whole cycle: discover → scaffold → validate → deploy → verify. Every command takes `--help`, and interactive ones take `-y`; read `references/cli.md` before using any of them in anger — the flags are discoverable, the failure modes are not.
 
@@ -56,7 +231,7 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 | `swell schema <type> ./file` | Validate one manifest locally |
 | `swell create {content\|function\|model\|notification\|setting\|webhook\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
 | `swell app push` | Deploy every app resource to the test environment |
-| `swell app dev` | Local tunnel; model hooks, events, and action functions execute locally |
+| `swell app dev` | Local tunnel; model hooks, model events and dashboard actions execute locally, and the frontend is previewed through Swell |
 | `swell app pull` | Adopt an existing app — a two-way sync, not a download |
 | `swell app version` / `install` / `release` | Publishing lifecycle — see `references/app-publishing.md` |
 | `swell logs [-f]` | Remote logs for functions, webhooks and API calls |
@@ -66,259 +241,74 @@ Five behaviours that decide whether a deploy actually did what you think:
 - **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
 - **Push skips unchanged files by hash**, so edits confined to `functions/` subdirectories leave importing bundles stale — use `--force` after any lib-only change.
-- **`swell app dev` pushes first, then intercepts** that environment's model hooks, events, and action functions for every caller until it exits.
+- **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
 - **`swell api` targets the test environment** unless `--live` is passed.
 
-JSON-manifest validation needs `@swell/cli` 2.9.24 or later; older CLIs fail it with `no schema with key or ref ".../2020-12/schema"` while `--format=dts` and function validation still work. Upgrade, or fall back to authoring against the dts output and treating `swell app push` as the real check — details and the workaround in `references/cli.md`.
+## Development cycle
 
-# III. Development Cycle
+The five gates describe delivery of a working app change. Apply them to the requested outcome and affected behavior; related resources can share schema discovery, a deployment and test evidence. A `frontend/` uses the adaptations under "Gate alignment" in `references/frontend.md`.
 
-Main Swell App resource types share the similar Development Cycle formalized in five gates. IMPORTANT: Pass all five gates for each modified or created resource.
+- **Architecture or read-only review:** identify building blocks, constraints and dependencies. Read relevant references; do not scaffold, mutate data or deploy.
+- **Debugging:** inspect the failing path and reproduce within the task's permitted environment. If a fix is requested, validate the change and the behavior it affects.
+- **Narrow edits:** reuse current schema and verification evidence for unchanged behavior. Check the affected resource and its dependencies; a label or layout edit does not require recreating every record or retesting unrelated flows.
+- **Working feature delivery:** complete the applicable gates end to end. When deployment is part of the task, verify the test-environment deployment and runtime behavior. For local-only work, run local checks and report deployment-dependent behavior as unverified.
 
-## Gate 1 — Explore
+### Gate 1 — Explore
 
-Identify resources your are going to create or modify. Identify prerequisites your resource depends on: e.g. model events for functions/webhooks/notifications, data fields for content views, relationship targets for links etc. Swell App naturally extends standard platform resources in its own scope. To avoid duplication of standard resources, or to find a proper alignment to standard resources, you may need to list existing remote models with `swell inspect models` and explore them with the same command.
+Identify the resources in scope and the prerequisites they depend on: model events for functions, webhooks and notifications; data fields for content views; relationship targets for links. Use the existing manifests and relevant references. When the task needs deployed-state discovery, list remote models with `swell inspect models` and explore them with the same command to avoid duplicating a standard resource.
 If the app is an integration app or declares `extensions[]`, identify the extension type, matching extension id, required platform flow, required functions, and whether checkout components are part of the design before authoring ordinary resources.
 Pass: You know (a) which resources you will create or extend, (b) which prerequisites must exist, and (c) that prerequisites are present or will be created first.
 
-## Gate 2 — Schema
+### Gate 2 — Schema
 
 Obtain the authoritative structural rules of the target resource type before authoring. Execute `swell schema {content|function|model|notification|setting|webhook} --format=dts`. For schema-backed resources, the schema is the structural source of truth. For integration manifest metadata and components, first check whether the current CLI exposes schema support; otherwise use the extension references and deploy-time validation.
 Pass: You have the schema output and understand the structural requirements for your resource type.
 
-## Gate 3 — Author & Validate
+### Gate 3 — Author & Validate
 
-For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y` (the schema-backed subset; see Section II for the full topic list). IMPORTANT: Do not hand-author these resources when a scaffold command exists. Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit the resource to implement your requirements. Validate resource with `swell schema {type} ./path/file` (if it errors on the JSON Schema draft, follow the Validation known issue in Section II). For functions and components, also run `npm run typecheck` when configured. Iterate until zero errors.
-Pass: Local validation passes with zero errors. TypeScript compiles without errors.
+For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes; when the CLI lacks the required shape, follow the resource reference's adaptation (for example, actions start from a route scaffold). Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
+Pass: Supported local validation and relevant type checks pass. Name unavailable checks and any pre-existing failures separately; do not claim deployment validation from local checks alone.
 
-## Gate 4 — Deploy & Verify
+### Gate 4 — Deploy & Verify
 
-Push resources to the platform test environment with `swell app push`. The platform performs additional validation beyond local schema checks: reference integrity (e.g., links to non-existent collections), reserved field conflicts, and event binding validity. Deployment errors indicate issues local validation cannot catch. Verify deployment with `swell inspect <type> --app=.` for list-level state (enabled, trigger, failure indicators) and `swell inspect <type> <key>` for the full record. For runtime probing, paste the commands printed under `Next steps` (e.g. `/events`, `/events:webhooks`) rather than constructing event or log queries by hand. For integration apps, also run `swell inspect extensions --app=.` and act on `action_owner`/`action` per `references/app-integrations.md`.
+When deployment is in scope, push resources to the platform test environment with `swell app push`. The platform performs additional validation beyond local schema checks: reference integrity (e.g., links to non-existent collections), reserved field conflicts, and event binding validity. Deployment errors indicate issues local validation cannot catch. Verify the affected deployed resources with `swell inspect <type> --app=.` for list-level state (enabled, trigger, failure indicators) and `swell inspect <type> <key>` for the full record. For runtime probing, paste the commands printed under `Next steps` (e.g. `/events`, `/events:webhooks`) rather than constructing event or log queries by hand. For integration apps, also run `swell inspect extensions --app=.` and act on `action_owner`/`action` per `references/app-integrations.md`.
 Pass: Deployment completes without errors and no `Ignoring file:` or `Unable to compile` lines appeared in the push output. List-mode meta shows the resource enabled with the expected trigger/binding; detail-mode JSON matches the source manifest.
 
-## Gate 5 — Test
+### Gate 5 — Test
 
-Confirm the resource behaves as designed under realistic conditions. Actions depend on resource type you are going to test:
+Confirm the affected behavior under realistic conditions. Run relevant existing tests and add coverage when it would catch a meaningful regression. For a new resource or a change to its runtime contract, choose the applicable checks:
 
 - Event-driven resources (model-triggered functions, webhooks, notifications): Trigger via `swell api [post|put|delete] /apps/<app_id>/<collection>` with payloads matching event conditions (model events propagate asynchronously).
 - Route functions: Call via `swell api [get|post|put|delete] /functions/<app_id>/<function_name>` with appropriate `--body`.
-- Action functions: Click the action in the test environment's dashboard — under `swell app dev` the function runs locally and logs to your terminal; otherwise read `swell logs --type function`. The `/functions/<app_id>/<name>` route refuses action functions, so `swell api` cannot exercise them that way. For action-started workflows, confirm the run with `swell inspect workflow-runs --app=.`.
+- Action functions: cannot be called as routes. Run the action from the dashboard, or send the dashboard's request from the CLI as shown in `references/actions.md`.
 - Data models: Execute create → read → update → delete cycle via `swell api` or integration test. Test relationship expansion with `?expand=`.
-  Pass: Resource produces expected behavior. For testable resources, integration tests in `./test/integration/` pass and provide regression coverage.
 
-Note: Consider formalizing your tests in unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary. The scaffold's `test/setup-globals.ts` defines `SwellError` and `SwellRejection` globals, and from `@swell/cli` 2.9.24 also `SwellResponse` — on an older scaffold, add `SwellResponse` there if tests construct responses.
-
-# IV. Resources best practices
-
-## Data Models
-
-Data models define the database schema in `./models/*.json`, where filename matches collection (`products.json`). Remote (deployed), models can be inspected with `swell inspect models /products` (standard) or `/apps/<app_id>/<collection>` (app). This section covers dev cycle that extends standard collections or creates new app-specific ones.
-
-**Decision Guide:**
-
-- [ ] **Extend a standard model** when data logically belongs to an existing entity: review scores on products, loyalty tiers on accounts, fulfillment metadata on orders. Fields merge into the record under `$app.<app_id>.*` and are queryable on the standard list endpoints (`where` on `$app.<app_id>.<field>` paths, including inside `$and`/`$or`). Benefits: seamless admin integration, no new API surface, automatic association with platform workflows.
-
-- [ ] **Create a new app model** when data requires independent lifecycle, dedicated events, distinct public permissions, or has no natural parent. Reviews, wishlists, vendor profiles fit here. The collection lives at `apps/<app_id>/<collection>` and requires explicit relationship links.
-
-- [ ] **Use a child collection** when data is tightly scoped to a parent and should not exist independently. Declare with `"type": "collection"` containing nested `fields`. Children share the parent's API path. Child collections declared in a standard-model extension live at `/<collection>:apps.<app_id>.<name>`, expand into the record under `$app.<app_id>.<name>` (not the record root), fire events under the parent model's event root (`before:product.<name>.created`), and are deleted automatically when the parent record is deleted.
-
-**Storefront exposure is opt-in and off by default.** An app collection with no public declaration produces no permissions record at all, so *every* Frontend API verb fails with `You do not have permission to perform this action on '<model>'`. Declare it in the model JSON: `"public": true` at the model root publishes every field; a per-field `"public": true` publishes just that field. `public_permissions` then refines it — `fields` is an explicit read whitelist; `query` pins a filter the caller cannot widen (`"query": { "where": { "status": "approved" } }` keeps unmoderated records inside the store, since config values override the caller's); `input.fields` is **required for any storefront write** (without it POST/PUT/DELETE fail with `You may not update <model> without public permissions`) and a field outside that list is *rejected* (`You are not allowed to update <field>`), not ignored; `scope: "account"` restricts reads and writes to the logged-in customer, but it is only applied when an `input` block is also present. Run `swell schema model --format=dts` for the full shape. Extension fields added to a **standard** model are a different story — see "Writing to standard model extensions" under Functions.
-
-Relationships require two fields: an `objectid` stores the reference; a `link` declares the target and enables expansion.
-
-```json
-{
-  "product_id": { "type": "objectid", "required": true },
-  "product": { "type": "link", "model": "products", "key": "product_id" }
-}
-```
-
-For app model targets, use FQN: `"model": "apps/<app_id>/vendors"`. For child collections: `"model": "products:variants"` or `"model": "apps/<app_id>/vendors:locations"`.
-
-Link fields declared in a standard-model extension expand via `?expand=$app.<app_id>.<field>`. Link resolution sees both your app's fields and the parent record's native fields (app fields win on name collisions) — but inside an app link's `key` or `params`, `id` always refers to the **parent record's** id, so key links off a dedicated app field (e.g. `channel_id`), never `id`.
-
-Events enable function triggers on record changes and are declared in the model JSON. Consult `swell schema model --format=dts` for structure, field options, and condition syntax.
-
-## Content Models
-
-Content models configure Admin Dashboard views in `./content/*.json`: list columns, form layout, navigation, input behaviour. They map to a data model's Resource ID and hold **UI logic only** — types, events, permissions and formulas belong in `./models/*.json`, and a content field id must match a data-model field (except `type: "action"` fields, which store nothing).
-
-**Decision Guide:**
-
-- [ ] **Augment a standard model** when adding UI for fields on an existing entity. Extensions merge with the native UI rather than replacing it — `edit.tabs` adds alongside native tabs, `list.fields` appends columns, `list.tabs` adds filtered views — and merchants can reorder or hide the additions.
-- [ ] **Create app model views** for app-defined collections. A list view without a `nav` object gets **no sidebar entry at all**, and layout is controlled entirely through views (`admin_zone` has no effect here).
-
-Authoring detail — view ids and types, field inheritance, `field_row`/`field_group` layout, `admin_span`, conditions and `readonly` expressions, and the `collection`/`lookup` field types — is in `references/content-models.md`. Buttons that run app functions or workflows — view `actions`/`extra_actions`, list `bulk_actions`, and `type: "action"` fields — are in `references/actions.md`. Consult `swell schema content --format=dts` for field types and every property option.
-
-## Functions
-
-Functions implement serverless logic in `./functions/*.ts`. Each file exports a `config` object specifying exactly one trigger (`model`, `route`, `cron`, or `action`) and a handler; a separate `workflow` kind runs durable multi-step background work (see trigger selection). Run `swell schema function --format=dts` for the authoritative type declarations — that schema is the post-decision shape reference for everything below.
-
-**Cross-cutting constraints.** Functions time out at 10s by default (configurable via `config.timeout`, 1000–10000 ms; values up to 20000 ms require platform feature enablement). Responses are hard-**truncated** at 75,000 bytes (`MAX_RESPONSE_BYTES`), not rejected: the caller receives the truncated prefix, which then fails JSON parsing and arrives as a raw string rather than an object — paginate large collections rather than returning them. Functions receive configuration only through `await req.swell.settings()`; there are no env-var or secret bindings (see Settings).
-
-**Before hunting for a code or config bug, confirm the app is still active in that environment.** `swell api get '/:clients/:self/apps'` (add `--live` for production) lists the installed-app records for the environment your credentials resolve to, each carrying `active`, `version`, and `local_proxy_url`. `active: false` silently suppresses **every** function invocation and **every** app-owned webhook delivery — no error to the caller, no function log — while the deployed function and webhook records still read as enabled with correct bindings, so `swell inspect` shows nothing wrong. A non-null `local_proxy_url` means a `swell app dev` tunnel still owns this app's hook and event deliveries and its action functions in that environment.
-
-Model-event functions that fail continuously for ~4 days (2 days if `timeout` >10s; immediately on 404/worker-missing) auto-disable until the function config is **re-pushed**; cron and routes are unaffected. The `enabled: true` reset rides on the function PUT, and `swell app push` skips files whose hash is unchanged — so a push that touches nothing in the top-level function file will not clear `auto_disabled`. Use `swell app push --force`, then confirm in detail mode. `swell inspect functions --app=.` gives a trigger summary, next cron run, and a bare `disabled` marker (list mode does **not** distinguish auto-disable from a manual disable, and its `last fail` column actually shows `date_final_attempt` = first failure + 4 days, i.e. the projected auto-disable deadline, which renders as a future date). Run `swell inspect functions <key>` for the record's real `auto_disabled`, `date_first_failed`, `date_last_success`, and `attempts_failed`.
-
-### Trigger selection
-
-> **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract. Authoring then follows the **Model hook (sync)** path below.
-
-- **Model event (async)** — fires after a record mutation persists. Use for downstream effects: denormalization, fan-out, analytics.
-- **Model hook (sync)** — `before:` / `after:` prefix on a model event runs synchronously inside the originating API request, can read the pre-mutation record, and (in `before` phases) can mutate what gets saved or reject the write via `req.reject()`. → see `references/functions-hooks.md` once chosen.
-- **Model schedule** — fires at a future date derived from a record field; re-schedules when the field changes.
-- **Cron** — fixed cron schedule, no record context.
-- **HTTP route** — custom endpoint at the fixed path `/functions/<app_id>/<function_name>`. No URL path parameters (no `/users/:id`-style routing); pass identifiers via query or body. External callers reach it at `https://<store>.swell.store/functions/<app_id>/<name>` and **must send a valid public key in `Authorization` even when `public: true`** — the gateway resolves the app slug from the key's installed-apps set — so a third-party webhook sender that cannot add that header needs a different ingress. → see `references/functions-routes.md` once chosen.
-- **Action** — `action: true`: runs when an admin user clicks an app action in the dashboard — a settings Actions-menu item, a content view header/menu button, a list bulk-bar button, or a `type: "action"` field. Receives the action context and dialog values, returns `{ message }`, and must finish within the function timeout. Cannot be called through `$call` or the storefront gateway. → see `references/actions.md` once chosen.
-- **Workflow** — `kind: 'workflow'`: durable multi-step background function with retriable steps and long sleeps, available on every store. Started from a function with `req.swell.workflows.create()`, or by an app action when its config sets `action: true` — the way to run dashboard work that outlasts a function timeout. → see `references/functions-workflows.md` once chosen.
-
-**Model Event Triggers** respond to record changes. Standard events (`created`, `updated`, `deleted`) exist on all models by default. Custom events (e.g. `review.approved`) must be declared in the data model first, and the declaration requires a non-empty `conditions` object (the condition that marks the event as having occurred) unless it is an `extension` event; conversely, standard `created`/`updated`/`deleted` types must **not** declare `conditions`. Both are enforced at push time by `validateModelEvents`, never by local validation.
-
-```typescript
-export const config: SwellConfig = {
-  description: "Update product ratings when reviews change",
-  model: {
-    events: ["review.created", "review.updated", "review.deleted"],
-    conditions: { status: "approved" }, // filter invocations
-  },
-};
-
-export default async function (req: SwellRequest) {
-  const { swell, data } = req;
-  // data = full record + $event metadata; see req.data below
-}
-```
-
-Conditions accept MongoDB-style operators against `$record`, `$data`, `$event`, `$settings`, or `$formula` (string expression for complex cases). Child collection events use dot notation: `review.comment.created`, `review.reaction.deleted`.
-
-**Model Schedule Triggers** execute at a future date derived from a record field. The field must exist in the data model.
-
-```typescript
-export const config: SwellConfig = {
-  description: "Capture scheduled payment",
-  model: {
-    events: ["payment.created", "payment.updated"],
-    conditions: { date_scheduled: { $exists: true } },
-    schedule: { formula: "date_scheduled" }, // re-schedules on field change
-  },
-};
-```
-
-**Cron Triggers** execute on a fixed schedule with no record context.
-
-```typescript
-export const config: SwellConfig = {
-  description: "Recalculate product popularity daily",
-  cron: { schedule: "0 0 * * *" },
-};
-
-export default async function (req: SwellRequest) {
-  /* req.data is empty */
-}
-```
-
-**HTTP Route Triggers** expose a custom API endpoint. The basic shape is below; `references/functions-routes.md` covers handler dispatch (named vs. default vs. object exports, the `delete` reserved-word issue), `req.body` / `req.query` / `req.rawBody`, header allow-listing, cache tuning, and signature-verification patterns.
-
-```typescript
-export const config: SwellConfig = {
-  description: "Submit review from storefront",
-  route: {
-    methods: ["post"],
-    public: true, // false requires secret key auth
-  },
-};
-
-export async function post(req: SwellRequest) {
-  if (!req.session?.account_id) {
-    throw new SwellError("Login required", { status: 401 });
-  }
-  return await req.swell.post("/reviews", { /* ... */ });
-}
-```
-
-### The `req` object
-
-Authenticated context for the handler. Common fields across triggers:
-
-- `req.swell` — platform client. App collections auto-scope: `req.swell.get('/reviews')` resolves to `/apps/<app_id>/reviews`. Use `expand` to include linked records.
-- `req.swell.transaction([{ method, url, data }, ...], { retry })` — multi-operation write (`POST /:transaction`, max 10 operations). **Rollback is partial, not total.** A *request* error in any op — not found, permission denied, bad URL, write conflict, timeout — aborts the whole set and throws with a stable code (`transaction_conflict`, `transaction_throttled`, `transaction_timeout`, `transaction_op_failed`) plus `op_index`. A **field-validation** failure does not abort: that op's slot comes back as `{ errors: {...} }` and every other op still commits. Always inspect each returned slot for `errors` — see `swell-backend/references/writes.md` §Transactions. Child operations fire no per-record hooks, functions, webhooks, or notifications — a committed transaction emits one `transaction.committed` event for the bundle.
-- `req.data` — trigger payload, and its `$event` shape **differs by trigger**. Async model events: record fields spread in, plus `$event` = `{ id, type, model, app_id, data, delivery }`; `$event.data` carries the full snapshot on `created`/`deleted` and **only changed fields** on `updated` — check `'field' in req.data.$event.data` to detect what changed. Custom events carry the subset declared in the model's event `fields`. `$event.delivery` is per-delivery retry state `{ attempts, date_first_failed }` — `attempts` is `0` on first delivery. Sync hooks (`before:`/`after:`): `$event` = `{ model, type, hook, app_id }` **only** — there is no `$event.data`, so `'field' in req.data.$event.data` throws; detect changes by comparing `req.data.<field>` against `req.data.$record.<field>`. Cron: empty. Routes: see route reference for body/query precedence. Actions: the dialog's field values at the top level plus `$action` (`id`, `source`, `collection`/`settings`, `record_id`, `selection`, `user_id`) — see `references/actions.md`.
-- `req.appId` — current app identifier. Use instead of hardcoding.
-- `req.store` — store metadata including `admin_url`.
-- `req.session` — user session (routes only); `null` unless the storefront gateway attached one, so gate with `req.session?.account_id`.
-- `req.context.waitUntil(promise)` — run work after the response returns (logs, metrics, non-blocking side effects); the Worker continues until the promise resolves or CPU time expires.
-- `await req.swell.settings()` — app settings from `./settings/`. Pass another app's id to read its settings cross-app.
-- `req.isLocalDev` — `true` under `swell app dev` (set at runtime from the `Swell-Local-Dev` header), useful for dev-only branches.
-
-**Writing to standard model extensions** — namespace under `$app` via `req.appValues`. Pass `(otherAppId, values)` to target another app:
-
-```typescript
-await req.swell.put(`/products/${id}`, req.appValues({ review_count: 42, average_rating: 4.5 }));
-```
-
-Extension fields come back under `$app.<app_id>.*` automatically — no explicit `expand` needed — **on the Backend API and inside app functions only.** They are **not readable from the Frontend API** by default, whatever `"public": true` says on the field: the storefront gateway projects every read through a per-model field allowlist, and the allowlist it builds for a store's own public key contains no `$app` path at all. The field simply comes back absent — no error, no 403 — so a storefront feature built on it fails while every secret-key check passes. Three real options, most portable first: put the storefront-visible data in the app's **own collection** with `public_permissions` (see Data Models) and attach it per product with an `include` sub-query; return it from a `public: true` route function; or have the merchant extend that **public key record's** own field permissions to allow the `$app` path. Do not verify this with `swell api … --api frontend` inside an app repo — that call authenticates with the *installed app's* public key, which does merge app fields into the model config and will show the field that a real storefront cannot see. Check with the store's own public key (a swell-js call) instead.
-
-For app-defined collections, write directly at the root.
-
-Writes to `$app` **deep-merge** with the stored subdocument — fields you don't send are preserved. To replace outright, use the `$set` operator: `{ "$app": { "$set": { "my_app": {...} } } }` replaces the whole app subdocument; `{ "$app": { "my_app": { "$set": { "config": {} } } } }` replaces a single field without merging into its prior value. Arrays deep-merge too, and never shrink on a plain write. Elements **with** an `id` align by id: a matching stored element merges in place, an unknown id appends. Elements **without** an `id` merge **positionally** — source index `i` merges into stored index `i` regardless of what is there, and appends only past the end of the stored array. So a plain write of `[{qty: 2}]` rewrites the first stored element rather than adding one. Append with `$push`; replace with `$set`.
-
-### Return values and errors
-
-Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error; on event-triggered functions, add `retry: false` to record the failed delivery without scheduling further retries. In `before:` hooks, thrown errors do **not** block the mutation — throw `req.reject(code, message, { status })` to reject the write (see `references/functions-hooks.md`). Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. Model and cron handlers typically return nothing.
-
-### Local testing
-
-Run `swell app dev` as a background process (one app per session) to stream function execution to your terminal. Trigger model events and hooks via `swell api [post|put|delete] /<collection>`, and action functions by clicking the action in the dashboard — those are the invocation paths the tunnel actually captures (workflows, including action-started ones, always run the pushed version). Routes are **not** tunneled: `swell api [method] /functions/<app_id>/<function_name> --body '{...}'` reaches the deployed worker, so push before testing a route change, or call the local dev URL directly and accept that it skips context initialization (settings, session). Caveat: `req.session` is **`null`** when a route is invoked through `swell api` — the CLI's `$call` path sends no `Swell-Session` header, and only the storefront gateway attaches one. Every `session?.account_id` gate therefore rejects. Simulate one with `-H 'Swell-Session: {"account_id":"..."}'`, or verify customer-scoped auth through the storefront gateway or integration tests.
-
-## Settings
-
-Settings define merchant-configurable app behavior in `./settings/*.json`. Values are accessible in functions via `await req.swell.settings()` and in model/content conditions via `$settings`.
-
-Each settings file creates a grouped panel in the App Preferences UI. Structure: `label` (panel heading), `description` (explanatory text), and `fields` (array using content field syntax). Multiple files render as grouped panels. Settings returned by `swell.settings()` are namespaced under the filename, but the CLI converts `_` to `-` first: `settings/new_section.json` deploys as the group `new-section`, read as `settings['new-section'].<field>` — `settings.new_section` is `undefined`. Name settings files in kebab-case so the group key matches the filename exactly. `field_group` does not introduce nesting—its child fields are flattened to the parent level. Select-style fields require `options` entries as `{ "value": …, "label": … }` objects — bare strings fail validation. Inspect the deployed record with `swell inspect settings --app=.`; an app's settings files collapse to one platform record at push time. A settings file can also declare `actions` (items at the top of the Actions menu on the app's page) and `type: "action"` fields (buttons among the settings fields) that run app functions or workflows; both are disabled while the settings have unsaved changes — see `references/actions.md`.
-
-**There are no environment variables or secrets.** Settings are a function's only configuration channel, and they are not a secret store:
-
-- The deployed worker is uploaded with **no Cloudflare bindings** (upload metadata carries only `body_part`, `tags`, `annotations`) and the runtime wrapper discards the env argument, so `env.MY_SECRET` is undefined. `process.env` does not exist either — functions run service-worker format with no `nodejs_compat`.
-- `.dev.vars` is **never uploaded** — `swell app push` ignores `**/.dev.vars*`. It feeds the `frontend/` wrangler dev server only.
-- The `secret` field type only **masks the input** in App Preferences. It is a `short_text` preset: the value is stored and returned as plain text to any caller that can read the settings, so use it for provider credentials to keep them off screen, not as protection. The only access flags are `public` (expose to the storefront API) and `private` (restrict from it).
-- Settings are **not isolated per app**. `await req.swell.settings('<other_app_id>')` is a plain `GET /settings/<id>` sent with the caller's own app credentials, and an app with an empty `permissions` array — the `swell create app` default — is authorized for everything. Assume any other installed app can read your provider credentials.
-- Rotation is a merchant action in App Preferences; there is no separate store to purge and no versioning of old values. A secret the merchant must not see has to live in your own service and be called out to — never bundle it into the app, where it ships inside the deployed worker script.
-
-## App Permissions
-
-`swell.json`'s `permissions` array scopes the API credentials the platform mints for the installed app. `swell create app` writes `"permissions": []`, and **an empty or absent array means full access** — entries only ever subtract capability.
-
-**Always declare `permissions` on every app.** The scaffold's empty array is a placeholder, not a decision: leave it and the app ships with full read and write access to the whole store, which merchants see at install time and which turns any bug or leaked credential into store-wide exposure. List the scopes the app actually uses and nothing more.
-
-Entries are `read_<model>` / `write_<model>` against the **top-level collection**: `read_products`, `write_orders`. `write_x` implies `read_x`. Child collections collapse to their parent, so `/products:variants` and `/products:apps.<app_id>.<name>` are both covered by `products`. The CLI validates only that the value is an array — there is no enum, so a typo like `products_read` deploys clean and grants nothing.
-
-- **Scoping breaks `/:batch` and `/:transaction`.** The wrapper URLs map to no permission name, so once `permissions` is non-empty every `req.swell.transaction([...])` fails with 403 `The client does not have the required permissions` before any child op is evaluated. If the app uses transactions, leave `permissions` empty.
-- Exempt regardless of scope: your app's own declared collections (matched by model config name — which is why the auto-scoped `req.swell.get('/reviews')` keeps working), `/:details` + `/:logs`, and calls to the app's own functions (`PUT /:functions/app.<app_id>.<name>` whose body is only `$call` — see `references/functions-routes.md`).
-- **The `/apps` + `/settings` exemption is narrower than it looks.** It string-compares the path segment against the app's canonical 24-character record id, but `req.swell.settings()` sends the app **slug** (`req.appId`, from the `Swell-App-Id` header). Slug ≠ ObjectId, so the exemption misses and the call falls through to a `read_settings` check: on any app with a non-empty `permissions` array, `await req.swell.settings()` 403s unless you grant `read_settings` (and `read_apps` to read your own app record by slug). Another reason to leave `permissions` empty.
-- **Changing `permissions` between released versions rotates the installed app's keys.** The platform snapshots the previous permissions with the previous `access_token` and `public_key` into `versioned_permissions` and mints a new pair; the old key keeps authenticating with the *old* scope, so a stale key that "still works" may be silently under-scoped. Re-read the app's keys after any permissions change. Development installs (`swell app push`) re-sync permissions in place instead of rotating.
-
-Declare permissions when the app is distributed to stores you do not control and the scope should be on record. For a store-local app, empty is both the default and the working configuration — do not add entries "to be safe".
-
-## Webhooks
-
-Webhooks send model events to external endpoints in `./webhooks/*.json`. Use when event handling logic lives outside Swell; for Swell-hosted logic, prefer functions. Webhooks subscribe to async events only — the `before:`/`after:` hook prefix is rejected at deploy; use a function for synchronous hook semantics.
-
-**`enabled` defaults to `false`.** `swell create webhook … -y` writes `enabled: false` unless you pass `--enabled`, and the interactive prompt defaults to No. A disabled webhook deploys cleanly, appears in `swell inspect webhooks`, and never fires — set `"enabled": true` in the manifest before pushing and confirm the deployed value in detail mode.
-
-The payload is the event record plus two `$`-prefixed additions: `id`, `date_created`, `model`, `type`, `data` (record snapshot or changed fields), `app_id`, `req_id`, `user_id`, plus `$type` (fully qualified event type — `<model>/<type>`, or `$app.<app_id>.<model>/<type>` for app events) and `$delivery` (`{ attempts, date_first_failed }`, `attempts` is `0` on first delivery). The environment arrives as the `Swell-Env` **request header**, not in the body, and **no store identifier is sent at all** — use a per-store endpoint URL if the receiver serves multiple stores. Requests time out after 10 seconds—endpoint must return a 2xx. Retries: the first retry comes ~1 minute after failure, then exponentially spaced attempts (roughly 10 per day) with a ~12-hour gap between daily cycles.
-
-**Recovering an auto-disabled webhook.** After ~4 consecutive days of failures with no success the platform sets `enabled: false` alongside `auto_disabled: true`, and dispatch tests only `enabled`. Setting `enabled` back to true is what revives it — the platform then replays all pending events and clears `auto_disabled`. For an app-owned webhook that flip rides on re-installing the manifest, i.e. `swell app push`, and push skips files whose hash is unchanged: fixing the endpoint without touching `webhooks/*.json` leaves the webhook dark. Use `swell app push --force`, exactly as with an auto-disabled function, then confirm `auto_disabled` cleared with `swell inspect webhooks <key>`. List mode (`swell inspect webhooks --app=.`) surfaces auto-disable status, subscribed events, and failure counts.
-
-Swell sends **no payload signature or HMAC header** — the only platform-side identity signals are the source IP and `Swell-Env`. A shared secret in the URL query string is the app-side workaround: validate it server-side *and* allowlist Swell's published webhook IPs. Treat payload contents as untrusted either way — re-fetch by `data.id` before acting.
-
-## Notifications
-
-Transactional emails in `./notifications/`, as a paired `<name>.json` manifest and `<name>.tpl` Liquid template sharing one basename. Consult `swell schema notification --format=dts` for every property.
-
-Three things decide whether one ever sends:
-
-- **Dispatch is create/update only.** `deleted` is accepted by the schema and never fires.
-- **The `event` must already exist** — a standard `created`/`updated`, or a custom event declared in the collection's data model. Binding to an undeclared event fails the deploy.
-- **Recipients resolve through the query.** `contact` is a dot path to an email field (`account.email`), and every relationship in that path must appear in `query.expand`.
-
-Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.`; name alone is not unique within an app. Template authoring — Liquid syntax, the `settings`/`store`/`get` globals, admin-editable `content` fields, child-collection `parent` access, and repeat/dispatch controls — is in `references/notifications.md`.
+Pass: The affected behavior produces the expected result and relevant tests pass. State any runtime checks that could not be performed within the task's scope.
+
+Consider formalizing your checks as unit and integration tests of the app. Scaffold tests with `swell create tests` if necessary.
+
+## References
+
+Load a reference when its block is in play; none of them needs to be read up front.
+
+| Reference | Read it when |
+| --- | --- |
+| `references/cli.md` | Before relying on any CLI command: push, pull, dev, inspect, validation |
+| `references/data-models.md` | Authoring a model: shapes, links, events, storefront exposure |
+| `references/content-models.md` | Authoring dashboard views |
+| `references/actions.md` | Adding a dashboard action |
+| `references/functions.md` | Writing or debugging any function |
+| `references/functions-hooks.md` | The function is a `before:` / `after:` hook |
+| `references/functions-routes.md` | The function is an HTTP route |
+| `references/functions-workflows.md` | Writing a workflow |
+| `references/settings.md` | Authoring settings; handling credentials |
+| `references/permissions.md` | Declaring or changing `permissions`; a 403 from the app's own client |
+| `references/webhooks.md` | Adding or debugging a webhook |
+| `references/notifications.md` | Authoring an email notification |
+| `references/frontend.md` | Anything in `frontend/` — read first |
+| `references/frontend-dashboard.md` | Dashboard pages of an `admin` or `integration` app |
+| `references/frontend-storefront.md` | The site of a `storefront` app |
+| `references/app-integrations.md` | Integration apps and `extensions[]` — read first |
+| `references/payment-extensions.md` | A `payment` extension or a checkout component |
+| `references/shipping-tax-extensions.md` | A `shipping` or `tax` extension |
+| `references/app-publishing.md` | Versions, installing in other stores, releasing, billing and listing fields |
