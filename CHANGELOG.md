@@ -7,7 +7,7 @@ versioning follows [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `swell-app`: `references/components.md` documents app components in admin content fields (`type: "component"`): files and names, the Preact build, `ComponentProps`, calling functions and `/app-api` with `props.fetch`, `req.swellContext`, and the security model; cross-references added to `SKILL.md` and to the content-model, route, frontend, dashboard-frontend, CLI and extension references.
+- `swell-app`: `references/components.md` documents app components in admin content fields (`type: "component"`): files and names, build limits, props, stored types and push checks, layout, focus and modals, calling functions and `/app-api` with `props.fetch`, development, and rendering on other pages; cross-references added to `SKILL.md` and to the content-model, route, frontend, dashboard-frontend, CLI and extension references.
 
 ## [0.7.0] - 2026-10-08
 

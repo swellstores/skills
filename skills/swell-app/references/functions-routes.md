@@ -54,7 +54,7 @@ export default {
 
 ## Authentication
 
-`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request — except when the function's **own app's component** calls it through `props.fetch`: the platform accepts the component's token instead, so a route needs neither `public: true` nor a secret key for that caller (route functions only, not hooks or cron; other apps' functions still need the key). That call carries a platform-signed context, exposed as `req.swellContext` (`{ appId, installationId, storeId, storeUser, surface }`, `null` unless the platform forwarded a signed context); `surface` is `'admin'` for admin content field components and `storeUser` holds the admin. `req.swellContext` is the caller's identity only if you check it: a route that must serve merchants only **must** test both, exactly:
+`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request. Exception: a call from the function's **own app's component** through `props.fetch` needs neither `public: true` nor a secret key (route functions only, not hooks or cron). Swell verifies the component's token and passes the caller as `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface }`, `null` on calls without one. A route that serves only merchants checks both fields:
 
 ```ts
 if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
@@ -62,7 +62,7 @@ if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
 }
 ```
 
-`storeUser` without `surface` is an admin using the app frontend with a cookie, not a component call. Never treat `null` as allowed. GET responses for component calls are not cached. See `references/components.md`.
+`storeUser` without `surface` is an admin using the app frontend with a cookie, not a component call. See `references/components.md`.
 
 `req.session` carries the storefront customer session, but only the storefront gateway attaches it (`Swell-Session` header). On every other invocation path it is `null` — see Local testing caveat. Storefront routes typically gate on `req.session?.account_id`.
 

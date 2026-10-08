@@ -82,7 +82,7 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
 - **Looking up the viewer.** To learn more than the id, read `/:users/<userId>` with the Backend client, as the scaffold's store user card does. Once `permissions` in `swell.json` is non-empty that read needs the `read_:users` scope, colon included; without it the read answers 403, which the card handles.
 - **Writes go in POST/PUT/DELETE handlers or server actions.** Swell withholds the store user on a request from another origin unless it is a `GET`, `HEAD` or `OPTIONS`. That is what stops another site from triggering a store-user-only write, and it does not protect a `GET` that changes data.
 - **Ids in the address are input.** A `frontend://shipments/{id}` link delivers an id anyone can type. Validate it and load the record on the server before acting on it.
-- **App component calls carry a token, not the cookie.** An admin content field component calls the frontend with `props.fetch('/app-api/…')`; its request has no admin cookie but a component token, and the proxy signs a context from the token: `admin` is the token's admin (so `context.storeUser` is set) and `surface` is `'admin'`. On every other request `context.surface` is `undefined`. A verified context proves only that Swell signed it — the proxy signs one for anonymous requests too (`storeUser: null`). So a handler that serves component calls **must** check both before returning store data, exactly. Use the request's verified context (`verifySwellContext` throws on a missing or invalid one, which also means reject):
+- **Calls from the app's own components.** An admin content field component calls `/app-api` with `props.fetch`: no dashboard cookie, but a component token from which Swell signs the context, with the admin as `context.storeUser` and `context.surface` set to `'admin'`. `surface` is `undefined` on every other request, and Swell signs a context for anonymous requests too, so a handler that serves component calls checks both:
 
   ```ts
   if (!(context.surface === 'admin' && context.storeUser)) {
@@ -90,7 +90,7 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
   }
   ```
 
-  `storeUser` without `surface` is an admin browsing the app frontend with their dashboard cookie, not a component call. See `references/components.md`.
+  `storeUser` without `surface` is an admin using the frontend with their dashboard cookie. See `references/components.md`.
 
 ## Preview and verify
 
