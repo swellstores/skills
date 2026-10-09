@@ -97,6 +97,7 @@ The rules from them that change a design:
 - A login or a logout changes the cart: read it again.
 - A write resolves with `errors` for a bad value and rejects for a field it does not accept.
 - A subscription is canceled, and a cancellation undone, with `canceled` and `cancel_at_end` together.
+- **In tests, give customers an `example.com` address.** Sign-up, recovery and every order email the customer. Swell does not deliver to that domain, and it deactivates a store that sends too many real emails, test environment included.
 
 # VI. Calling App Functions
 
