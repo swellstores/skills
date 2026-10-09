@@ -16,7 +16,7 @@ A component with `config.extension` is a checkout payment component instead: a d
 
 - JSX always compiles with Preact's automatic runtime. `react` and `react-dom` resolve to `preact/compat`, so React libraries bundle; React 19-only APIs (`use`, Actions, `useOptimistic`) do not exist.
 - **No CSS or other non-JS imports** — the build fails. Use inline styles or a `<style>` element.
-- `@swell/apps-sdk` is types only (`import type { ComponentProps } from '@swell/apps-sdk/components'`): a 2.x release with the `./components` entry.
+- `@swell/apps-sdk` is types only (`import type { ComponentProps } from '@swell/apps-sdk/components'`), from 2.0.0-alpha.6: earlier releases have no `./components` entry.
 - Bundles are public: no secrets in a component.
 
 ## Props
@@ -85,7 +85,7 @@ const preview = await props.fetch('/app-api/label-preview'); // the app's fronte
 - Third-party URLs get no token. Calls that need secrets go through an app function.
 - The token lasts 600 s and the host refreshes it; it is scoped to one installation and bound to the signed-in admin.
 - Swell turns the token into a signed context with `surface: 'admin'` and the admin as `storeUser`.
-- **Functions:** a **route** function of the same app accepts the call without `route.public` or a secret key (not hooks or cron, not other apps' functions). The context is `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface }` — already verified by Swell, and `null` on calls without one. GET responses to component calls are not cached.
+- **Functions:** a **route** function of the same app accepts the call without `route.public` or a secret key (not hooks or cron, not other apps' functions). The context is `req.swellContext` (typed from `@swell/app-types` 1.2.9) — `{ appId, installationId, storeId, storeUser, surface }` — already verified by Swell, and `null` on calls without one. GET responses to component calls are not cached.
 - **Frontend:** `/app-api` handlers get the context from the scaffold's helper; the check is in `references/frontend-dashboard.md`, "Authorize store users".
 - **Check both `surface` and `storeUser`.** Swell signs a context for every request through the app origin, anonymous ones included, and `storeUser` without `surface` is an admin using the frontend with a cookie. `null` is never "allowed":
 
