@@ -97,6 +97,7 @@ An import that must be silent sends both: `POST /orders` with `{ ...order, $even
 - **Neither flag stops the store's own logic.** An order still takes stock and a payment still updates its order.
 - **In a batch the flags go inside each operation's `data`.**
 - **`swell api` cannot switch events off.** A write made with it is always recorded. `$notify: false` works there.
+- **Emails to real addresses are limited.** Swell deactivates a store that sends many emails for its size, a new store soonest, and sends from the test environment count. Seed and import with `$notify: false`. Where a test needs the notification itself, address the customer at `example.com`: the email is rendered and logged, but never delivered or counted.
 
 Operations inside a transaction fire no events of their own in any case: see "Transactions".
 
