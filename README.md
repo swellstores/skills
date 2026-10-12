@@ -8,7 +8,7 @@ They give an agent what the API reference does not: which API fits the job, how 
 
 | Skill | Covers |
 | --- | --- |
-| `swell-app` | Building, deploying and publishing [Swell Apps](https://developers.swell.is/apps/overview) with the `swell` CLI: data models, dashboard views and actions, settings, permissions, functions and workflows, webhooks, notifications, payment, shipping and tax extensions, and app frontends, including storefronts. |
+| `swell-app` | Building, deploying and publishing [Swell Apps](https://developers.swell.is/apps/overview) with the `swell` CLI: data models, dashboard views and actions, settings, permissions, functions and workflows, webhooks, notifications, payment, shipping and tax extensions, admin field components, and app frontends, including storefronts. |
 | `swell-backend-api` | Server-side work with the [Backend API](https://developers.swell.is/backend-api/introduction): queries, writes, batches and transactions, events and webhooks, files, orders, payments, subscriptions, products and inventory, accounts, coupons and promotions. |
 | `swell-frontend-api` | Storefront work with the [Frontend API](https://developers.swell.is/frontend-api/introduction): catalog and content, shopper sessions, cart and checkout, payments, customer accounts and subscriptions. |
 

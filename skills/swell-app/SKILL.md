@@ -247,7 +247,7 @@ Five behaviours that decide whether a deploy actually did what you think:
 
 - **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
-- **Push skips unchanged files by hash**, so edits confined to `functions/` subdirectories leave importing bundles stale — use `--force` after any lib-only change.
+- **Push skips unchanged files by hash.** From `@swell/cli` 2.9.27 the hash covers the files a function or component imports; older CLIs leave importers stale after a lib-only edit — use `--force` there.
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
 - **`swell api` targets the test environment** unless `--live` is passed.
 
