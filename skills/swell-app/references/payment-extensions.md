@@ -79,7 +79,7 @@ Each payment event is a synchronous platform hook. The platform merges **every**
 |----------|-------|-----------|--------------|------------------|----------------|----------------|
 | Intent | `after:payment.create_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `call("createIntent", data)` in the component) | `{ result: { ...browserSafeData } }` | `{ error: "msg" }` |
 | Get Intent | `after:payment.get_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `call("getIntent", data)` in the component) — same shape as `create_intent` | `{ result: { ...browserSafeState } }` | `{ error: "msg" }` |
-| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data["my-method"]`) | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
+| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id"]` | `id` (the Swell payment being charged, in both phases), `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data["my-method"]`) | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
 | Refund | `before:` or `after:payment.refund` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `transaction_id` | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
 
 Implement `payment.get_intent` only when the provider needs in-flight intent state refreshed from the platform — typically for redirect-return recovery, where checkout reopens after the shopper bounced through a provider page and the cart's persisted intent state is stale. The component triggers it with `call("getIntent", data)`, which the Swell vault routes to the hook. Skip it for fully inline flows.
@@ -203,7 +203,7 @@ Scaffold it from the extension in `swell.json`:
 
     swell create component Razorpay --extension card -y
 
-The CLI refuses an id that is not a `payment` extension of `swell.json`. The file it writes is the contract in full:
+The CLI refuses an id that is not a `payment` extension of `swell.json`, and an extension that already has a component (the push rules below). The file it writes is the contract in full:
 
 ```tsx
 import { useEffect } from "preact/hooks";
@@ -225,7 +225,7 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
           currency: context.cart.currency,
         });
         // ...open the provider's checkout with the intent and wait for the payment...
-        return { billing: { intent: { ...intent, stripe: { id: providerIntentId } } } };
+        return { billing: { intent: { stripe: { id: providerIntentId } } } };
       }),
     [on, call, context],
   );
@@ -253,17 +253,18 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
 
 | Part | What it is |
 |------|------------|
-| `context` | `{ cart, method }`. `cart` is the shopper's cart (`account_id`, `currency`, `capture_total`, items, billing, shipping...) without store settings and saved cards; `method` is `{ id, name, mode }`. The cart comes from the host page: verify amounts on the server in `create_intent`. A cart update re-renders the component with new `context`, it does not remount |
+| `context` | `{ cart, method }`. `cart` is the shopper's cart (`account_id`, `currency`, `capture_total`, items, billing, shipping...) without store settings and saved cards; `method` is `{ id, name, mode }`. The cart is an allowlist: top-level `id`, `number`, `account_id`, `currency`, `display_currency`, the totals (`capture_total`, `grand_total`, `sub_total`, `discount_total`, `shipment_total`, `tax_total`, `tax_included_total`), `item_quantity`, `items`; `account` with `id`, `email`, `name`, `first_name`, `last_name`, `phone`; `shipping` and `billing` as addresses only. `billing.intent`, `billing.card`, `checkout_id` and saved cards are not visible. It comes from the host page, so never trust it for money: the charge hook is the check (see Billing Persistence Contract). A cart update re-renders the component with new `context`, it does not remount |
 | `settings` | The app's public settings (fields marked `"public": true`), keyed by settings config name: `settings/card.json` is `settings.card.key_id` |
 | `on("submit", handler)` | The shopper pressed the order button. `handler({ billing })` receives the billing the checkout has so far and returns `{ billing }` |
 | `on("redirect", handler)` | The shopper returned to checkout from a provider redirect. `handler({ params })` receives the return URL's query parameters (strings) and returns `{ billing }` |
-| `call("createIntent", data)` | Invokes the extension's `payment.create_intent` hook (through the Swell vault) and resolves with the hook's `result` |
+| `call("createIntent", data)` | Invokes the extension's `payment.create_intent` hook (through the Swell vault) and resolves with the hook's `result`; a vault request that takes over 20 seconds rejects with `Request timed out after 20 seconds` |
 | `call("getIntent", data)` | The same for `payment.get_intent`. The built-in actions are fixed: a host cannot replace them |
 | `setValidity(message)` | A message keeps the order button disabled and shows to the shopper; `null` clears it |
-| `fetch`, `locale`, `readonly`, `params` | As in `components.md`. `readonly` is true while checkout is submitting. `fetch` calls are anonymous storefront ones (`surface` is `checkout` or `storefront`): treat them like public routes |
+| `fetch`, `locale`, `readonly`, `params` | As in `components.md`. `readonly` follows the checkout's loading state (initial load and submit). `fetch` calls are anonymous storefront ones (`surface` is `checkout` or `storefront`): treat them like public routes |
 
 - `createIntent` takes the account from `context.cart.account_id` and the gateway from the platform: do not pass either. `data` arrives in the hook as `req.data.intent`; send only what the hook needs (`amount`, `currency`).
 - A thrown `Error` in a handler (or a rejected `call`) shows its message to the shopper and returns the form to a usable state. Throw shopper-readable messages, for example `Payment cancelled` when the shopper closes the provider modal.
+- `submit` must return `{ billing }`: with none, the shopper sees "The payment method did not respond" and no order is placed. `redirect` is the reverse: a handler that returns no `billing` is ignored, so return nothing for returns that are not the provider's (a URL with only utm parameters).
 - Register handlers in `useEffect(() => on("submit", ...), [on, call, context])`. The frame runs only the **first** handler registered for an event, so a handler registered on every render would keep the first render's closure. Either re-register through the effect as above (the cleanup returned by `on` unsubscribes the old one) or register once and read the latest props through a ref.
 - The component never writes the cart. Return `{ billing }` and the host saves it; the handler's result is the only way billing gets in.
 
@@ -282,6 +283,8 @@ return {
 
 You do not return `billing.method`: the checkout already set it to the selected method. Return only what the charge needs. The backend payment hook receives method-specific billing under `req.data[methodId]` (e.g. `req.data["my-method"]`), so a token stored under the wrong method id is never found by the charge function. The `billing.intent` key is the **processing provider** that generates the intent, not the extension id. In this example the extension is `my-method` but the intent key is `stripe` because Stripe is the payment processor. When your extension calls its own provider directly, extension and processor coincide and the key equals the extension id. The charge function reads the same key: `req.data.intent?.stripe?.id`. A mismatch between what the component returns and what the function reads yields `undefined` with no deploy-time or runtime error. Store only browser-safe identifiers; never return secret keys or raw provider responses.
 
+**The browser writes billing.** `billing.intent.<provider>.id` and every other billing field reach the cart through the public checkout API, and a shopper can write any value there. The `payment.charge` hook is the only trusted check: verify there that the provider payment's amount, currency and method match the order, and that it belongs to this payment. `req.data.id` is the Swell payment being charged in both phases (`captured: false` and `captured: true`); bind the provider payment to it (Razorpay app: `functions/card-charge.ts` writes it into the provider payment's notes as `swell_payment_id`, repeats the method, amount and currency checks in every phase, and accepts an already-captured payment only when it is bound to this Swell payment). Do not rely on `create_intent` for this: the intent can be created with other values than the order's.
+
 ### Intent Request
 
 `call("createIntent", data)` is not the raw `swell.payment.createIntent` API: pass the browser intent payload directly.
@@ -298,9 +301,9 @@ The function receives this under `req.data.intent` and answers with `{ result }`
 ### Lifecycle and Rendering
 
 1. Hosted checkout mounts the place `checkout.payment.methods` with the filter `{ method: <selected method id> }` into the body of the selected method. The platform returns the component of the extension the merchant bound to that method, when it opted into the place. A method without a component submits as before. Switching methods unmounts the frame.
-2. The submit button stays disabled until the component has started, and while `setValidity` holds a message. A component that fails to start shows its error and does not softlock checkout.
+2. An app method pays through its component only while payment is collected (`capture_total > 0`, or a payment is required); otherwise the method has no component and submits as before. The submit button is disabled while checkout is loading, until the component has started, and while it reports a validity message or an error. A component that fails to start shows its error and keeps that method's submit disabled; the shopper can switch to another method, except while checkout is loading, when the method options of an app method are locked.
 3. The frame is its own document: load a provider's script with a `<script>` element in the component (once, `components/lib/checkout.ts` in the Razorpay app shows a loader), mount third-party widgets into your own ref.
-4. **Render visible content before opening a provider modal.** Provider modals are fixed full-screen elements; when one appears the frame turns into a viewport overlay by itself and goes back when it closes. Content in the frame is what the shopper sees in the methods list before the modal opens.
+4. **Render visible content before opening a provider modal.** Provider modals are fixed full-screen elements; when one appears the frame turns into a viewport overlay by itself and goes back when it closes. Content in the frame is what the shopper sees in the methods list before the modal opens. If the provider's modal lets the shopper retry after a failed attempt (Razorpay `payment.failed`), do not reject `submit` on a failure: keep the last error and settle only on success, or when the shopper closes the modal (reject with the last error, or `Payment cancelled`). `components/lib/checkout.ts` in the Razorpay app does this.
 5. In `submit`, validate and run the provider UI first, then `call("createIntent", data)` if the provider needs a server-created order or session, and return the billing.
 6. If the provider can redirect away from checkout, handle `redirect` too: read `params`, verify the provider's status (`call("getIntent", params)` is the browser trigger for the `payment.get_intent` hook), return `{ billing }`, and throw a shopper-readable error on failure. Redirect handlers must be idempotent: shoppers reload return URLs. Public keys may come from app settings; secret keys stay in functions.
 
