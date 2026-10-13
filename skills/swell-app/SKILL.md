@@ -174,9 +174,9 @@ Read `references/frontend.md` before touching `frontend/`, then `references/fron
 Browser UI written in Preact. Each top-level file is one component, of one of two kinds:
 
 - **Admin content field component**: renders a `type: "component"` field of a content view in place of a built-in input, in a cross-origin iframe on the app's own origin. It can call the app's functions and `/app-api` with a platform-verified caller (`req.swellContext`). A default export is required; the build fails without one. Scaffold it with `swell create component <Name> -y` and read `references/components.md` before writing one.
-- **Checkout component**: one whose `config.extension` matches a `payment` extension in `swell.json`. Swell's checkout loads it directly, not in an iframe, and a missing default export deploys cleanly and renders nothing. Read `references/payment-extensions.md` before writing one.
+- **Checkout payment component**: one whose `config.extension` is `{ id }` of a `payment` extension in `swell.json`, with `targets: [{ id: 'checkout.payment.methods' }]`. Hosted checkout renders it in the same kind of iframe, in the body of the payment method bound to the extension; it returns `{ billing }` from `submit` handlers and calls `call('createIntent', data)`. Scaffold with `swell create component <Name> --extension <id> -y` and read `references/payment-extensions.md` before writing one. A string `config.extension` is the legacy `swell.app` contract that hosted checkout no longer renders.
 
-No storefront, shipping or tax host loads app components. Components are unrelated to `frontend/`; an app may ship both.
+Shipping and tax have no component place, and a storefront renders components only when its own page mounts them with `createComponents` (`references/components.md`, "Other pages"). Components are unrelated to `frontend/`; an app may ship both.
 
 ### Assets and tests
 
@@ -185,7 +185,7 @@ No storefront, shipping or tax host loads app components. Components are unrelat
 
 ## Integration apps and extensions
 
-Integration apps declare extension slots in `swell.json` that the platform binds into native payment, shipping, or tax flows. Branch here when the requested feature is a payment method, shipping service, or tax service, or when `swell.json` has `type: "integration"` or `extensions[]`, when functions set `config.extension`, or when `components/` has top-level `.tsx`/`.jsx` files that set `config.extension` (checkout components; components without it are admin field components — `references/components.md`). Generic integrations (`type: "integration"` without `extensions[]`) need only `references/app-integrations.md`'s manifest section — skip the type-specific references.
+Integration apps declare extension slots in `swell.json` that the platform binds into native payment, shipping, or tax flows. Branch here when the requested feature is a payment method, shipping service, or tax service, or when `swell.json` has `type: "integration"` or `extensions[]`, when functions set `config.extension`, or when `components/` has top-level `.tsx`/`.jsx` files that set `config.extension` (checkout payment components; components without it are admin field components — `references/components.md`). Generic integrations (`type: "integration"` without `extensions[]`) need only `references/app-integrations.md`'s manifest section — skip the type-specific references.
 
 Two non-obvious traps distinguish extension work from ordinary app work:
 
@@ -317,6 +317,6 @@ Load a reference when its block is in play; none of them needs to be read up fro
 | `references/frontend-storefront.md` | The site of a `storefront` app |
 | `references/app-integrations.md` | Integration apps and `extensions[]` — read first |
 | `references/components.md` | A component for an admin content field |
-| `references/payment-extensions.md` | A `payment` extension or a checkout component |
+| `references/payment-extensions.md` | A `payment` extension or a checkout payment component |
 | `references/shipping-tax-extensions.md` | A `shipping` or `tax` extension |
 | `references/app-publishing.md` | Versions, installing in other stores, releasing, billing and listing fields |

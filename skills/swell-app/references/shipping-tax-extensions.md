@@ -167,7 +167,7 @@ Verify in order:
 
 Common mistakes:
 
-- Adding `components/*.tsx` for shipping or tax UI — components are loaded only by checkout's payment step and admin content fields today; the bundle deploys but never renders.
+- Adding `components/*.tsx` for shipping or tax UI — a component with `extension: { id }` must name a `payment` extension, so push fails for a shipping or tax one (`extension "<id>" is a shipping extension; only payment extensions can have components yet`). Components render only in hosted checkout's payment methods place and admin content fields today.
 - Treating `order.shipping` or `order.taxes` as ordinary async model events.
 - Forgetting `config.extension`, or setting it to a value that doesn't equal the manifest extension `id` — the function misses extension-scoped dispatch.
 - Returning a full provider response instead of the narrow merge fields.
