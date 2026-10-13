@@ -1,6 +1,6 @@
 ---
 name: swell-app
-description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions and frontends. Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
+description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends. Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -30,6 +30,7 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 | Keep extra data on products, orders, customers or another standard record | Model that extends the standard collection |
 | Keep a new kind of record | Model for an app collection, or a child collection of a parent |
 | Let merchants list, filter, create and edit that data in the dashboard | Content views |
+| A field in a dashboard form that needs its own input — a picker, a preview, a lookup in an outside service | Component bound to a content field |
 | A dashboard button that does something to a record, to selected rows or for the app | Action |
 | React after a record changes | Function on a model event (async) |
 | Validate, change or reject a write before it is saved | Function as a `before:` hook (sync) |
@@ -72,6 +73,7 @@ Dashboard screens for a collection: list columns, record forms, tabs, navigation
 
 - An app collection appears in the sidebar only when its list view declares `nav`. An app cannot create a new sidebar section.
 - Views are lists and record forms. A multi-step flow, a chart or summary across records, a custom layout or an embedded third-party widget needs a frontend.
+- A single field whose input the built-in types cannot provide renders with an app component (`type: "component"`, see "Components").
 
 Read `references/content-models.md` before authoring views; `swell schema content --format=dts` lists every field type and property.
 
@@ -167,9 +169,14 @@ What decides whether it fits:
 
 Read `references/frontend.md` before touching `frontend/`, then `references/frontend-dashboard.md` or `references/frontend-storefront.md` for what is being built.
 
-### Checkout components — `components/*.{jsx,tsx}`
+### Components — `components/*.{jsx,tsx}`
 
-Browser UI for **payment checkout extensions only**: Preact components that Swell's checkout loads for a `payment` extension. No admin, storefront, or shipping/tax host loads app components today. Unrelated to `frontend/`; an integration app may ship both. Read `references/payment-extensions.md` before writing one.
+Browser UI written in Preact. Each top-level file is one component, of one of two kinds:
+
+- **Admin content field component**: renders a `type: "component"` field of a content view in place of a built-in input, in a cross-origin iframe on the app's own origin. It can call the app's functions and `/app-api` with a platform-verified caller (`req.swellContext`). A default export is required; the build fails without one. Scaffold it with `swell create component <Name> -y` and read `references/components.md` before writing one.
+- **Checkout component**: one whose `config.extension` matches a `payment` extension in `swell.json`. Swell's checkout loads it directly, not in an iframe, and a missing default export deploys cleanly and renders nothing. Read `references/payment-extensions.md` before writing one.
+
+No storefront, shipping or tax host loads app components. Components are unrelated to `frontend/`; an app may ship both.
 
 ### Assets and tests
 
@@ -178,7 +185,7 @@ Browser UI for **payment checkout extensions only**: Preact components that Swel
 
 ## Integration apps and extensions
 
-Integration apps declare extension slots in `swell.json` that the platform binds into native payment, shipping, or tax flows. Branch here when the requested feature is a payment method, shipping service, or tax service, or when `swell.json` has `type: "integration"` or `extensions[]`, when functions set `config.extension`, or when `components/` has top-level `.tsx`/`.jsx` files. Generic integrations (`type: "integration"` without `extensions[]`) need only `references/app-integrations.md`'s manifest section — skip the type-specific references.
+Integration apps declare extension slots in `swell.json` that the platform binds into native payment, shipping, or tax flows. Branch here when the requested feature is a payment method, shipping service, or tax service, or when `swell.json` has `type: "integration"` or `extensions[]`, when functions set `config.extension`, or when `components/` has top-level `.tsx`/`.jsx` files that set `config.extension` (checkout components; components without it are admin field components — `references/components.md`). Generic integrations (`type: "integration"` without `extensions[]`) need only `references/app-integrations.md`'s manifest section — skip the type-specific references.
 
 Two non-obvious traps distinguish extension work from ordinary app work:
 
@@ -191,7 +198,7 @@ Two non-obvious traps distinguish extension work from ordinary app work:
 
 ### Who the code runs as
 
-Functions, workflows and a frontend's Backend client all act as **the app**: they use the credentials Swell issued to the installed app and return the same data whoever triggered them. The person is known separately, and only in some places — a store user in a dashboard frontend and in an action's `$action.user_id`, a customer in a storefront's session and in `req.session` of a route called through the storefront address. Decide what a person may do from that identity, never from an id in the request.
+Functions, workflows and a frontend's Backend client all act as **the app**: they use the credentials Swell issued to the installed app and return the same data whoever triggered them. The person is known separately, and only in some places — a store user in a dashboard frontend, in an action's `$action.user_id` and in `req.swellContext` of a route the app's own admin component calls, a customer in a storefront's session and in `req.session` of a route called through the storefront address. Decide what a person may do from that identity, never from an id in the request.
 
 ### API clients and operations
 
@@ -229,7 +236,7 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 | `swell inspect {content\|extensions\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
 | `swell schema <type> --format=dts` | The authoritative structure for a resource type — consult before authoring |
 | `swell schema <type> ./file` | Validate one manifest locally |
-| `swell create {content\|function\|model\|notification\|setting\|webhook\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
+| `swell create {content\|function\|model\|notification\|setting\|webhook\|component\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
 | `swell app push` | Deploy every app resource to the test environment |
 | `swell app dev` | Local tunnel; model hooks, model events and dashboard actions execute locally, and the frontend is previewed through Swell |
 | `swell app pull` | Adopt an existing app — a two-way sync, not a download |
@@ -240,7 +247,7 @@ Five behaviours that decide whether a deploy actually did what you think:
 
 - **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
-- **Push skips unchanged files by hash**, so edits confined to `functions/` subdirectories leave importing bundles stale — use `--force` after any lib-only change.
+- **Push skips unchanged files by hash.** From `@swell/cli` 2.9.27 the hash covers the files a function or component imports; older CLIs leave importers stale after a lib-only edit — use `--force` there.
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
 - **`swell api` targets the test environment** unless `--live` is passed.
 
@@ -309,6 +316,7 @@ Load a reference when its block is in play; none of them needs to be read up fro
 | `references/frontend-dashboard.md` | Dashboard pages of an `admin` or `integration` app |
 | `references/frontend-storefront.md` | The site of a `storefront` app |
 | `references/app-integrations.md` | Integration apps and `extensions[]` — read first |
+| `references/components.md` | A component for an admin content field |
 | `references/payment-extensions.md` | A `payment` extension or a checkout component |
 | `references/shipping-tax-extensions.md` | A `shipping` or `tax` extension |
 | `references/app-publishing.md` | Versions, installing in other stores, releasing, billing and listing fields |

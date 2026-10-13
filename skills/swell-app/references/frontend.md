@@ -9,7 +9,7 @@ This reference covers what every frontend shares: the template, the connection t
 | Pages for store users, shown inside the Swell dashboard | `admin` or `integration` | Store users | `references/frontend-dashboard.md` |
 | The store's own site | `storefront` | Shoppers | `references/frontend-storefront.md` |
 
-The frontend is separate from `components/`, which holds checkout UI for payment extensions. An integration app may ship both.
+The frontend is separate from `components/`, which holds checkout UI for payment extensions and components for admin content fields (`references/components.md`). An app may ship both.
 
 ## Scaffold from a template
 

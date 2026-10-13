@@ -54,7 +54,15 @@ export default {
 
 ## Authentication
 
-`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request.
+`route.public: true` opens the endpoint to callers without a secret key; through the storefront gateway they still send a public key (next section). `public: false` (or omitted) requires the store's secret key in the request. Exception: a call from the function's **own app's component** through `props.fetch` needs neither `public: true` nor a secret key (route functions only, not hooks or cron). Swell verifies the component's token and passes the caller as `req.swellContext` — `{ appId, installationId, storeId, storeUser, surface }`, `null` on calls without one. A route that serves only merchants checks both fields:
+
+```ts
+if (!(req.swellContext?.surface === 'admin' && req.swellContext.storeUser)) {
+  throw new SwellError('Admin component calls only', { status: 403 });
+}
+```
+
+`storeUser` without `surface` is an admin using the app frontend with a cookie, not a component call. See `references/components.md`.
 
 `req.session` carries the storefront customer session, but only the storefront gateway attaches it (`Swell-Session` header). On every other invocation path it is `null` — see Local testing caveat. Storefront routes typically gate on `req.session?.account_id`.
 

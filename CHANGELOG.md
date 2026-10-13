@@ -4,6 +4,18 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.8.0] - 2026-10-12
+
+App components: an app's own Preact UI rendering admin content fields.
+
+Baseline: `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (`next`), `@swell/app-types` 1.2.9.
+
+### Added
+- `swell-app`: `references/components.md` documents app components in admin content fields (`type: "component"`): files and names, build limits, props, stored types and push checks, layout, focus and modals, calling functions and `/app-api` with `props.fetch`, development, and rendering on other pages; cross-references added to `SKILL.md` and to the content-model, route, frontend, dashboard-frontend, CLI and extension references.
+
+### Changed
+- `swell-app`: from CLI 2.9.27 push hashes the files a function or component imports, so a lib-only edit no longer needs `--force`.
+
 ## [0.7.0] - 2026-10-08
 
 The set is restructured around what is being built. `swell-app` owns the app — scaffolding, resources, runtime clients, frontends, deployment — and two API skills own what the Backend and Frontend APIs do, inside an app or outside one. Each skill was verified by fresh agents building from it alone on a test store: four apps, eight standalone backend integrations, four independent storefronts and three apps that use all three skills.

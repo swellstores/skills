@@ -10,6 +10,7 @@ A frontend is the most expensive way to put something in the dashboard. Go down 
 | --- | --- |
 | List, filter, create and edit records | Content-model views — `references/content-models.md` |
 | A button that does something: on a record, on selected records, in a field, or in the app's settings; optionally asking a few inputs in a dialog first | An action that runs a function, or a workflow when the work outlives a function timeout — `references/actions.md` |
+| A field in a record form that needs its own input: a picker, a preview, a lookup in an outside service | An app component bound to a content field — `references/components.md` |
 | Anything else: multi-step flows, charts and summaries across records, a custom layout, an embedded third-party widget | A frontend |
 
 They combine. A typical app keeps its records in content-model views, runs its one-click operations as actions, and opens a frontend page for the one screen neither can express.
@@ -72,7 +73,7 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
 
 ## Authorize store users
 
-`context.storeUser` is `{ userId, storeId }` for someone signed in to the store's dashboard and `null` for everyone else. That is all Swell says about the viewer.
+`context.storeUser` is `{ userId, storeId }` for someone signed in to the store's dashboard and `null` for everyone else. That is all Swell says about the viewer, apart from `context.surface` on calls from the app's own components (below).
 
 - **Pages.** Read `context.storeUser` before anything else and render the visitor state when it is `null`. In Vinext: `(await getSwellContext())?.storeUser`, as in the scaffold's `components/store-user-card.tsx`. In React the browser cannot tell who is viewing — ask the Worker, as the scaffold's `src/components/store-user-card.tsx` does.
 - **Endpoints and server actions.** Start with `requireStoreUser`. It returns the store user or throws a `SwellError` with status 401 and code `store_user_required`. The scaffold's `POST /app-api/hello` shows where it goes: check the store user, then validate input, then apply the app's own permissions, then do the work.
@@ -81,6 +82,15 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
 - **Looking up the viewer.** To learn more than the id, read `/:users/<userId>` with the Backend client, as the scaffold's store user card does. Once `permissions` in `swell.json` is non-empty that read needs the `read_:users` scope, colon included; without it the read answers 403, which the card handles.
 - **Writes go in POST/PUT/DELETE handlers or server actions.** Swell withholds the store user on a request from another origin unless it is a `GET`, `HEAD` or `OPTIONS`. That is what stops another site from triggering a store-user-only write, and it does not protect a `GET` that changes data.
 - **Ids in the address are input.** A `frontend://shipments/{id}` link delivers an id anyone can type. Validate it and load the record on the server before acting on it.
+- **Calls from the app's own components.** An admin content field component calls `/app-api` with `props.fetch`: no dashboard cookie, but a component token from which Swell signs the context, with the admin as `context.storeUser` and `context.surface` set to `'admin'`. `surface` is `undefined` on every other request, and Swell signs a context for anonymous requests too, so a handler that serves component calls checks both:
+
+  ```ts
+  if (!(context.surface === 'admin' && context.storeUser)) {
+    return Response.json({ error: 'admin_component_only' }, { status: 403 });
+  }
+  ```
+
+  `storeUser` without `surface` is an admin using the frontend with their dashboard cookie. See `references/components.md`.
 
 ## Preview and verify
 
