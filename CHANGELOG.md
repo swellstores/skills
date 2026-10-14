@@ -15,7 +15,7 @@ Baseline: the first `@swell/cli` release after 2.9.27, `@swell/apps-sdk` 2.0.0-a
 - `swell-app`: `references/components.md` points payment components at the same iframe mechanism, documents `call`, mounting a place with `mount(el, { target, select })` (the platform returns every component of the store's active apps that declares the target, the host's `select` picks which to mount) and the `vaultUrl` option; `app-integrations.md`, `shipping-tax-extensions.md` and `SKILL.md` follow: hosted checkout selects the component of the method's app and extension.
 - `swell-app`: `swell create component <Name> --extension <id> --target <id>` adds the fields to the generic component template; the CLI checks the extension and the shape of `targets`, the platform validates target ids and each target's requirements on push (`checkout.payment.methods` needs a `payment` extension).
 - `swell-app`: the component gets the whole cart as `context.cart`.
-- `swell-app`: `references/payment-extensions.md` describes server-side finalization with the Razorpay app as the example: the capture is the claim, a saved card is the fallback, fail closed on a captured payment with no owner, and subscriptions through the card token.
+- `swell-app`: `references/payment-extensions.md` describes server-side finalization for a card gateway that saves cards: the capture is the claim, a saved card is the fallback, fail closed on a captured payment with no owner, subscriptions through the card token, and slow charges finished asynchronously (`async: true`, a workflow, a sweep).
 - A string `extension` is the legacy `swell.app` contract: hosted checkout no longer renders it.
 
 ## [0.8.0] - 2026-10-12
