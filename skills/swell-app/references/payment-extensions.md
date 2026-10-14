@@ -199,11 +199,11 @@ Verify: `swell logs --type function --app=.` — two `payment.charge` entries fo
 
 A payment method that needs browser UI (a card form, a provider's modal) ships a **payment component**: a Preact component in the same iframe mechanism as admin field components, with a place of its own in hosted checkout. Read `components.md` for files, build limits, layout and the props they share. Requires `@swell/apps-sdk` 2.0.0-alpha.7 and the first `@swell/cli` release after 2.9.27.
 
-Scaffold it from the extension in `swell.json`:
+Scaffold it with the extension of `swell.json` and the place:
 
-    swell create component Razorpay --extension card -y
+    swell create component <Name> --extension <extension id> --target checkout.payment.methods -y
 
-The CLI refuses an id that is not a `payment` extension of `swell.json`, and an extension that already has a component (the push rules below). The file it writes is the contract in full:
+The CLI writes the generic component template with `extension: { id }` and `targets` added to its `config`. It refuses an extension id that `swell.json` does not declare and an extension that already has a component. The rest of the file is yours; a payment component looks like this:
 
 ```tsx
 import { useEffect } from "preact/hooks";
@@ -236,16 +236,17 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
 ```
 
 - `extension: { id }` must be an object (`{ id: "<extension id>" }`) naming a `payment` extension declared once in `swell.json`; `targets: [{ id: "checkout.payment.methods" }]` opts the component into hosted checkout's payment methods place. One component per extension. Push adds the extension `type` to the stored values (`extension: { id, type }`) and the platform serves only `payment` ones to the place. The functions of the extension keep `config.extension` as the plain id string; only the component's `extension` is an object.
-- `targets` without an object `extension` fails push, and so does a `targets` entry other than `checkout.payment.methods`. The messages, as `swell app push` prints them:
-  - `extension "<id>" is not declared in swell.json`
-  - `extension "<id>" is declared more than once in swell.json`
-  - `extension "<id>" is a <type> extension; only payment extensions can have components yet`
-  - `extension "<id>" already has the component <Name>`
-  - `extension must be an object with an id, like { id: "card" }`
-  - `target "<id>" needs a payment extension: add extension: { id: "<extension id>" }`
-  - `targets need extension as an object, like { id: "card" }; a string extension is the legacy swell.app contract`
-  - `unknown target "<id>"; known targets: checkout.payment.methods`
-  - `targets must be a list like [{ id: "checkout.payment.methods" }]`
+- Push checks a component in two places, and `swell app push` prints the messages of both:
+  - The CLI checks the extension and the shape of `targets`:
+    - `extension "<id>" is not declared in swell.json`
+    - `extension "<id>" is declared more than once in swell.json`
+    - `extension "<id>" already has the component <Name>`
+    - `extension must be an object with an id, like { id: "card" }`
+    - `targets must be a list of objects with an id, like [{ id: "<target id>" }]`
+  - The platform owns the list of targets and what each one needs. Today the only target is `checkout.payment.methods`, which needs an object `extension` of a `payment` extension:
+    - `Unknown component target '<id>'. Known targets: checkout.payment.methods`
+    - `Target 'checkout.payment.methods' needs extension: { id } of a payment extension declared in swell.json` (followed by the reason: a string extension is the legacy contract, or the extension has another type)
+    - `Component targets must be an array of { id }, ...` and `Component target at index <n> must be { id } with a non-empty string id.`
 - The scaffold writes `components/tsconfig.json`, adds `preact` and `@swell/apps-sdk` (types only) and extends the `typecheck` script, as for any component (`components.md`, "Files and names"); run `npm install` after.
 - Components bundle for the browser. Keep provider SDKs that need secrets, Node-only APIs and secret-bearing modules out of component code. Browser-safe helpers in `components/lib/` may be imported from `functions/`; never import the other direction.
 
