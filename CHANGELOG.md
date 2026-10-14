@@ -12,7 +12,10 @@ Baseline: the first `@swell/cli` release after 2.9.27, `@swell/apps-sdk` 2.0.0-a
 
 ### Changed
 - `swell-app`: the checkout component section of `references/payment-extensions.md` is rewritten for the new contract. A component declares `extension: { id }` and `targets: [{ id: 'checkout.payment.methods' }]`, receives `context: { cart, method }`, registers `on('submit')` and `on('redirect')` handlers that return `{ billing }`, and reaches the extension's `payment.create_intent` and `payment.get_intent` hooks with `call('createIntent' | 'getIntent', data)`. It includes push errors, the billing persistence contract, rendering in hosted checkout and merchant storefronts, a migration table from the `swell.app` props, and updated verification steps.
-- `swell-app`: `references/components.md` points payment components at the same iframe mechanism, documents `call`, mounting a place with `mount(el, { target, filters })` and the `vaultUrl` option; `app-integrations.md`, `shipping-tax-extensions.md` and `SKILL.md` follow: checkout binds a component by its extension, shipping and tax components fail push.
+- `swell-app`: `references/components.md` points payment components at the same iframe mechanism, documents `call`, mounting a place with `mount(el, { target, select })` (the platform returns every component of the store's active apps that declares the target, the host's `select` picks which to mount) and the `vaultUrl` option; `app-integrations.md`, `shipping-tax-extensions.md` and `SKILL.md` follow: hosted checkout selects the component of the method's app and extension.
+- `swell-app`: `swell create component <Name> --extension <id> --target <id>` adds the fields to the generic component template; the CLI checks the extension and the shape of `targets`, the platform validates target ids and each target's requirements on push (`checkout.payment.methods` needs a `payment` extension).
+- `swell-app`: the component gets the whole cart as `context.cart`.
+- `swell-app`: `references/payment-extensions.md` describes server-side finalization with the Razorpay app as the example: the capture is the claim, a saved card is the fallback, fail closed on a captured payment with no owner, and subscriptions through the card token.
 - A string `extension` is the legacy `swell.app` contract: hosted checkout no longer renders it.
 
 ## [0.8.0] - 2026-10-12
