@@ -235,7 +235,7 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
 }
 ```
 
-- `extension: { id }` must be an object (`{ id: "<extension id>" }`) naming a `payment` extension declared once in `swell.json`; `targets: [{ id: "checkout.payment.methods" }]` opts the component into hosted checkout's payment methods place. One component per extension. Push adds the extension `type` to the stored values (`extension: { id, type }`) and the platform serves only `payment` ones to the place. The functions of the extension keep `config.extension` as the plain id string; only the component's `extension` is an object.
+- `extension: { id }` must be an object (`{ id: "<extension id>" }`) naming a `payment` extension declared once in `swell.json`; `targets: [{ id: "checkout.payment.methods" }]` opts the component into hosted checkout's payment methods place. One component per extension. Push adds the extension `type` to the stored values (`extension: { id, type }`). Hosted checkout shows the component of the app the merchant bound to the method and whose `extension.id` is the method id. The functions of the extension keep `config.extension` as the plain id string; only the component's `extension` is an object.
 - Push checks a component in two places, and `swell app push` prints the messages of both:
   - The CLI checks the extension and the shape of `targets`:
     - `extension "<id>" is not declared in swell.json`
@@ -326,7 +326,7 @@ await handle.ready;
 const { billing } = await handle.emit("submit", { billing: cart.billing });
 ```
 
-`createIntent` and `getIntent` work there too (vault `https://vault.schema.io`, `vaultUrl` option to change it); the host then saves the returned billing itself. Hosted checkout mounts by place: `mount(el, { target: "checkout.payment.methods", filters: { method }, context: { cart, method } })` returns a handle whose `emit` resolves with an array, one result per component that handled the event.
+`createIntent` and `getIntent` work there too (vault `https://vault.schema.io`, `vaultUrl` option to change it); the host then saves the returned billing itself. Hosted checkout mounts by place: `mount(el, { target: "checkout.payment.methods", select: (c) => c.app === method.extension_app_id && c.extension?.id === method.id, context: { cart, method } })` returns a handle whose `emit` resolves with an array, one result per component that handled the event.
 
 ### Migrating from the swell.app contract
 
