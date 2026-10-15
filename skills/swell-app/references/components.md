@@ -2,7 +2,7 @@
 
 An app component is a Preact UI that renders a **content field** in the admin in place of a built-in input. It runs in a cross-origin iframe on the app installation's origin (`https://<store>--<installation>--app.swell.store`): no access to the admin DOM, storage or session. Swell serves the frame page and its runtime from `/.swell/components/` and `/.swell/sdk/` on that origin (reserved: an app frontend cannot use these paths); the app ships only the component.
 
-A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component. A string `config.extension` is the legacy `swell.app` contract, not an iframe.
+A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component.
 
 Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`).
 

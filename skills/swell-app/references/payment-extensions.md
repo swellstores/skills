@@ -245,7 +245,7 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
     - `targets must be a list of objects with an id, like [{ id: "<target id>" }]`
   - The platform owns the list of targets and what each one needs. Today the only target is `checkout.payment.methods`, which needs an object `extension` of a `payment` extension:
     - `Unknown component target '<id>'. Known targets: checkout.payment.methods`
-    - `Target 'checkout.payment.methods' needs extension: { id } of a payment extension declared in swell.json` (followed by the reason: a string extension is the legacy contract, or the extension has another type)
+    - `Target 'checkout.payment.methods' needs extension: { id } of a payment extension declared in swell.json`
 - The scaffold writes `components/tsconfig.json`, adds `preact` and `@swell/apps-sdk` (types only) and extends the `typecheck` script, as for any component (`components.md`, "Files and names"); run `npm install` after.
 - Components bundle for the browser. Keep provider SDKs that need secrets, Node-only APIs and secret-bearing modules out of component code. Browser-safe helpers in `components/lib/` may be imported from `functions/`; never import the other direction.
 
@@ -328,20 +328,6 @@ const { billing } = await handle.emit("submit", { billing: cart.billing });
 
 `createIntent` and `getIntent` work there too (vault `https://vault.schema.io`, `vaultUrl` option to change it); the host then saves the returned billing itself. Hosted checkout mounts by place: `mount(el, { target: "checkout.payment.methods", select: (c) => c.app === method.extension_app_id && c.extension?.id === method.id, context: { cart, method } })` returns a handle whose `emit` resolves with an array, one result per component that handled the event.
 
-### Migrating from the swell.app contract
-
-A string `extension` (`extension: "my-method"`) is the legacy contract. A legacy component still builds the old IIFE for `swell.app` on merchant storefronts; hosted checkout no longer renders it, so a legacy-only app shows no payment UI there. Move to the object `extension`, a `targets` entry and the props below:
-
-| Old prop (swell.app) | New |
-|---|---|
-| `registerHandlers({ onSubmit })` | `on("submit", ...)` returning `{ billing }` |
-| `registerHandlers({ handleRedirect })` | `on("redirect", ...)` returning `{ billing }` |
-| `createIntent(data)` / `getIntent(data)` | `call("createIntent", data)` / `call("getIntent", data)` |
-| `updateCart(data)` | return `{ billing }`; the host saves it |
-| `loadLib(id, url)` | a `<script>` in the component (the frame is its own document) |
-| `onReady()` | not needed; the host waits for the component to mount |
-| `cart`, `settings` | `context.cart`, `settings` |
-
 ## Verification & Common Mistakes
 
 Verify in order:
@@ -363,8 +349,7 @@ Common mistakes:
 - Forgetting `config.extension` — the function misses extension-scoped dispatch.
 - Returning raw provider errors or large provider objects instead of the platform return contract.
 - Reading secret settings in the checkout component.
-- A string `extension` or no `targets` in the component: hosted checkout renders nothing for it.
+- No `targets` in the component, or `extension` that is not an object: hosted checkout renders nothing for it.
 - Registering `submit` on every render without the effect cleanup: the frame runs only the first handler registered, so it keeps stale props.
-- Waiting for `onReady`, `updateCart` or `registerHandlers`: they do not exist on payment components (see the migration table).
 - Opening a provider modal from an empty component.
 - Assuming deploy alone proves the native payment flow selected the extension (Critical Contract #2).
