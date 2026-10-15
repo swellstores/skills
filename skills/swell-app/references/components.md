@@ -2,9 +2,9 @@
 
 An app component is a Preact UI that renders a **content field** in the admin in place of a built-in input. It runs in a cross-origin iframe on the app installation's origin (`https://<store>--<installation>--app.swell.store`): no access to the admin DOM, storage or session. Swell serves the frame page and its runtime from `/.swell/components/` and `/.swell/sdk/` on that origin (reserved: an app frontend cannot use these paths); the app ships only the component.
 
-A component with `config.extension` is a checkout payment component instead: a different mechanism, not an iframe — `references/payment-extensions.md`. Never put `config.extension` on a field component.
+A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component.
 
-Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry.
+Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`).
 
 ## Files and names
 
@@ -35,6 +35,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
   setValidity(error: string | null): void;
   readonly fetch: typeof fetch;
   on(event: string, handler: (data: unknown) => unknown): () => void;
+  call<T = unknown>(name: string, data?: unknown): Promise<T>;
 }
 ```
 
@@ -50,9 +51,10 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 | `setValidity(msg)` | A message blocks saving and shows under the field when the merchant saves; `null` clears it. |
 | `fetch` | See "Calling the backend". |
 | `on` | The admin sends no events. |
+| `call(name, data)` | The admin offers no actions: it rejects with `Unknown host action "<name>"`. Hosts that mount with `actions` offer theirs, and payment components get `createIntent` and `getIntent` (`payment-extensions.md`). |
 
 - Prop changes arrive as a **re-render with new props**; there is no change event. `setValue` re-renders with the new value at once and the host does not echo it back. The host sends a value only when it changes elsewhere (form reset, another edit) or to restore the previous one when it refuses yours.
-- `setValue`, `setValidity`, `fetch` and `on` keep their identity across renders. Values must be structured-cloneable.
+- `setValue`, `setValidity`, `fetch`, `on` and `call` keep their identity across renders. Values must be structured-cloneable.
 - `context.record` is the record **with unsaved edits** on a record page, the row in a collection-field row, and the modal's values in an app action modal (no record id there).
 - `required` is checked by the admin ("Required" for an empty value). Use `setValidity` for values that are set but invalid. When a save stops at this field, the admin focuses the component's first control.
 - A component that fails to start shows its error under the field; the rest of the form works. An error after it started shows as a warning and does not block saving.
@@ -108,7 +110,9 @@ const preview = await props.fetch('/app-api/label-preview'); // the app's fronte
 
 ## Other pages
 
-Any page on a `*.swell.store` address can render an installed app's components with `createComponents({ storeId, publicKey })` from `@swell/apps-sdk/components`, then `mount(target, { app, component, value, params, context })`. The handle has `ready`, `on('change' | 'validity' | 'error')`, `update`, `emit`, `focus` and `unmount`. Frames refuse other parents (custom domains included), there is no shopper token (`props.fetch` calls are anonymous), and a moved mount element reloads the frame.
+Any page on a `*.swell.store` address can render an installed app's components with `createComponents({ storeId, publicKey })` from `@swell/apps-sdk/components`, then `mount(target, { app, component, value, params, context })`. The handle has `ready`, `on('change' | 'validity' | 'error')`, `update`, `emit`, `focus` and `unmount`. `actions` in the mount options are host functions a component reaches with `call(name, data)`. Frames refuse other parents (custom domains included), there is no shopper token (`props.fetch` calls are anonymous), and a moved mount element reloads the frame.
+
+`mount(el, { target, select, context })` instead of `app` and `component` mounts a host **place** (`@swell/apps-sdk` 2.0.0-alpha.7 or later). The platform returns every component of the store's active apps that declares the target, and the host's `select(component)` picks which to mount: it gets each component's `name`, `app`, `targets` and `extension` (no settings) before any frame is created, and without it all are mounted. Hosted checkout keeps the component of the selected method's app and extension: `select: (c) => c.app === method.extension_app_id && c.extension?.id === method.id`. The handle adds `components` (`{ app, name }[]` of the mounted ones, known after `ready`), has no bound value, and `emit` resolves with an array, one result per component that handled the event. `select` is fixed at mount; a `select` that throws fails `ready`. Payment components also get built-in `createIntent` and `getIntent` actions served by the Swell vault (`vaultUrl` option of `createComponents`, default `https://vault.schema.io`); hosts cannot override them.
 
 ## Errors
 

@@ -6,7 +6,7 @@ Read before authoring or debugging any extension. Then load `payment-extensions.
 
 `swell app push` deploys code; it does not activate it. Dispatch fires only when (a) a native settings record selects this app via `extension_app_id`/`extension_config_id`, AND (b) the handler's `config.extension` matches the manifest extension `id`. Most "function never runs" reports are merchant-activation gaps, not code bugs.
 
-The extension `id` is the stable join key — `swell.json` extension `id`, function/component `config.extension`, and platform `extension_config_id` must all match exactly.
+The extension `id` is the stable join key — `swell.json` extension `id`, function `config.extension` (a string), component `config.extension.id` (an object, see `payment-extensions.md`), and platform `extension_config_id` must all match exactly.
 
 `swell inspect extensions [--app=.]` returns three structured routing fields. Branch on `action_owner` first:
 
@@ -67,7 +67,7 @@ Extension fields (current platform branch):
 Two payment traps in that table:
 
 - **`method` does not rename the method record.** The Admin always writes `methods.<extension.id>` (`methods.card` for card gateways) and reads `method` only to decide card vs. alt. Declaring `{"id": "my-method", "method": "my-method-pay"}` activates `methods.my-method`, but `swell inspect extensions` looks up `methods.my-method-pay` and reports a false `not activated`. Leave `method` unset unless the value is exactly `"card"`.
-- **A card-gateway extension needs `id: "card"` too.** Checkout renders app components with `component.extension === selectedMethod.id`, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs can never render its component. Keep the extension `id` free of underscores here in particular: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>`, and older builds recover the pair by splitting on every `_`, which truncates an underscored extension id into a `extension_config_id` that never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
+- **A card-gateway extension needs `id: "card"` too.** Checkout matches the component by extension: of the components the platform returns for its place, it mounts the one of the method's app whose `extension.id` is the selected method id, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs is never matched, so its component can never render. Keep the extension `id` free of underscores here in particular: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>`, and older builds recover the pair by splitting on every `_`, which truncates an underscored extension id into a `extension_config_id` that never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
 
 Per-extension display assets do not render. `gateway_logo_src`/`gateway_icon_src` and the `method_*`/`carrier_*` pairs are their declared home, but the installer matches uploaded image paths against `app.highlights` — a field whose schema is only `id`/`title`/`description`/`image_src` — so `extension_assets[]` is never populated and the Admin falls back to the app-level icon (`logo_src`, else `assets/icon.*`). Ship one app icon; do not rely on these fields or on `gateway`.
 
@@ -82,7 +82,7 @@ const settings = await req.swell.settings();                       // default
 const settings = await req.swell.settings(`${req.appId}/my-method`); // explicit
 ```
 
-Mark fields `"public": true` to expose to checkout components; provider secrets must remain non-public. Do not invent extension-specific settings APIs — the standard `req.swell.settings()` is the only access path.
+Mark fields `"public": true` to expose to checkout components (`settings` prop); provider secrets must remain non-public. Do not invent extension-specific settings APIs — the standard `req.swell.settings()` is the only access path.
 
 A settings config's **name** is the file basename with underscores converted to hyphens — `settings/my_method.json` deploys as name `my-method`. That name is both the settings group key passed to `req.swell.settings()` as `<appId>/<name>` and the key the Admin matches on. The Admin picks an extension's settings panel in this order:
 
@@ -97,7 +97,7 @@ Rules 2 and 3 compare against the **deployed** name. Newer Admin builds normaliz
 Before authoring:
 
 - Extension `type` and `id`, and the native flow that will select them.
-- Whether a checkout component is needed (payment only — shipping/tax/generic have no component host today).
+- Whether a checkout component is needed (payment only — shipping/tax have no component place yet).
 - Which settings are credentials/options.
 - How you'll prove activation: `swell inspect extensions app.<slug>.<extId>` → `action_owner`/`action`.
 

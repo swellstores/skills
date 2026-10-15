@@ -4,6 +4,19 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.9.0] - 2026-10-15
+
+Payment components: checkout payment UI on the app components iframe contract.
+
+Baseline: `@swell/cli` 2.9.28, `@swell/apps-sdk` 2.0.0-alpha.7 (`next`), `@swell/app-types` 1.2.9.
+
+### Changed
+- `swell-app`: the checkout component section of `references/payment-extensions.md` is rewritten for the new contract. A component declares `extension: { id }` and `targets: [{ id: 'checkout.payment.methods' }]`, receives `context: { cart, method }`, registers `on('submit')` and `on('redirect')` handlers that return `{ billing }`, and reaches the extension's `payment.create_intent` and `payment.get_intent` hooks with `call('createIntent' | 'getIntent', data)`. It includes push errors, the billing persistence contract, rendering in hosted checkout and merchant storefronts, and updated verification steps.
+- `swell-app`: `references/components.md` points payment components at the same iframe mechanism, documents `call`, mounting a place with `mount(el, { target, select })` (the platform returns every component of the store's active apps that declares the target, the host's `select` picks which to mount) and the `vaultUrl` option; `app-integrations.md`, `shipping-tax-extensions.md` and `SKILL.md` follow: hosted checkout selects the component of the method's app and extension.
+- `swell-app`: `swell create component <Name> --extension <id> --target <id>` adds the fields to the generic component template; the CLI checks the extension and the shape of `targets`, the platform validates target ids and each target's requirements on push (`checkout.payment.methods` needs a `payment` extension).
+- `swell-app`: the component gets the whole cart as `context.cart`.
+- `swell-app`: `references/payment-extensions.md` describes server-side finalization for a card gateway that saves cards: the capture is the claim, a saved card is the fallback, fail closed on a captured payment with no owner, subscriptions through the card token, and slow charges finished asynchronously (`async: true`, a workflow, a sweep).
+
 ## [0.8.0] - 2026-10-12
 
 App components: an app's own Preact UI rendering admin content fields.
