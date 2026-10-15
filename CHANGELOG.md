@@ -4,11 +4,11 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
-## [0.9.0] - 2026-10-13
+## [0.9.0] - 2026-10-15
 
 Payment components: checkout payment UI on the app components iframe contract.
 
-Baseline: the first `@swell/cli` release after 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.7 (`next`), `@swell/app-types` 1.2.9.
+Baseline: `@swell/cli` 2.9.28, `@swell/apps-sdk` 2.0.0-alpha.7 (`next`), `@swell/app-types` 1.2.9.
 
 ### Changed
 - `swell-app`: the checkout component section of `references/payment-extensions.md` is rewritten for the new contract. A component declares `extension: { id }` and `targets: [{ id: 'checkout.payment.methods' }]`, receives `context: { cart, method }`, registers `on('submit')` and `on('redirect')` handlers that return `{ billing }`, and reaches the extension's `payment.create_intent` and `payment.get_intent` hooks with `call('createIntent' | 'getIntent', data)`. It includes push errors, the billing persistence contract, rendering in hosted checkout and merchant storefronts, a migration table from the `swell.app` props, and updated verification steps.

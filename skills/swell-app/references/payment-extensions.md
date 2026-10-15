@@ -197,7 +197,7 @@ Verify: `swell logs --type function --app=.` — two `payment.charge` entries fo
 
 ## Checkout Component
 
-A payment method that needs browser UI (a card form, a provider's modal) ships a **payment component**: a Preact component in the same iframe mechanism as admin field components, with a place of its own in hosted checkout. Read `components.md` for files, build limits, layout and the props they share. Requires `@swell/apps-sdk` 2.0.0-alpha.7 and the first `@swell/cli` release after 2.9.27.
+A payment method that needs browser UI (a card form, a provider's modal) ships a **payment component**: a Preact component in the same iframe mechanism as admin field components, with a place of its own in hosted checkout. Read `components.md` for files, build limits, layout and the props they share. Requires `@swell/apps-sdk` 2.0.0-alpha.7 and `@swell/cli` 2.9.28.
 
 Scaffold it with the extension of `swell.json` and the place:
 
