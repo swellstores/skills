@@ -246,7 +246,6 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
   - The platform owns the list of targets and what each one needs. Today the only target is `checkout.payment.methods`, which needs an object `extension` of a `payment` extension:
     - `Unknown component target '<id>'. Known targets: checkout.payment.methods`
     - `Target 'checkout.payment.methods' needs extension: { id } of a payment extension declared in swell.json` (followed by the reason: a string extension is the legacy contract, or the extension has another type)
-    - `Component targets must be an array of { id }, ...` and `Component target at index <n> must be { id } with a non-empty string id.`
 - The scaffold writes `components/tsconfig.json`, adds `preact` and `@swell/apps-sdk` (types only) and extends the `typecheck` script, as for any component (`components.md`, "Files and names"); run `npm install` after.
 - Components bundle for the browser. Keep provider SDKs that need secrets, Node-only APIs and secret-bearing modules out of component code. Browser-safe helpers in `components/lib/` may be imported from `functions/`; never import the other direction.
 
@@ -354,7 +353,7 @@ Verify in order:
 5. The checkout component frame loads: `swell inspect extensions app.<slug>.<extId>` lists the component among the extension's bound components, and in hosted checkout the selected method shows its content and the order button enables.
 6. `call("createIntent", data)` resolves with browser-safe provider data.
 7. `submit` returns billing with the method's token under `billing.<methodId>` and the provider intent id under `billing.intent.<provider>.id`; the order's billing carries them.
-8. Creating an order invokes `payment.charge` — **twice** for a card gateway (`captured: false` then `captured: true`, same `transaction_id` both times), **exactly once** for an alt method (`captured: undefined`). Every call returns `success: true`.
+8. Creating an order invokes `payment.charge` — **twice** for a card gateway (`captured: false` then `captured: true`, same `transaction_id` both times), **exactly once** for an alt method (`captured: undefined`). Every call returns `success: true`, or `{ async: true }` for a charge the extension finishes later, which then records `success` on the payment.
 9. Refunding invokes `payment.refund` and returns `success: true` with a refund `transaction_id`.
 10. `swell logs --type function --app=.` shows the expected invocations and no hidden provider errors. On a card gateway it shows two `payment.charge` calls for the order.
 
