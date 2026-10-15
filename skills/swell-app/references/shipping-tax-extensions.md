@@ -167,7 +167,7 @@ Verify in order:
 
 Common mistakes:
 
-- Adding `components/*.tsx` for shipping or tax UI expecting checkout to show it — a component may name a shipping or tax extension, but no place renders one: the only checkout target, `checkout.payment.methods`, needs a `payment` extension, so push fails for it (`Target 'checkout.payment.methods' needs extension: { id } of a payment extension declared in swell.json`). Components render only in hosted checkout's payment methods place and admin content fields today.
+- Adding `components/*.tsx` for shipping or tax UI — no place renders components for shipping or tax yet, so the component deploys but never shows.
 - Treating `order.shipping` or `order.taxes` as ordinary async model events.
 - Forgetting `config.extension`, or setting it to a value that doesn't equal the manifest extension `id` — the function misses extension-scoped dispatch.
 - Returning a full provider response instead of the narrow merge fields.
