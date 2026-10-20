@@ -110,9 +110,7 @@ Fields an app adds to a standard model are written under `$app` via `req.appValu
 await req.swell.put(`/products/${id}`, req.appValues({ review_count: 42, average_rating: 4.5 }));
 ```
 
-They come back under `$app.<app_id>.*` automatically — no explicit `expand` needed — on the Backend API and inside app functions. Whether a storefront can read them is a separate question: see "Storefront exposure" in `references/data-models.md`. For app-defined collections, write directly at the root.
-
-Writes to `$app` **deep-merge** with the stored subdocument — fields you don't send are preserved. To replace outright, use the `$set` operator: `{ "$app": { "$set": { "my_app": {...} } } }` replaces the whole app subdocument; `{ "$app": { "my_app": { "$set": { "config": {} } } } }` replaces a single field without merging into its prior value. Arrays deep-merge too, and never shrink on a plain write. Elements **with** an `id` align by id: a matching stored element merges in place, an unknown id appends. Elements **without** an `id` merge **positionally** — source index `i` merges into stored index `i` regardless of what is there, and appends only past the end of the stored array. So a plain write of `[{qty: 2}]` rewrites the first stored element rather than adding one. Append with `$push`; replace with `$set`. These are the Backend API's write rules, not something specific to `$app`; the `swell-backend-api` skill's `references/writes.md` covers the operators in full.
+They come back under `$app.<app_id>.*` automatically — no explicit `expand` needed — on the Backend API and inside app functions. They merge and take field operators like the record's own fields, as the `swell-backend-api` skill's `references/writes.md` describes. Whether a storefront can read them is a separate question: see "Storefront exposure" in `references/data-models.md`. For app-defined collections, write directly at the root.
 
 ## Return values and errors
 

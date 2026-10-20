@@ -56,20 +56,13 @@ Where an id is supplied instead of generated, in a `$set` or on a new nested ele
 
 ## App fields on a standard record
 
-An app's fields live under `$app.<app_id>` and merge like the rest of the record. The operators take different forms there. `PUT /products/<id>` with:
+An app's fields live under `$app.<app_id>`. They merge as in "An update merges" and take the operators of "Replacing and editing", on the field and by path. `PUT /products/<id>` with:
 
 ```js
-// Replace one field: $set directly inside the app's object
-{ $app: { my_app: { $set: { badges: ['new'] } } } }
-// Replace everything the app stores on the record; other apps' data is untouched
-{ $app: { $set: { my_app: { badges: ['new'] } } } }
-// Remove a field: a dotted path starting with the app id
-{ $app: { $unset: ['my_app.badges'] } }
+{ $app: { my_app: { badges: { $set: ['new'] } } } }   // replace the array
+{ $inc: { '$app.my_app.points': -5 } }                // a top-level operator by path
+{ $app: { $set: { my_app: { badges: ['new'] } } } }   // replace everything the app stores on the record
 ```
-
-- **The form on the field does not replace inside `$app`.** `{ $app: { my_app: { badges: { $set: ['new'] } } } }` does not leave `['new']`. Use the first form above.
-- **`$unset` with only the app id is ignored.** An app's whole object is replaced, not removed.
-- **The top-level operators reach an app field by its path:** `{ $inc: { '$app.my_app.points': -5 } }`.
 
 ## Child records through the parent
 
