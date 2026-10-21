@@ -74,7 +74,7 @@ The form is the same for a standard model (`'before:product.updated'`) and for o
 
 ## Hooks on declared events
 
-A hook can name any event the model declares: `created`, `updated` and `deleted`, the domain events of standard models (`before:order.paid`, `after:subscription.canceled`) and the custom events of your own collections. A hook on a domain or custom event runs inside the write that triggers the event: the write after which the event's `conditions` hold. They are checked on the pending write the same way as on the saved one: bare keys are the record after the write, `$record` the record before it. So `before:order.paid` can change or reject the write that makes an order paid, including the create of an order that is paid from the start.
+A hook can name any event the model declares: `created`, `updated` and `deleted`, the domain events of standard models (`before:order.paid`, `after:subscription.canceled`) and the custom events of your own collections. A hook on a domain or custom event runs inside the write that triggers the event: the write after which the event's `conditions` hold. They are checked on the pending write, with the changes its `before:created` or `before:updated` hooks return, the same way as on the saved one: bare keys are the record after the write, `$record` the record before it. So `before:order.paid` can change or reject the write that makes an order paid, including the create of an order that is paid from the start.
 
 List a model's declared events with `swell inspect models /orders` and read `events.types`. Standard models already ship their domain events; subscribe to them, never redeclare them.
 
