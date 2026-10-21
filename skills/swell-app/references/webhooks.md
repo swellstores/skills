@@ -26,5 +26,6 @@ The delivery contract in full — payload shapes per event type, the retry sched
 1. `enabled` is `false` in the manifest (above).
 2. The app is inactive in that environment — `active: false` on the installed app suppresses every app-owned webhook delivery with no error. See "When a function does not run" in `references/functions.md`.
 3. It was auto-disabled.
+4. The write changed only app fields. Such an `updated` event reaches an app's webhook only when that app's own fields changed.
 
 **Recovering an auto-disabled webhook.** After ~4 consecutive days of failures with no success the platform sets `enabled: false` alongside `auto_disabled: true`, and dispatch tests only `enabled`. Setting `enabled` back to true is what revives it — the platform then replays all pending events and clears `auto_disabled`. For an app-owned webhook that flip rides on re-installing the manifest, i.e. `swell app push`, and push skips files whose hash is unchanged: fixing the endpoint without touching `webhooks/*.json` leaves the webhook dark. Use `swell app push --force`, exactly as with an auto-disabled function, then confirm `auto_disabled` cleared with `swell inspect webhooks <key>`. List mode (`swell inspect webhooks --app=.`) surfaces auto-disable status, subscribed events, and failure counts.
