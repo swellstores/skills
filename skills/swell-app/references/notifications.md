@@ -2,7 +2,7 @@
 
 Notifications are transactional emails triggered by model events, defined in `./notifications/` using a paired-file convention: a JSON manifest (`<name>.json`) and a Liquid template (`<name>.tpl`) must share the same base filename. Consult `swell schema notification --format=dts` for all configuration properties.
 
-**Event binding.** Set `event` to `created`, `updated`, or an event declared in the collection's data model; push refuses any other, `deleted` included, so mail on a delete belongs in a function. Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.` and by triggering the event; the list key includes the model since name alone is not unique within an app. File basenames must not contain `.` — push rejects them, because the inspect identifier grammar splits on dots.
+**Event binding.** Set `event` to `created`, `updated`, or an event the collection declares, including one your app's model file adds to a standard collection; push refuses any other, `deleted` included, so mail on a delete belongs in a function. Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.` and by triggering the event; the list key includes the model since name alone is not unique within an app. File basenames must not contain `.` — push rejects them, because the inspect identifier grammar splits on dots.
 
 **Once per record by default.** `repeat` defaults to `false`: before sending, the platform counts existing messages for `(template, record_id)` and skips when any exist, so a notification bound to `order.updated` fires on the *first* qualifying update to an order and never again for that order. Set `"repeat": true` for anything that should send more than once per record.
 
