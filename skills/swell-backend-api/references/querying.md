@@ -94,6 +94,8 @@ await swell.get('/orders', {
 // { count: 10, results: [{ month: 1, orders: 310, revenue: 28411.5 }, …] }
 ```
 
+A field to group by that has a path, such as `billing.country` or an app field, comes back nested at that path: `{ billing: { country: 'US' }, orders: 12 }`.
+
 With accumulators only there is nothing to group by, and the answer is `{ results: [{ … }] }` with a single entry and no `count`.
 
 `aggregate` runs a MongoDB pipeline, in MongoDB's own syntax with `$`-prefixed field references:
