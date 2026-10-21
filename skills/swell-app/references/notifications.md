@@ -14,11 +14,13 @@ Also: `new: true` restricts sending to record creation (POST) only; `conditions`
 
 **Child collections.** Use colon notation for the collection (`"collection": "reviews:comments"`). In templates, the parent record is accessible via the `parent` variable; expand upward with `"expand": ["parent", "parent.product"]`.
 
-The `.tpl` file uses Liquid syntax. Record fields are accessed directly (`{{ product.name }}`), child collection parents via `{{ parent.field }}`. Two global objects are available in all templates, plus a `get` filter:
+The `.tpl` file uses Liquid syntax. Record fields are accessed directly (`{{ product.name }}`), child collection parents via `{{ parent.field }}`. Three global objects are available in all templates, plus a `get` filter:
 
 `settings` — App settings from `./settings/`, enabling conditional content: `{% if settings.rewards.enabled %}...{% endif %}`.
 
 `store` — Store metadata: `name`, `url`, `logo`, `currency`, `support_email`.
+
+`app` — `{{ app.admin_url }}` links to the app's page in the dashboard, in the environment the notification is sent from.
 
 `get` — a Liquid **filter**, not a function: `{{ '/products/abc' | get }}` fetches additional Swell data during rendering. It takes only the URL string — there is no second `data` argument, so interpolate any parameters into the URL yourself.
 
