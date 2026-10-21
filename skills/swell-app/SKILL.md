@@ -147,9 +147,8 @@ Read `references/webhooks.md` before adding one.
 
 A transactional email: a manifest that binds to a model event, and a Liquid template with the same basename. Sent to an address taken from the record (`contact`) or to the store's administrators.
 
-- Sent on record create and update only. `deleted` is accepted by the schema and never sends; use a function or webhook for that.
+- Sent on `created`, `updated`, or an event declared in the collection's data model; mail on a delete belongs in a function.
 - **Once per record by default**: a notification bound to an update sends on the first qualifying update and never again for that record unless `repeat` is set.
-- A custom `event` must be declared in the collection's data model. An undeclared one deploys silently and never sends.
 
 Read `references/notifications.md` before authoring one.
 
