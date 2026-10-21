@@ -107,7 +107,7 @@ Calling a route from outside Swell:
 Limits that hold for every function:
 
 - **Edge runtime (Cloudflare Workers), not Node.js**: Web APIs such as `fetch` and Web Crypto, no Node built-ins.
-- **A 10-second limit**, detailed in `references/functions.md`. A response is cut off at 75,000 bytes. Work that does not fit is a workflow; large results are paginated.
+- **A 10-second limit**, detailed in `references/functions.md`. Work that does not fit is a workflow.
 - **No environment variables or secrets.** Configuration comes from the app's settings only (see "Configuration and secrets").
 - **A function acts as the app**, with the app's `permissions`, whoever or whatever triggered it. `req.swell` is its client to the store's data and follows Backend API semantics.
 

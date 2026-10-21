@@ -8,7 +8,6 @@ Each top-level file exports a `config` object with exactly one trigger (`model`,
 
 - **Edge runtime, not Node.js.** Functions run on Cloudflare Workers in service-worker format with no `nodejs_compat`: no Node built-ins, no `process.env`. Use Web APIs (`fetch`, Web Crypto).
 - **Timeout.** 10 s by default, configurable via `config.timeout` (1000–10000 ms; values up to 20000 ms require platform feature enablement). Sync hooks ignore `config.timeout` — see `references/functions-hooks.md`.
-- **Responses are hard-truncated at 75,000 bytes** (`MAX_RESPONSE_BYTES`), not rejected: the caller receives the truncated prefix, which then fails JSON parsing and arrives as a raw string rather than an object. Paginate large collections rather than returning them.
 - **No environment variables or secrets.** Functions receive configuration only through `await req.swell.settings()` — see `references/settings.md`.
 - **A function acts as the app.** `req.swell` carries the installed app's credentials, limited by `permissions` in `swell.json` (`references/permissions.md`), whoever or whatever triggered it.
 

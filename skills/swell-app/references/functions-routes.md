@@ -102,8 +102,6 @@ An app's functions can call each other the same way: `` await req.swell.put(`/:f
 - `new SwellResponse(data, { status, headers })` for custom status/headers (preferred over native `Response`).
 - Throw `SwellError(msg, { status })` to return an error response.
 
-The platform's HTTP client stops reading a function response at 75,000 bytes mid-stream. The chunk-boundary fragment then fails to JSON-parse and reaches the caller as a raw truncated string instead of an object, with no error raised. Paginate large collections rather than returning them.
-
 ## Signature verification (HMAC, third-party webhooks)
 
 When verifying a third-party webhook signature, hash `req.rawBody`. For a JSON body on a call through the storefront gateway it is the exact text the caller sent; re-stringifying `req.body` won't byte-match it. A form-encoded body arrives rewritten, so a signature over one cannot be verified in a route. `swell api` rewrites the body as well: test a signature check with a real HTTP request to the gateway address.
