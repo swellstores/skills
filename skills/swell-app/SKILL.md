@@ -125,7 +125,7 @@ Read `references/functions-workflows.md` before writing one.
 
 ### Settings — `settings/*.json`
 
-The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; model and content conditions can read it as `$settings`. Settings files can also carry actions.
+The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; function, notification and content conditions read it as `$settings`. Settings files can also carry actions.
 
 - Values belong to one store and environment. An installed app starts with empty values.
 - Settings are the only configuration channel for functions and managed frontends, and they are not a secret store (see "Configuration and secrets").
