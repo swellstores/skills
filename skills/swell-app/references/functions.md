@@ -38,18 +38,19 @@ A `before:` or `after:` prefix on the event turns the function into a sync hook.
 
 > **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.
 
-**Model schedule triggers** execute at a future date derived from a record field. The field must exist in the data model.
+**Model schedule triggers** execute at the time `schedule.formula` gives for the record as stored, usually a date field. The field must exist in the data model.
 
 ```typescript
 export const config: SwellConfig = {
-  description: "Capture scheduled payment",
+  description: "Send a reminder when it is due",
   model: {
-    events: ["payment.created", "payment.updated"],
-    conditions: { date_scheduled: { $exists: true } },
-    schedule: { formula: "date_scheduled" }, // re-schedules on field change
+    events: ["reminder.created", "reminder.updated"],
+    schedule: { formula: "date_due" },
   },
 };
 ```
+
+The function keeps one pending run per record. On each of its events for the record, a changed time moves the run, an empty time or `conditions` that no longer match cancel it, and an unchanged time leaves it. Conditions are checked on every event, so one on the write (`$data`, `$origData`, `$event`) cancels the run on any write it does not match: test the record's own fields (`remind_at: { $ne: null }`) for what must hold while the run waits. A time that has passed runs at once when the write sets it. Deleting the record cancels its run. The formula reads the same names as conditions.
 
 **Cron triggers** execute on a fixed schedule with no record context.
 
