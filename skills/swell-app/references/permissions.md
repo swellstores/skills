@@ -10,7 +10,7 @@
 
 Entries are `read_<collection>` / `write_<collection>` against the **top-level collection**: `read_products`, `write_orders`. `write_x` implies `read_x`. Child collections collapse to their parent, so `/products:variants` and `/products:apps.<app_id>.<name>` are both covered by `products`.
 
-The CLI validates only that the value is an array — there is no enum, so a typo like `products_read` deploys clean and grants nothing. A call outside the declared scopes fails with 403 `The client does not have the required permissions`.
+The CLI validates only that the value is an array — there is no enum, so a typo like `products_read` deploys clean and grants nothing. A call outside the declared scopes fails with 403 `The client does not have the required permissions: <permission>`, which names the scope to add.
 
 ## What needs no scope
 
@@ -28,7 +28,7 @@ The CLI validates only that the value is an array — there is no enum, so a typ
 | `req.swell.transaction([...])` | `write_:transaction`, plus the scope of every operation inside |
 | `POST /:batch` | `write_:batch` — also for a batch of reads — plus the scope of every operation inside |
 
-- **The wrapper scope does not cover what is inside.** Each operation of a transaction or batch is checked on its own. In a transaction an operation outside the app's scopes aborts the set with `transaction_op_failed` and status 403; in a batch the call succeeds and that operation's slot holds `{ "$error": "The client does not have the required permissions" }`.
+- **The wrapper scope does not cover what is inside.** Each operation of a transaction or batch is checked on its own. In a transaction an operation outside the app's scopes aborts the set with `transaction_op_failed` and status 403; in a batch the call succeeds and that operation's slot holds the same 403 message as `$error`.
 
 ## Changing permissions
 
