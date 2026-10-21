@@ -1,6 +1,6 @@
 # Model Event Hooks
 
-Synchronous handlers that run inside the originating API request. Prefix a model's `created`, `updated` or `deleted` event with `before:` or `after:` to convert the trigger from async (fires after the mutation persists) to a hook (runs as part of the request itself). Hooks can read the pre-mutation record and, in `before` phases, mutate what gets saved. Prefixing any *other* event type — a domain event like `order.paid`, or a custom event — installs cleanly and then silently folds into the `updated` series; read "Only `created`/`updated`/`deleted` are real hook phases" below before subscribing to one.
+Synchronous handlers that run inside the originating API request. Prefix a model event with `before:` or `after:` to convert the trigger from async (fires after the mutation persists) to a hook (runs as part of the request itself). Hooks can read the pre-mutation record and, in `before` phases, mutate what gets saved.
 
 ```typescript
 export const config: SwellConfig = {
@@ -72,34 +72,13 @@ Format: `<hook>:<root>.<type>`, with the hook prefix immediately before the even
 
 The form is the same for a standard model (`'before:product.updated'`) and for one of the app's own collections (`'before:review.created'`). A name is matched against the app's own collections first, then against standard models.
 
-## Only `created`/`updated`/`deleted` are real hook phases
+## Hooks on declared events
 
-There are exactly three hook series. Prefixing any other event type — including the domain events standard models declare (`order.paid`, `order.submitted`, `order.canceled`, `subscription.canceled`, `product.stock_adjusted`) and custom events on your own collections — installs without error and then silently folds the function into the model's **`updated`** series. Install succeeds because a model event that declares no `hooks` array accepts any system hook prefix; only the fold decides where it actually runs. Three consequences, and the first is the one that generates support tickets:
-
-- **It never fires on create.** The `created` series and the `updated` series are triggered from different code paths, and a folded hook is only in the second. A checkout that creates an order already paid runs no `before:order.paid` at all.
-- **It fires on every update of that collection**, paid or not, shipped or not.
-- **The model's own event `conditions` are not evaluated on the hook path.** `orders` declares `paid` with `conditions: { "paid": true, "$record": { "paid": { "$ne": true } } }`; the hook path ignores that entirely and evaluates only `config.model.conditions` on your function. `$event.type` still reads `order.paid` on every one of those firings, so the handler looks correctly targeted while it is not.
-
-The reported symptom is always "my hook on `order.paid` never fires" — it fired on updates nobody was watching and missed the create that was.
-
-**Do this instead** — to react when an order becomes paid:
-
-- **Async is the default answer.** Subscribe to `'order.paid'` with no prefix. The async dispatch path *does* evaluate the model's declared `conditions` against the merged record plus incoming data, and matches on create as well as update.
-- **Only if it must run inside the request** (mutate the write, or reject it): subscribe to `'before:order.updated'` and reproduce the transition yourself in the function's own `conditions` — that is the only condition set the hook path evaluates. Accept that this cannot see a create-time transition.
-
-```typescript
-export const config: SwellConfig = {
-  description: "Sync order to fulfillment when it becomes paid",
-  model: {
-    events: ["before:order.updated"],
-    conditions: { paid: true, $record: { paid: { $ne: true } } },
-  },
-};
-```
-
-Extension events are the exception to the fold: those declaring `hooks` (`payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) keep their own type namespace and are invoked explicitly by platform code. They also emit no event record at all, so there is no async form of them — `after:payment.charge` is a hook or it is nothing.
+A hook can name any event the model declares: `created`, `updated` and `deleted`, the domain events of standard models (`before:order.paid`, `after:subscription.canceled`) and the custom events of your own collections. A hook on a domain or custom event runs inside the write that triggers the event: the write after which the event's `conditions` hold. They are checked on the pending write the same way as on the saved one: bare keys are the record after the write, `$record` the record before it. So `before:order.paid` can change or reject the write that makes an order paid, including the create of an order that is paid from the start.
 
 List a model's declared events with `swell inspect models /orders` and read `events.types`. Standard models already ship their domain events; subscribe to them, never redeclare them.
+
+Extension events (`payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are not triggered by writes: platform code invokes them for the app configured on that method. They record no event, so `after:payment.charge` is a hook or nothing.
 
 ## Custom hook events
 
@@ -120,8 +99,8 @@ Custom events on your own collections must be declared in the model before any f
 }
 ```
 
-- `hooks` is a whitelist, not an enabler. Declare it and only the listed prefixes install; omit it and both `before:` and `after:` are accepted anyway. Declaring it does **not** exempt the event from the `updated` fold — only `extension: true` does.
-- `conditions` must be a non-empty object on every non-standard event that is not `extension: true` — install fails otherwise. It is **not evaluated when the hook fires**: the event folds into the model's `updated` series like any other, so `before:review.reviewed` runs on every update of that collection and never on create or delete. Gate the handler with `config.model.conditions` on the function itself — the only condition set the hook path evaluates.
+- `hooks` limits which prefixes install; without it both `before:` and `after:` do. An event that declares `hooks` exists for hooks only and records no async event.
+- `conditions` must be a non-empty object on every non-standard event that is not `extension: true` — install fails otherwise. They decide when the event, and every hook on it, fires.
 - `hook_timeout` ≤ 60000 ms — the per-invocation timeout for this hook. Hooks ignore the function's own `config.timeout` entirely. Without `hook_timeout` a hook is cut off at 10 s, and it is the only way to give a hook longer.
 - `hook_retry_attempts` ≤ 3 — retries only when the invocation returns no status at all (timeout or network error); a function that responds with an error status is never retried.
 - `hook_*` knobs are valid on app-defined collections only — declaring either on a standard model fails install.
@@ -134,4 +113,4 @@ Functions of one app that hook the same event run one after another in the order
 
 ## Decision tip
 
-Validate or modify before save → hook, and the event must be `created`/`updated`/`deleted`; anything else folds into `updated`. React after the fact → async model trigger, which can name any declared event, domain events included, and is the only path that honors the model's own event `conditions`. Both paths independently honor each function's `config.model.conditions`, so the same model event can carry an async handler and a hook filtered differently.
+Validate or modify before save → a `before:` hook. React after the fact → an async model trigger. Both can name any declared event, and both also apply the function's own `config.model.conditions`, so the same event can carry an async handler and a hook filtered differently.

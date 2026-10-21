@@ -35,7 +35,7 @@ export default async function (req: SwellRequest) {
 
 Conditions accept MongoDB-style operators against `$record`, `$data`, `$event`, `$settings`, or `$formula` (string expression for complex cases). Child collection events use dot notation: `review.comment.created`, `review.reaction.deleted`.
 
-A `before:` or `after:` prefix on the event turns the function into a sync hook. Read `references/functions-hooks.md` before using one: only `created`, `updated` and `deleted` are real hook phases.
+A `before:` or `after:` prefix on the event turns the function into a sync hook. Read `references/functions-hooks.md` before using one.
 
 > **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.
 
@@ -122,7 +122,7 @@ Plain object → JSON 200. String → `text/plain` 200. For custom status/header
 
 **Then check for auto-disable.** Model-event functions that fail continuously for ~4 days (2 days if `timeout` >10s; immediately on 404/worker-missing) auto-disable until the function config is **re-pushed**; cron and routes are unaffected. The `enabled: true` reset rides on the function PUT, and `swell app push` skips files whose hash is unchanged — so a push that touches nothing in the top-level function file will not clear `auto_disabled`. Use `swell app push --force`, then confirm in detail mode. `swell inspect functions --app=.` gives a trigger summary, next cron run, and a bare `disabled` marker (list mode does **not** distinguish auto-disable from a manual disable, and its `last fail` column actually shows `date_final_attempt` = first failure + 4 days, i.e. the projected auto-disable deadline, which renders as a future date). Run `swell inspect functions <key>` for the record's real `auto_disabled`, `date_first_failed`, `date_last_success`, and `attempts_failed`.
 
-Other causes have their own references: a hook on an event other than `created`/`updated`/`deleted` (`references/functions-hooks.md`); an extension function whose app the merchant has not selected (`references/app-integrations.md`); a file that push skipped (`references/cli.md`).
+Other causes have their own references: an extension function whose app the merchant has not selected (`references/app-integrations.md`); a file that push skipped (`references/cli.md`).
 
 ## Local testing
 
