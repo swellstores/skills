@@ -77,8 +77,6 @@ Bind one tax phase, not both — both receive the same extension dispatch, so a 
 
 For shipping, preserve existing `shipment_rating.services` in `after:` unless intentionally replacing native rating. For tax, return both per-item assignments and order-level totals when the provider supplies them. Keep service/tax `id`s stable — downstream recalculation and display key off them.
 
-A second function in the same app subscribing to the same `event+extension+phase` is logged as a conflict and only one result is used — combine them into one handler.
-
 Verify `req.data` shape against the table by logging it on first invocation via `swell logs --type function --app=.`; remove diagnostic logs before finalizing.
 
 ### Shipping example
@@ -172,7 +170,6 @@ Common mistakes:
 - Forgetting `config.extension`, or setting it to a value that doesn't equal the manifest extension `id` — the function misses extension-scoped dispatch.
 - Returning a full provider response instead of the narrow merge fields.
 - Returning tax totals without item-level tax details when downstream flows expect item taxes.
-- Two functions in the same app subscribing to the same `event+extension+phase` — only one result is used and the platform logs a conflict.
 - (Shipping) Saving the extension settings dialog but forgetting to toggle `enabled` on the carrier row.
 - (Shipping) Reading `/settings/shipments/carriers/<extId>`, finding nothing, and reporting the extension unactivated — the row id is `app_<appId>_<extId>`.
 - (Tax) Binding `after:order.taxes` expecting to post-process a native result — binding already suppressed it.

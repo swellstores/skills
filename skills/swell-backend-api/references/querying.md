@@ -1,6 +1,6 @@
 # Querying
 
-Reads on the Backend API. Every list endpoint takes the same parameters: `where`, `sort`, `limit`, `page`, `search`, `fields`, `expand`, `include`, `group`, `aggregate`, `$locale` and `$currency`. A top-level key that is not one of them is a filter: `{ active: true }` is `{ where: { active: true } }`. How a missing record or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
+Reads on the Backend API. Every list endpoint takes the same parameters: `where`, `sort`, `limit`, `page`, `search`, `fields`, `expand`, `include`, `group`, `aggregate`, `$locale` and `$currency`. A top-level key that is not one of them is a filter: `{ active: true }` is `{ where: { active: true } }`. An app's fields are addressed by their path, `$app.<app_id>.<field>`, in `where`, `sort`, `fields`, `expand` and `group`. How a missing record or an error reaches the code differs by client and is in `SKILL.md`, "Errors, Rate Limits, Retries".
 
 ## where
 
@@ -84,7 +84,7 @@ The value under `open_orders` is whatever that query answers: a list envelope he
 
 ## group and aggregate
 
-`group` aggregates the records that `where` selects. Each key is a field to group by (`status: true`), an accumulator (`$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, `$addToSet`) or a date part to group by (`$year`, `$month`, `$dayOfMonth`, `$dayOfWeek`, `$hour`). Field names inside `group` are written without a `$` prefix.
+`group` aggregates the records that `where` selects. Each key is a field to group by (`status: true`), an accumulator (`$sum`, `$avg`, `$min`, `$max`, `$first`, `$last`, `$push`, `$addToSet`) or a date part to group by (`$year`, `$month`, `$dayOfMonth`, `$dayOfWeek`, `$hour`). Field names inside `group` are written without an extra `$` prefix: `grand_total`, and an app field as `$app.<app_id>.<field>`.
 
 ```js
 await swell.get('/orders', {
@@ -93,6 +93,8 @@ await swell.get('/orders', {
 });
 // { count: 10, results: [{ month: 1, orders: 310, revenue: 28411.5 }, …] }
 ```
+
+A field to group by that has a path, such as `billing.country` or an app field, comes back nested at that path: `{ billing: { country: 'US' }, orders: 12 }`.
 
 With accumulators only there is nothing to group by, and the answer is `{ results: [{ … }] }` with a single entry and no `count`.
 

@@ -2,14 +2,11 @@
 
 Notifications are transactional emails triggered by model events, defined in `./notifications/` using a paired-file convention: a JSON manifest (`<name>.json`) and a Liquid template (`<name>.tpl`) must share the same base filename. Consult `swell schema notification --format=dts` for all configuration properties.
 
-**Event binding.** Notifications fire only on record **create and update** — the platform triggers them on `post`/`put` only. Set `event` to `created`, `updated`, or a custom event declared in the collection's data model; `deleted` is accepted by the schema but never dispatches, so use a function or webhook for delete-driven mail. An undeclared custom event is **not** rejected at deploy either — the notification installs silently and never fires. Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.` and by triggering the event; the list key includes the model since name alone is not unique within an app. File basenames must not contain `.` — push rejects them, because the inspect identifier grammar splits on dots.
+**Event binding.** Set `event` to `created`, `updated`, or an event the collection declares, including one your app's model file adds to a standard collection; push refuses any other, `deleted` included, so mail on a delete belongs in a function. Verify the deployed `(model, name)` binding with `swell inspect notifications --app=.` and by triggering the event; the list key includes the model since name alone is not unique within an app. File basenames must not contain `.` — push rejects them, because the inspect identifier grammar splits on dots.
 
-**Dispatch controls.** Binding alone does not decide whether a notification sends. Two defaults surprise people:
+**Once per record by default.** `repeat` defaults to `false`: before sending, the platform counts existing messages for `(template, record_id)` and skips when any exist, so a notification bound to `order.updated` fires on the *first* qualifying update to an order and never again for that order. Set `"repeat": true` for anything that should send more than once per record.
 
-- **`repeat` defaults to `false`, meaning once per record, ever.** Before sending, the platform counts existing messages for `(template, record_id)` and skips when any exist — a notification bound to `order.updated` fires on the *first* qualifying update to an order and never again for that order. Set `"repeat": true` for anything that should send more than once per record.
-- **A notification with neither `conditions` nor `event` never sends.** That is deliberate legacy behavior, not a bug — always declare at least one.
-
-Also: `new: true` restricts sending to record creation (POST) only; `conditions` are evaluated against the record with `$record`, `$data`, `$origData`, `$method`, `$env`, `$notify` in scope (an empty `{}` counts as no condition and passes). `$settings` is not in scope: a condition on it compares against nothing and deploys without an error, so to let a setting switch a notification off, have the function that makes the change store the choice in a field of the record and put the condition on that field; `delay` is in **minutes**; `cc`/`bcc` are comma-separated strings capped at 80 characters total; `attachments` holds at most 5 model field paths.
+Also: `new: true` restricts sending to record creation (POST) only; `conditions` are evaluated against the record with `$record`, `$data`, `$origData`, `$method`, `$env`, `$notify` and the app's `$settings` in scope (an empty `{}` counts as no condition and passes); `delay` is in **minutes**; `cc`/`bcc` are comma-separated strings capped at 80 characters total; `attachments` holds at most 5 model field paths.
 
 **Testing.** `sample` supplies the record used when the dashboard renders a test/preview send — without it the preview renders against an essentially empty record and every `{{ field }}` comes out blank. It costs nothing at runtime, being read only on test sends. Any notification sent from a non-live environment gets `(TEST) ` prepended to the subject, so never assert on an exact subject line in test-environment checks. To confirm a send after triggering the event, read the notification log: `swell api get '/notifications?where[record_id]=<record id>'` returns one entry per send, with its `to` address and `template`, and an `error` when the template failed to render. Trigger test sends with a recipient at `example.com`: Swell renders and logs the notification without delivering it. Emails to real addresses are counted, and a store that sends many for its size is deactivated.
 
@@ -17,11 +14,13 @@ Also: `new: true` restricts sending to record creation (POST) only; `conditions`
 
 **Child collections.** Use colon notation for the collection (`"collection": "reviews:comments"`). In templates, the parent record is accessible via the `parent` variable; expand upward with `"expand": ["parent", "parent.product"]`.
 
-The `.tpl` file uses Liquid syntax. Record fields are accessed directly (`{{ product.name }}`), child collection parents via `{{ parent.field }}`. Two global objects are available in all templates, plus a `get` filter:
+The `.tpl` file uses Liquid syntax. Record fields are accessed directly (`{{ product.name }}`), child collection parents via `{{ parent.field }}`. Three global objects are available in all templates, plus a `get` filter:
 
 `settings` — App settings from `./settings/`, enabling conditional content: `{% if settings.rewards.enabled %}...{% endif %}`.
 
 `store` — Store metadata: `name`, `url`, `logo`, `currency`, `support_email`.
+
+`app` — `{{ app.admin_url }}` links to the app's page in the dashboard, in the environment the notification is sent from.
 
 `get` — a Liquid **filter**, not a function: `{{ '/products/abc' | get }}` fetches additional Swell data during rendering. It takes only the URL string — there is no second `data` argument, so interpolate any parameters into the URL yourself.
 

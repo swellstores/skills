@@ -6,7 +6,7 @@ Data models hold data logic: types, events, permissions, formulas. How a collect
 
 ## Extend, create, or nest
 
-- **Extend a standard model** when data logically belongs to an existing entity: review scores on products, loyalty tiers on accounts, fulfillment metadata on orders. Name the file after the standard collection (`models/products.json`). Fields merge into the record under `$app.<app_id>.*` and are queryable on the standard list endpoints (`where` on `$app.<app_id>.<field>` paths, including inside `$and`/`$or`). Benefits: seamless admin integration, no new API surface, automatic association with platform workflows.
+- **Extend a standard model** when data belongs to an existing record: review scores on products, loyalty tiers on accounts, fulfillment metadata on orders. Name the file after the standard collection (`models/products.json`). The fields live on the record under `$app.<app_id>` and are queryable on the standard list endpoints (`where` on `$app.<app_id>.<field>` paths, including inside `$and`/`$or`). A field declared inside one of the model's objects lives in that object: declared under `billing` in `models/orders.json`, it is at `billing.$app.<app_id>.<field>`.
 
 - **Create a new app model** when data requires an independent lifecycle, dedicated events, distinct public permissions, or has no natural parent. Reviews, wishlists, vendor profiles fit here. Use a kebab-case filename (`vendor-profiles.json`). The collection lives at `apps/<app_id>/<collection>` and requires explicit relationship links.
 

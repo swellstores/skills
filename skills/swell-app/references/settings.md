@@ -1,6 +1,6 @@
 # Settings
 
-Settings define merchant-configurable app behavior in `./settings/*.json`. The merchant edits them on the app's page in the dashboard; code reads them with `await req.swell.settings()` in functions and with the Backend client's `settings()` in a frontend; model and content conditions read them through `$settings`. Consult `swell schema setting --format=dts` for every property.
+Settings define merchant-configurable app behavior in `./settings/*.json`. The merchant edits them on the app's page in the dashboard; code reads them with `await req.swell.settings()` in functions and with the Backend client's `settings()` in a frontend; every kind of condition — function, notification, content and model event — reads them as `$settings`. Consult `swell schema setting --format=dts` for every property.
 
 ## Files, groups and fields
 

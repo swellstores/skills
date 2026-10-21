@@ -93,7 +93,7 @@ Server logic. Each top-level file is one function with exactly one trigger; shar
 | Trigger | Runs | Scope and limits |
 | --- | --- | --- |
 | Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure |
-| Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Apart from the extension events of integration apps, hooks exist for `created`, `updated` and `deleted` only; a prefix on any other event does not behave as it reads. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. → `references/functions-hooks.md` |
+| Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Any declared event can be hooked: the hook runs inside the write that triggers the event. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. → `references/functions-hooks.md` |
 | Model schedule | At a date taken from a record field | Re-schedules when the field changes |
 | Cron | On a fixed schedule | No record context |
 | HTTP route | On a call to `/functions/<app_id>/<function_name>` | Fixed path, no path parameters. Callers need a key — see below. → `references/functions-routes.md` |
@@ -107,7 +107,7 @@ Calling a route from outside Swell:
 Limits that hold for every function:
 
 - **Edge runtime (Cloudflare Workers), not Node.js**: Web APIs such as `fetch` and Web Crypto, no Node built-ins.
-- **A 10-second limit**, detailed in `references/functions.md`. A response is cut off at 75,000 bytes. Work that does not fit is a workflow; large results are paginated.
+- **A 10-second limit**, detailed in `references/functions.md`. Work that does not fit is a workflow.
 - **No environment variables or secrets.** Configuration comes from the app's settings only (see "Configuration and secrets").
 - **A function acts as the app**, with the app's `permissions`, whoever or whatever triggered it. `req.swell` is its client to the store's data and follows Backend API semantics.
 
@@ -125,7 +125,7 @@ Read `references/functions-workflows.md` before writing one.
 
 ### Settings — `settings/*.json`
 
-The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; model and content conditions can read it as `$settings`. Settings files can also carry actions.
+The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; every kind of condition reads it as `$settings`. Settings files can also carry actions.
 
 - Values belong to one store and environment. An installed app starts with empty values.
 - Settings are the only configuration channel for functions and managed frontends, and they are not a secret store (see "Configuration and secrets").
@@ -147,9 +147,8 @@ Read `references/webhooks.md` before adding one.
 
 A transactional email: a manifest that binds to a model event, and a Liquid template with the same basename. Sent to an address taken from the record (`contact`) or to the store's administrators.
 
-- Sent on record create and update only. `deleted` is accepted by the schema and never sends; use a function or webhook for that.
+- Sent on `created`, `updated`, or an event declared in the collection's data model; mail on a delete belongs in a function.
 - **Once per record by default**: a notification bound to an update sends on the first qualifying update and never again for that record unless `repeat` is set.
-- A custom `event` must be declared in the collection's data model. An undeclared one deploys silently and never sends.
 
 Read `references/notifications.md` before authoring one.
 
