@@ -128,9 +128,9 @@ Custom events on your own collections must be declared in the model before any f
 
 A custom event can also declare `"extension": true`, which makes its `conditions` optional. Extension events are not dispatched by record writes at all: platform code (payment, shipping, tax) invokes them explicitly for the app configured on that method, matching the function's own `config.extension`. There is no app-facing API to dispatch one, so `extension: true` on your own collection's event will never fire on its own. See the relevant extension reference for dispatch semantics.
 
-## One handler per app per hook event
+## Several hooks of one app
 
-A second function in the same app subscribing to the same hook event (same `app_id + event.type + extension`) is skipped at **runtime**, every time the event fires — the deploy reports nothing. The skip is recorded in the app's function logs (`Function '<name>' of the same app has already been triggered for the event '<type>'`); the API caller sees nothing. Which of the two wins depends on invocation order you do not control, so split work across `before` / `after` phases or combine into one handler. `extension` is `config.extension`, set only on functions that serve an integration extension slot — see `references/app-integrations.md`.
+Functions of one app that hook the same event run one after another in the order of their names, and each `before:` hook sees the changes of the ones before it. Hooks of different apps run in parallel.
 
 ## Decision tip
 
