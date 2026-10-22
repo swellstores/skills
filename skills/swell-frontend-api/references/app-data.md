@@ -13,7 +13,7 @@ An app adds data as its own collections and as fields on standard models, and a 
 
 ## Who can write
 
-With `input` and neither scope below, any visitor can create records, and an update or a delete rejects with `permission_error`. A write answers with what a read of the record returns.
+With `input` and neither scope below, any visitor can create records, and an update or a delete rejects with `permission_error`. A write answers with the record's `id` and its public fields, or only the `id` when no field is public.
 
 `scope: 'account'` limits reads and writes to the logged-in customer's own records; `input.scope: 'account'` limits writes the same way and leaves reads as declared.
 
