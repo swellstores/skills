@@ -6,9 +6,9 @@ criteria: |
   most likely cause given the symptom.
   Credit, but do not require, checking the subscribed event types: a misspelled or undeclared type is
   refused on write, but a declared type that records no event is stored and produces the same silence.
-  FAIL if it invents a webhook signature/HMAC secret that must be configured, claims Swell verifies
-  payload signatures, or attributes the silence purely to retries/backoff without checking enabled.
+  FAIL if it invents a webhook signing secret that must be configured in Swell, or attributes the
+  silence purely to retries/backoff without checking enabled.
 ---
 `enabled: false` on create is the single most common cause and is invisible — the webhook record
-exists and looks correct. Swell has no payload signature, so a model that invents one sends the user
-hunting for a setting that does not exist.
+exists and looks correct. Swell signs requests with its published keys and has no secret to set, so a
+model that invents one sends the user hunting for a setting that does not exist.

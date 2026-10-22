@@ -75,7 +75,7 @@ assertions. Each one is a mistake an agent makes without the skill:
 | `storefront-app-field-visibility` | `$app` fields reach a storefront only when the app marks them public |
 | `cli-environment-safety` | `swell api` writes to **test** unless `--live` is passed |
 | `product-import-stock-tracking` | `stock_tracking` must be set or stock never decrements |
-| `webhook-not-firing` | `enabled` defaults to false; there is no payload signature |
+| `webhook-not-firing` | `enabled` defaults to false; there is no signing secret to set |
 
 ## Conventions
 

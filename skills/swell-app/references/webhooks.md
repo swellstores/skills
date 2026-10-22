@@ -12,7 +12,7 @@ The payload is the event record plus two `$`-prefixed additions: `id`, `date_cre
 - Requests time out after 10 seconds; the endpoint must return a 2xx.
 - Retries: each delivery is sent again ~1 minute after its first failure, then at growing intervals, 12 hours after every tenth failure. A `Retry-After` header on the failure answer puts off the next attempt by up to 12 hours, never sooner than that schedule.
 
-Swell sends **no payload signature or HMAC header** — the only platform-side identity signals are the source IP and `Swell-Env`. A shared secret in the URL query string is the app-side workaround: validate it server-side *and* allowlist Swell's published webhook IPs. Treat payload contents as untrusted either way — re-fetch by `data.id` before acting.
+Each request is signed. Verify it before acting, against the body exactly as received: `const { event, storeId } = await verifySwellWebhook(request.headers, await request.text(), { appId })` from `@swell/apps-sdk` returns the verified event as `event`, with the `storeId` it came from. `appId` (the `id` in `swell.json`) refuses webhooks of apps with another id; check `storeId` against the stores the app is installed in, since another developer's private app can have the same id. How to verify without the SDK is under "What the endpoint receives" in the `swell-backend-api` skill's `references/events-webhooks.md`.
 
 The delivery contract in full — payload shapes per event type, the retry schedule, responses that stop retries, reading delivery rows — is in the `swell-backend-api` skill's `references/events-webhooks.md`. It applies to app-owned webhooks unchanged.
 

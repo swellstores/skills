@@ -138,7 +138,7 @@ A manifest that makes Swell POST an event to an external URL. Use it when the ha
 
 - Async events only: a webhook cannot validate or block a write.
 - The endpoint must answer within 10 seconds. A failed delivery is retried for days, then the webhook is disabled.
-- Requests are unsigned, so the receiver re-fetches the record before acting. The `Swell-Store-Id` header names the store.
+- Requests are signed: verify them with `verifySwellWebhook` from `@swell/apps-sdk` before acting. The `Swell-Store-Id` header names the store.
 
 Read `references/webhooks.md` before adding one.
 

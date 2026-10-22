@@ -85,7 +85,7 @@ Read `references/events-webhooks.md` before reacting to store activity. Four of 
 - **An event is a notice, not the record.** Most events carry the record's id and little else, so read the record before acting.
 - **Not every change records an `updated` event.** A payment that settles an order records `order.paid` and no `order.updated`.
 - **A webhook created through the API is off** until `enabled: true` is sent.
-- **A webhook request is not signed**, and it can arrive twice or out of order.
+- **A webhook request is signed**: verify it before acting. It can arrive twice or out of order.
 
 The reference also covers the event log and type names, the forms of a webhook's event entries, retries and automatic disabling, reading delivery rows, and reading `/events` in place of a webhook.
 
