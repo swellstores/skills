@@ -62,7 +62,7 @@ A webhook is a record in `/:webhooks`: an address, and the event types to send t
 ```
 
 - **`enabled` is `false` unless the body sets it.** A webhook created without it is stored, receives nothing and reports no error.
-- **`events` is not checked.** Any string is stored. A misspelled type, a type with the `before:` or `after:` prefix of an app's hook, or one that records no event, never fires and nothing says so. After creating a webhook, make the change once on a test record and look for its delivery row: see "A webhook that is silent".
+- **`events` is checked.** A type that no model declares, or one with the `before:` or `after:` prefix of an app's hook, refuses the write with an error on `events`. A declared type that records no event is accepted and never fires (see "Which types a model has"). An update checks only the types it adds.
 - **A store can have 20 webhooks enabled at once**, or the number its plan sets. The write that would enable one more is refused with `Your account can't have more than <n> webhooks enabled at once`. Webhooks that belong to apps are not counted.
 - **A new or changed webhook can take a few seconds to apply.**
 
@@ -99,7 +99,7 @@ One `POST` per event, with the event as a JSON body:
 - **`$delivery.attempts` is `0` on the first delivery.** On a retry it counts the attempts already made, and `$delivery.date_first_failed` is present.
 - **An event can arrive more than once, and events can arrive out of order.** Recognize a repeat by the event's `id`, and read the record for its current state.
 - **The environment is in the `Swell-Env` header**, `test` for the test environment. The header is absent for the live environment, and the body does not name the environment.
-- **Nothing in the request names the store.** An endpoint that serves several stores needs an address per store.
+- **The store's id is in the `Swell-Store-Id` header.**
 - **The request is not signed.** There is no signature or secret header to verify. Check that it comes from one of the addresses Swell publishes at <https://developers.swell.is/backend-api/webhooks>, put a secret of your own in the webhook's address, or both. In any case use the body as a notice and read the record by `data.id`.
 - **Answer with a 2xx status within 10 seconds.** Any other status, or no answer in time, is a failed delivery. The body of a 2xx answer is ignored. Do long work after answering.
 - **An `https` address must have a valid certificate.**
