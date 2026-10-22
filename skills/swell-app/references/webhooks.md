@@ -15,7 +15,7 @@ The payload is the event record plus two `$`-prefixed additions: `id`, `date_cre
 - The environment arrives as the `Swell-Env` **request header**, not in the body.
 - **No store identifier is sent at all** — use a per-store endpoint URL if the receiver serves multiple stores.
 - Requests time out after 10 seconds; the endpoint must return a 2xx.
-- Retries: the first retry comes ~1 minute after failure, then exponentially spaced attempts (roughly 10 per day) with a ~12-hour gap between daily cycles.
+- Retries: each delivery is sent again ~1 minute after its first failure, then at growing intervals, 12 hours after every tenth failure. A `Retry-After` header on the failure answer puts off the next attempt by up to 12 hours, never sooner than that schedule.
 
 Swell sends **no payload signature or HMAC header** — the only platform-side identity signals are the source IP and `Swell-Env`. A shared secret in the URL query string is the app-side workaround: validate it server-side *and* allowlist Swell's published webhook IPs. Treat payload contents as untrusted either way — re-fetch by `data.id` before acting.
 

@@ -106,8 +106,8 @@ One `POST` per event, with the event as a JSON body:
 
 ## Retries
 
-- **A failed delivery is sent again after about a minute, then at intervals that grow** from about ten minutes to two or three hours. After every tenth failure the next attempt is 12 hours later.
-- **The intervals follow the webhook's failures in a row, not the event's.** While an endpoint is down, a new event that fails does not start at one minute: it waits the interval the webhook has reached, which can be hours. One successful delivery resets the count, so after an outage the deliveries arrive spread over hours and out of order.
+- **A failed delivery is sent again after about a minute, then at intervals that grow** from about ten minutes to two or three hours. After every tenth failure the next attempt is 12 hours later. Each event's delivery counts its own failures.
+- **A `Retry-After` header on a failure answer puts off the next attempt**, in seconds or as an HTTP date, by up to 12 hours. It never brings an attempt sooner than the schedule above.
 - **Two answers stop the retries of one event:** status 410, or a failure status with a JSON body that contains `"retry": false`. Neither counts as a failure of the webhook.
 - **After 4 days of failures without one success, the webhook is switched off**: `enabled` becomes `false` and `auto_disabled` becomes `true`. The store's administrators are emailed a warning after every tenth failure, at most once a day, and again when the webhook is switched off.
 
@@ -152,7 +152,6 @@ The webhook's own record has the state across events:
 - **For a webhook the platform switched off**, the same write clears `auto_disabled` and sends again, a few seconds apart, the deliveries that were waiting. Add `retry_disabled_events: false` to switch it on without them. The value is stored, so it also applies the next time.
 - **For a webhook switched off by hand**, nothing is sent again. The deliveries that were waiting are never sent.
 - **Events recorded while a webhook was off are never delivered to it**, in either case. To catch up, read them from `/events` as below.
-- **`attempts_failed` is kept** until a delivery succeeds. If the endpoint still fails, the next retry can be hours away.
 
 ## Reading events without a webhook
 
