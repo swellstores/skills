@@ -36,6 +36,8 @@ Conditions accept MongoDB-style operators against `$record`, `$data`, `$event`, 
 
 An event does not wake the function whose run made the write, except that a scheduled function's own write still moves its run. An `updated` event whose write changed app fields and nothing else wakes only the functions of the apps whose fields it changed, including the other functions of the app that wrote them. Writes by functions that follow from one request run functions for at most 10 events of a record: past that, the record's later events in the request run no function, and each function stopped logs why. Scheduled runs still follow their times.
 
+Runs of a function for one record go one at a time, in the order of the record's events. A run that failed and waits for its retry, or one still unsent 5 minutes after its event, does not hold back later ones.
+
 A `before:` or `after:` prefix on the event turns the function into a sync hook. Read `references/functions-hooks.md` before using one.
 
 > **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.

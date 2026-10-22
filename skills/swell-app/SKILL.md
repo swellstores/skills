@@ -92,7 +92,7 @@ Server logic. Each top-level file is one function with exactly one trigger; shar
 
 | Trigger | Runs | Scope and limits |
 | --- | --- | --- |
-| Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure. Not woken by its own writes, or by an update that changes only other apps' fields |
+| Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure. One run at a time per record, in order. Not woken by its own writes, or by an update that changes only other apps' fields |
 | Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Any declared event can be hooked: the hook runs inside the write that triggers the event. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. → `references/functions-hooks.md` |
 | Model schedule | At a time taken from the record | One pending run per record: a new time moves it, an empty one cancels it |
 | Cron | On a fixed schedule | No record context |
