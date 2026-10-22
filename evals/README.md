@@ -72,7 +72,7 @@ assertions. Each one is a mistake an agent makes without the skill:
 |---|---|
 | `writes-array-merge` | a plain array PUT merges *positionally*; it does not replace or append |
 | `transaction-atomicity` | validation failures do **not** roll a transaction back |
-| `storefront-app-field-visibility` | `$app` fields are not readable from the Frontend API by default |
+| `storefront-app-field-visibility` | `$app` fields reach a storefront only when the app marks them public |
 | `cli-environment-safety` | `swell api` writes to **test** unless `--live` is passed |
 | `product-import-stock-tracking` | `stock_tracking` must be set or stock never decrements |
 | `webhook-not-firing` | `enabled` defaults to false; there is no payload signature |
