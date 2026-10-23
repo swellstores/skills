@@ -90,7 +90,7 @@ Failures of `req.swell` calls also arrive differently than in a function:
 - **A rate-limited request (429) or a server error throws a retryable error**, and the step retries under its own settings.
 - A read of an id that does not exist resolves empty, as in a function.
 
-`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `'function'` for `workflows.create()` and `'action'` for a dashboard action. `req.app.admin_url` is the app's page in the dashboard, as in functions. `req.environmentId` is `'test'` in the test environment and `null` in live, as in functions (`@swell/cli` 2.9.30 or later). `req.isLocalDev` is always `false`.
+`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `'function'` for `workflows.create()` and `'action'` for a dashboard action. `req.app.admin_url` and `req.app.frontend_url` are as in functions. `req.environmentId` is `'test'` in the test environment and `null` in live, as in functions (`@swell/cli` 2.9.30 or later). `req.isLocalDev` is always `false`.
 
 ## Deploy-only iteration loop
 
