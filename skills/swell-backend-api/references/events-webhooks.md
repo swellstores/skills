@@ -37,7 +37,7 @@ An event is a notice that something changed, not the record. Read the record by 
 
 `created`, `updated` and `deleted` are the default. A model that declares its own list replaces it, so do not assume them: `payments` has `succeeded`, `failed` and `voided`, and no `payment.created`.
 
-- **Read the list from the store.** `GET /:models/<collection>` has it under `events`, app-declared events included: `root` is the first part of the type and each entry of `types` has the second part as its `id`. A child collection's list is on its field in the parent model (`fields.addresses.events`). The definition of an app's collection also has the app's record id, as `app_id`.
+- **Read the list from the store.** `GET /:models/<collection>` has it under `events`, app-declared events included: `root` is the first part of the type and each entry of `types` has the second part as its `id`. A child collection's list is on its field in the parent model (`fields.addresses.events`).
 - **Standard models have events beyond the three.** Orders: `submitted`, `paid`, `payment_failed`, `refunded`, `delivered`, `canceled`. Carts: `converted`, `abandoned`. Products: `stock_adjusted`. Subscriptions: `activated`, `invoiced`, `paid`, `payment_failed`, `paused`, `resumed`, `canceled`, `trial_will_end` and more.
 - **A type that has `hooks` in its declaration records no event.** `payment.charge`, `payment.refund`, `order.shipping` and `order.taxes` are points where an app extends the platform. A webhook subscribed to one never fires.
 
@@ -77,7 +77,7 @@ A webhook is a record in `/:webhooks`: an address, and the event types to send t
 
 The plain type is enough unless two collections, or two apps, use the same type name.
 
-**The longer forms must repeat the event's own `model` and `app_id` exactly.** For an app's collection the model is `apps/<app id>/<collection>` with the app's record id, so the entries are `apps/<app id>/reviews/review.created` and `$app.<app id>.apps/<app id>/reviews/review.created`. An entry written with the app's `swell.json` id, or with the collection's short name, is stored and never matches. Copy both values from an event the store has recorded.
+**The longer forms repeat the event's own `model` and `app_id`.** For an app's collection the model is `apps/<app id>/<collection>`, so the entries are `apps/<app id>/reviews/review.created` and `$app.<app id>.apps/<app id>/reviews/review.created`. `<app id>` can be the `id` in the app's `swell.json`: the webhook stores the app's record id in its place, as the events carry it.
 
 ## What the endpoint receives
 

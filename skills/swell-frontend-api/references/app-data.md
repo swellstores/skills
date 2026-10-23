@@ -4,7 +4,7 @@ An app adds data as its own collections and as fields on standard models, and a 
 
 ## App collections
 
-`/apps/<app_id>/<collection>` and `/apps/<app_id>/<collection>/<id>`, through `swell.get/post/put/delete`. `<app_id>` is the `id` in the app's `swell.json`; the app's record id answers a store's key with an empty list.
+`/apps/<app_id>/<collection>` and `/apps/<app_id>/<collection>/<id>`, through `swell.get/post/put/delete`. `<app_id>` is the `id` in the app's `swell.json`.
 
 - **Nothing public:** every call rejects with status 400, code `permission_error`.
 - **Reads** return `id` and the public fields, and reject with `permission_error` when no field is public. Naming another field in `fields` adds nothing; expanding a link that is not public rejects.
