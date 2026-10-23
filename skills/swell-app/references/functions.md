@@ -97,6 +97,7 @@ Authenticated context for the handler. Common fields across triggers:
 - `req.appId` — current app identifier. Use instead of hardcoding.
 - `req.store` — store metadata: `id` and the storefront `url`.
 - `req.app.admin_url` — the app's page in the dashboard, in the function's environment.
+- `req.environmentId` — `'test'` in the test environment, `null` in live. Requires `@swell/cli` 2.9.30 and `@swell/app-types` 1.2.11 (types), or later: push bundles the code that sets it, so in a function pushed with an older CLI it is `undefined` and `req.environmentId === 'test'` reads as live.
 - `req.session` — user session (routes only); `null` unless the storefront gateway attached one, so gate with `req.session?.account_id`.
 - `req.context.waitUntil(promise)` — run work after the response returns (logs, metrics, non-blocking side effects); the Worker continues until the promise resolves or CPU time expires.
 - `await req.swell.settings()` — app settings from `./settings/`. Pass another app's id to read its settings cross-app.
