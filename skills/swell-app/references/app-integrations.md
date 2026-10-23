@@ -18,7 +18,7 @@ Detail mode (`swell inspect extensions app.<slug>.<extId>`) adds a `Next steps:`
 
 Non-obvious invariants:
 
-- **Shipping alone treats `enabled: false` as a dispatch gate.** Payment-alt and tax dispatch fire whenever `extension_app_id` is set; for payment-alt, `enabled` is checkout-list visibility only.
+- **`enabled` means what it means on the native settings record.** A shipping carrier with `enabled: false` is not rated; a payment method with `enabled: false` is not listed in checkout and still dispatches for a payment made with it. Tax settings have no `enabled`.
 - **`missing_required_events` is independent of `status`.** Partial event coverage still reports `activated` — check the field separately.
 - **Use `app.<slug>.<extId>` from list-mode column 1** as the extension identifier. Hex ids from `bound.functions[].id` / `bound.components[].id` are not accepted — extensions are a synthesized resource with no canonical 24-char id.
 - **Non-null `local_diff`** means the deployed manifest differs from local `swell.json` — `swell app push` before debugging dispatch.

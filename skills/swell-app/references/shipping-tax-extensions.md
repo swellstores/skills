@@ -4,7 +4,7 @@ Bind integration apps into native order calculation. Read `app-integrations.md` 
 
 ## Critical Contracts
 
-Three runtime traps no local check catches. Verify all three before claiming a shipping or tax extension is done.
+Two runtime traps no local check catches. Verify both before claiming a shipping or tax extension is done.
 
 ### 1. Merchant Save activates dispatch — bound paths and field counts differ by type
 
@@ -19,11 +19,7 @@ The carrier row id is `app_<appId>_<extId>`, never the bare extension id. `<appI
 
 **Verify:** `swell inspect extensions app.<slug>.<extId>` reports `status: "activated"`. If `action_owner === "merchant"`, surface `action` verbatim and stop debugging.
 
-### 2. Shipping is the only extension type where `enabled: false` blocks dispatch
-
-Tax (and payment-alt) dispatch fires whenever `extension_app_id` is set. Only shipping reads `enabled` as a dispatch gate — a shipping carrier with `enabled: false` and `extension_app_id` set still does not dispatch.
-
-### 3. Hook results merge into the calculation payload — they do not replace it
+### 2. Hook results merge into the calculation payload — they do not replace it
 
 Declare `model.fields` for every top-level field returned. Return only fields the platform should mutate. When bound, the extension is authoritative for the fields it returns; native calculation can still run for non-extension services/carriers in shipping, and for tax falls back to internal rules only when no extension is bound.
 
@@ -71,7 +67,7 @@ Phase choice:
 - Both shipping phases sit behind a shipment-params fingerprint. A save that changes nothing shipping-relevant (address, items, shipment settings) fires neither phase — that is a stale rating, not a broken function.
 - Binding — not phase — is what disables native tax calculation. Once `/settings/taxes.extension_app_id` is set, `applyTaxRules` and the tax integration webhooks are skipped for **both** phases, so an `after:` handler has no native result to coexist with.
 - `before:order.taxes` — runs after existing taxes are cleared and before the order webhook. Prefer this one.
-- `after:order.taxes` — runs after the order webhook. On a recalculation where no tax-relevant field changed the whole routine returns early and neither phase fires — except when a previously failed order webhook is pending retry, where the pass skips `clearTaxes` and `before:` but still fires `after:`. Make `after:` handlers idempotent.
+- `after:order.taxes` — runs after the order webhook. A recalculation where no tax-relevant field changed fires neither phase.
 
 Bind one tax phase, not both — both receive the same extension dispatch, so a two-phase app calls the provider twice per calculation.
 
