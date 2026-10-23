@@ -81,7 +81,7 @@ Read `references/content-models.md` before authoring views; `swell schema conten
 
 A dashboard button or menu item that runs one of the app's functions or workflows: on a record, on selected rows, among a record's fields, or on the app's own page, optionally after a dialog that asks for inputs. This is how a merchant triggers an operation without a custom frontend.
 
-- Swell authenticates the store user on the action invocation path, used by the dashboard and by the CLI's equivalent request. Ordinary function calls and storefront callers cannot invoke an action function. The handler still checks record state and any finer access rules — `references/actions.md` owns the invocation and authorization contract.
+- Swell authenticates the store user on the action invocation path, used by the dashboard and by `swell app action`. Ordinary function calls and storefront callers cannot invoke an action function. The handler still checks record state and any finer access rules — `references/actions.md` owns the invocation and authorization contract.
 - The merchant waits for the result, within the function timeout. Longer work, or a bulk action over many records, runs as a workflow.
 
 Read `references/actions.md` before adding one.
@@ -117,7 +117,7 @@ Read `references/functions.md` before writing a function — the `req` object, p
 
 A durable background process: a sequence of steps, each with its own timeout and retry policy, recorded so a completed step never runs twice, and able to sleep for long periods. Use it for work that outlives a function timeout or must survive a failure between steps — a sync to an external system, a long bulk operation, a delayed follow-up.
 
-- Started by another function or by a dashboard action. Nothing else starts one, and a workflow cannot start another workflow.
+- Started by a function, by a frontend's server code or by a dashboard action. A workflow cannot start another workflow.
 - Its store client is narrower than a function's: no transactions, and only the app's own settings.
 - Workflows do not run under `swell app dev`; they are tested after a push.
 
@@ -238,12 +238,13 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 | `swell app push` | Deploy every app resource to the test environment |
 | `swell app dev` | Local tunnel; model hooks, model events and dashboard actions execute locally, and the frontend is previewed through Swell |
 | `swell app pull` | Adopt an existing app — a two-way sync, not a download |
+| `swell app action <id>` | Run an app action as a dashboard user does: `references/actions.md`, "Verify" |
 | `swell app version` / `install` / `release` | Publishing lifecycle — see `references/app-publishing.md` |
 | `swell logs [-f]` | Remote logs for functions, webhooks and API calls |
 
 Five behaviours that decide whether a deploy actually did what you think:
 
-- **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
+- **`swell app push` is not all-or-nothing.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys, and the push then exits non-zero naming the failed files. Check the output for `Ignoring file:` / `Unable to compile` to see why.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
 - **Push skips unchanged files by hash.** From `@swell/cli` 2.9.27 the hash covers the files a function or component imports; older CLIs leave importers stale after a lib-only edit — use `--force` there.
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
@@ -285,7 +286,7 @@ Confirm the affected behavior under realistic conditions. Run relevant existing 
 
 - Event-driven resources (model-triggered functions, webhooks, notifications): Trigger via `swell api [post|put|delete] /apps/<app_id>/<collection>` with payloads matching event conditions (model events propagate asynchronously).
 - Route functions: Call via `swell api [get|post|put|delete] /functions/<app_id>/<function_name>` with appropriate `--body`.
-- Action functions: cannot be called as routes. Run the action from the dashboard, or send the dashboard's request from the CLI as shown in `references/actions.md`.
+- Action functions: cannot be called as routes. Run the action from the dashboard, or with `swell app action <id>` (`references/actions.md`).
 - Data models: Execute create → read → update → delete cycle via `swell api` or integration test. Test relationship expansion with `?expand=`.
 
 Pass: The affected behavior produces the expected result and relevant tests pass. State any runtime checks that could not be performed within the task's scope.

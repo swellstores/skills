@@ -49,7 +49,7 @@ await step.do('call warehouse', {
 
 ## Starting a workflow
 
-From any app function (route, model event, cron, action):
+From any app function (route, model event, cron, action), and from a frontend's server code through its Backend client (`getBackend()` in Vinext), which has the same `workflows.create()`:
 
 ```typescript
 const run = await req.swell.workflows.create('sync-order', { order_id: id });
@@ -60,7 +60,7 @@ The first argument is the workflow's **function name**: the pushed file's basena
 
 A dashboard action starts a workflow without a calling function: add `action: true` to the workflow's config and name the workflow in the action's `function`. The run then receives the action's dialog values and `$action` as `req.data`, under the same limits as below. Declaring the action, and what the merchant sees while the run is active, is in `references/actions.md`.
 
-The second argument of `workflows.create()` is passed through as `req.data` inside the workflow. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
+The second argument of `workflows.create()` is passed through as `req.data` inside the workflow, less a `$action` key: only a run that an action starts has one. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
 
 Inside the workflow, `req.swell` is a **narrower** client than a function's, not the same one:
 
@@ -97,7 +97,7 @@ Failures of `req.swell` calls also arrive differently than in a function:
 Workflows do **not** execute under `swell app dev` — your other functions still do, but workflow instances run only after `swell app push`. Iterate as:
 
 1. `swell app push`
-2. Trigger from a function (`swell api` against the calling route or model event) or run the action that starts it
+2. Trigger from a function (`swell api` against the calling route or model event) or run the action that starts it (`swell app action <id>`)
 3. Inspect: `swell inspect workflows --app=.` (deployed workflows), `swell inspect workflow-runs --app=.` (recent instances + status)
 4. Logs: `swell logs --type workflow --app <id>` (step-level logs)
 
