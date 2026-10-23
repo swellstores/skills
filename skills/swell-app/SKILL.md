@@ -51,7 +51,7 @@ Each folder holds one kind of block, and a file's name decides what it becomes: 
 
 ### Manifest — `swell.json`
 
-The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and marketing fields are used at release time — `references/app-publishing.md`.
+The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and listing fields fill the App Store listing: `references/app-publishing.md`, "Listing".
 
 ### Data models — `models/*.json`
 
@@ -178,7 +178,7 @@ Shipping and tax have no component place, and a storefront renders components on
 
 ### Assets and tests
 
-- **`assets/`** is the app's only **public** directory: its files are served from an unauthenticated CDN address, while every other file push uploads is stored private. Put nothing there you would not publish. The app's icon and listing images are picked up from it by filename (`icon.*`, `image.*`, `preview.*`), so a rename silently unbinds them — `references/app-publishing.md`.
+- **`assets/`** is the app's only **public** directory: its files are served from an unauthenticated CDN address, while every other file push uploads is stored private. Put nothing there you would not publish. The app's icon and listing images are taken from its files, by name or by the paths `swell.json` gives — `references/app-publishing.md`, "Listing".
 - **`test/`** holds the Vitest suite: `test/unit/` and `test/integration/`, plus helpers — `mock-request.ts` mocks the function context, and `swell-client.ts` reaches the store through the CLI's login, with no credentials to configure. Scaffold it with `swell create tests`.
 
 ## Integration apps and extensions
