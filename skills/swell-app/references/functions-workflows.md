@@ -17,16 +17,18 @@ export default class SyncOrder {
   async run(req: SwellWorkflowRequest, step: SwellWorkflowStep) {
     const { order_id } = req.data as { order_id: string };
 
-    const order = await step.do('load order', async () => {
-      return (await req.swell.get(`/orders/${order_id}`)) as { id: string };
-    });
+    const order = await step.do('load order', () =>
+      req.swell.get<{ id: string }>(`/orders/${order_id}`),
+    );
 
     await step.sleep('cool off', '30 seconds');
 
     await step.do('mark synced', async () => {
-      return req.swell.put(`/orders/${order.id}`, {
-        $app: { [req.appId]: { synced: true } },
-      });
+      const result = await req.swell.put<{ errors?: object }>(
+        `/orders/${order.id}`,
+        req.appValues({ synced: true }),
+      );
+      if (result.errors) throw new Error(JSON.stringify(result.errors));
     });
 
     return { ok: true };
@@ -34,7 +36,7 @@ export default class SyncOrder {
 }
 ```
 
-`req.data` is typed `unknown` and every `req.swell.*` call resolves `Promise<unknown>` on `SwellWorkflowRequest` — cast at the boundary as above or Gate 3 `npm run typecheck` fails.
+`req.data` is typed `unknown`: cast it at the boundary as above. A `req.swell.*` call resolves `unknown` unless it names the result type, as `get<{ id: string }>` does; Gate 3 `npm run typecheck` refuses an `unknown` result read without one.
 
 ## Step semantics
 
@@ -72,16 +74,9 @@ Inside the workflow, `req.swell` is a **narrower** client than a function's, not
 | `:`-prefixed paths (`/:functions`, `/:cache`, …) | Rejected: `workflow_operation_blocked` |
 | `/:batch` | Allowed (the one `:` exception) — child ops are re-validated *without* it, so no nested batch, `/:transaction`, `/settings`, or `..` inside |
 | `/:transaction` | Rejected — no transactions inside a workflow |
-| `appValues()` | **Does not exist** |
 | `workflows.create()` | **Does not exist** — a workflow cannot start another workflow |
 
-`..` traversal is blocked the same way (`workflow_operation_blocked`), but two neighboring cases are not: a path carrying a URL scheme fails as `workflow_runtime_api_path_invalid` — a different code, so grepping for `workflow_operation_blocked` misses it — and a literal `#` is truncated rather than rejected, so `/orders#x` silently becomes `/orders`. Only a percent-encoded `%23`/`%3F` trips the blocked check. Because `appValues()` is absent — `swell schema function --format=dts` lists it on the workflow request, but the runtime does not have it — build the extension envelope by hand:
-
-```typescript
-await req.swell.put(`/orders/${orderId}`, { $app: { [req.appId]: { synced: true } } });
-```
-
-Calling `req.appValues(...)` instead throws `TypeError: req.appValues is not a function` inside the step, and the step-retry machinery retries that TypeError to exhaustion — the run reads as a flaky integration, not a typo.
+`..` traversal is blocked the same way (`workflow_operation_blocked`), but two neighboring cases are not: a path carrying a URL scheme fails as `workflow_runtime_api_path_invalid` — a different code, so grepping for `workflow_operation_blocked` misses it — and a literal `#` is truncated rather than rejected, so `/orders#x` silently becomes `/orders`. Only a percent-encoded `%23`/`%3F` trips the blocked check.
 
 Failures of `req.swell` calls also arrive differently than in a function:
 
