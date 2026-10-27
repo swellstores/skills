@@ -110,6 +110,7 @@ A value in the body is used in place of the one the platform would generate. `id
 - **An `id` in any other format is dropped without an error**, and the record gets a generated one.
 - **A `POST` with an `id` that already exists writes over that record.** It does not fail and it does not add a second one: the body is merged into the stored record, and `date_created` and fields with defaults are set again. An import that runs twice therefore rewrites what the first run created.
 - **`number` can be set when the record is created and not changed afterwards.**
+- **`channel` and `attribution` cannot be imported.** The platform sets `channel` on carts, orders and subscriptions, and a body that carries either field is refused with `READONLY` (see "Channel" in `references/orders-payments.md`). Imported records get the channel of the key that writes them.
 
 ## Localized and per-currency values
 
