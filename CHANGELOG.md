@@ -4,6 +4,40 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.10.0] - 2026-10-27
+
+App platform fixes: app fields and app features behave as native ones, so the skills state the contract and drop the workarounds for the fixed bugs.
+
+Baseline: `@swell/cli` 2.9.32, `@swell/apps-sdk` 2.0.0-alpha.8 (`next`), `@swell/app-types` 1.3.0. `req.environmentId`, `req.app.frontend_url`, workflows' `req.appValues` and a thrown `SwellError`'s `retryAfter` come from the code push bundles, so a function gets them on its next push with this CLI.
+
+### Added
+- `swell-app`: `swell app action <id>` runs an app action as a dashboard user does, with `--record`, `--ids` or `--all`, `--values` and `--live` (`references/actions.md`, "Verify").
+- `swell-app`: `req.app.admin_url` and `req.app.frontend_url` in functions and workflows, `{{ app.admin_url }}` in notification templates, and `req.environmentId` in functions.
+- `swell-app`, `swell-backend-api`: webhook requests are signed. `verifySwellWebhook` from `@swell/apps-sdk` checks one against the body as received and returns its event and store; `references/events-webhooks.md` says how to verify without the SDK. The `Swell-Store-Id` header names the store.
+- `swell-app`, `swell-backend-api`: `retryAfter` on a thrown `SwellError`, and a `Retry-After` header on a webhook's failure answer, put off the next attempt.
+- `swell-backend-api`: a `PUT` with `where` updates the record only while it matches, so it can claim a record for work that must run once; a `unique` field holds under concurrent writes.
+
+### Changed
+- `swell-app`: a hook can name any declared event, the domain events of standard models and custom events included, and runs inside the write that triggers it. Hooks of one app on the same event run one after another in name order.
+- `swell-app`: a scheduled function keeps one pending run per record: a new time moves it, an empty time or conditions that no longer match cancel it.
+- `swell-app`: a function's or hook's own writes do not wake it, an update that changes only app fields wakes only the apps whose fields it changed, writes by functions run functions for at most 10 events of a record per request, and hooks nest at most 10 levels. Runs of a function for one record go one at a time.
+- `swell-app`, `swell-backend-api`: each event's delivery retries on its own count of failures.
+- `swell-app`: a function's log says when its run timed out.
+- `swell-app`, `swell-frontend-api`: what each public permission of an app model does. `scope: 'account'` and `input.scope: 'account'` need a login for every call, a create included; a storefront write answers with the record's `id` and public fields; an app's public fields on standard models reach any storefront key.
+- `swell-app`: app webhooks start enabled (`swell create webhook` writes `enabled: true`, `--no-enabled` for one that starts off), and a webhook's event types are checked on write.
+- `swell-app`: notifications bind to `created`, `updated` or any event the collection declares, including one an app adds to a standard collection, and every kind of condition reads `$settings`.
+- `swell-app`: Swell refuses an action whose `record_id` is not a record of its collection, and only a run that an action starts has `$action`.
+- `swell-app`: `swell app push` exits non-zero when a file fails, and fails a file whose action names no action function of the app.
+- `swell-app`: a one-call payment extension gets `captured: true`, the tax phases run together, and an extension's `enabled` means what it means on the native settings record.
+- `swell-app`: the App Store listing is filled from `swell.json`, `DESCRIPTION.md` and image files on every push that changes them; an extension's icon fields show its images; release checks that the listing is complete.
+- `swell-app`: workflows have `req.appValues`, and `req.swell` calls name their result type.
+- `swell-backend-api`: an app is named by its `swell.json` id in `/:models` and webhook event entries. App fields take field operators and paths as the record's own fields do, and queries address them by path, `group` included.
+- Evals that graded the old behaviour grade the new one.
+
+### Removed
+- Workarounds and warnings for the fixed bugs: hooks folding into `updated`, one hook per app and event, the 75,000-byte response limit, sentinel fields against hook loops, URL secrets and IP allowlists in place of webhook signatures, `captured` read as `undefined`, hand-built action requests, the `$app` envelope built by hand in workflows, and listing images that a rename unbinds.
+- `swell-app`: the claim that `swell app push --force` overwrites the app's name, description and icon.
+
 ## [0.9.0] - 2026-10-15
 
 Payment components: checkout payment UI on the app components iframe contract.
