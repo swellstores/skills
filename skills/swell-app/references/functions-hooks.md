@@ -48,7 +48,7 @@ export default async function (req: SwellRequest) {
 
 The API caller receives an error with the hook's `message`, `code`, and `status`. `status` must be 400–499; anything else (or omitted) coerces to 422. `req.reject()` returns a `SwellRejection` (also available as a global class) — it only takes effect when thrown, and only from a `before` phase; rejections from `after:` hooks are stripped and ignored.
 
-Throwing anything else — including `SwellError` — does **not** abort. All other hook errors fail open: the mutation proceeds and the error is reported in the response's `$function_errors`, for app-defined collections too. (Earlier platform versions rejected writes to app-defined collections on any hook error, tunable via a `hook_reject_error` event property; that property is gone and throw-to-abort no longer exists — migrate those hooks to `req.reject()`.)
+Throwing anything else — including `SwellError` — does **not** abort. All other hook errors fail open: the mutation proceeds and the error is reported in the response's `$function_errors`, for app-defined collections too. A `hook_reject_error` event property has no effect: reject with `req.reject()`.
 
 Hooks do not run at all for writes made inside a `/:transaction` batch — the platform bypasses hook invocation there because an outbound HTTP call cannot be rolled back if the transaction aborts. Nothing else observes a child op either: per-record `/events` inserts are skipped inside a transaction, so async model-event functions, webhooks and notifications do not fire for child ops. One `transaction.committed` event covers the whole bundle, and it carries no per-record hook context — there is no async trigger to fall back on. The bypass inherits into every child op of the transaction; `/:batch` children are ordinary requests and do fire hooks. `/:transaction` is public, so any caller who wraps a write in a transaction skips your validation hook.
 
@@ -62,9 +62,9 @@ Neither bypass is visible to the caller. Never make a rejection hook the only en
 
 On updates, `req.data.$app.<slug>` is the record's **stored** app subdocument merged with the incoming write, not just the keys the caller sent — and `$unset` paths are resolved by deletion, so an unset field is simply absent rather than flagged. Never read `req.data.$app` as "what changed". `req.data.$record.$app.<slug>` is decoded the same way on `updated` and holds the pre-write values; diff against it.
 
-## Re-entrancy
+## Writes from a hook
 
-Writes from inside a hook re-trigger the same hook chain. Guard with `conditions` on the function or with a sentinel field in `$app[req.appId]` — an unconditional write-back to the same collection stalls the originating request until the hook invocation times out.
+A hook does not run for the writes its own run makes. Other hooks do, one level deeper each time, and the write that would run hooks an 11th level deep is refused with status 409 and `Hook recursion exceeded max depth (10)`. A route function the hook calls writes at the hook's level, so its writes count the same way.
 
 ## Event syntax
 

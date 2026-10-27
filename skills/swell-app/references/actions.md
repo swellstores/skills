@@ -90,9 +90,6 @@ export default async function (req: SwellRequest) {
     return { message: `Marked shipped: ${count}` };
   }
 
-  if (!/^[0-9a-f]{24}$/i.test(action.record_id ?? "")) {
-    throw new SwellError("Unknown shipment", { status: 400 });
-  }
   const shipment = await swell.get(`/shipments/${action.record_id}`);
   if (shipment?.status !== "pending") {
     throw new SwellError("Only a pending shipment can be marked shipped", { status: 409 });
@@ -104,7 +101,7 @@ export default async function (req: SwellRequest) {
 
 - **`action: true` is the function's only trigger.** A function cannot also be a route, model or cron function. (The content schema's text says `action: {}`; both forms deploy the same.) `swell create function` does not offer the trigger yet: scaffold with `route` and replace the `route` block.
 - **`req.data` is the dialog's values plus `$action`.** Values of `modal.fields` arrive at the top level (`data.carrier`); anything the dialog did not declare is dropped. `$action` carries `id`, `source`, `user_id`, and `collection` or `settings`, plus `record_id` or `selection` as in the table. One function can serve several actions by branching on `$action.id` or `source`.
-- **`record_id` and `selection` are input.** Swell sets the rest of `$action` from the app's own declaration, but passes these two through from the dashboard unchecked. Check that the id is a record id before putting it in a path, and load the record before acting on it. `$action.collection` is the collection's full path (`apps/<app record id>/shipments`) and works as is: `swell.get(`/${action.collection}/${id}`)`.
+- **`record_id` is a record of the collection.** Swell checks `$action` against the app's declaration and refuses a `record_id` that is not a record of `collection`. Load the record to check its state before acting on it. `selection` is what the merchant selected, as the dashboard sent it. `$action.collection` is the collection's full path (`apps/<app record id>/shipments`, or `products:variants` for content of a child collection) and works as is: `swell.get(`/${action.collection}/${id}`)`.
 - **Use `selection.query` to read the selected records.** It is the filter for exactly what the merchant selected — hand-picked rows, or everything matching the list's search and filters when they selected all. It carries no sort or paging. Page it by an id cursor as in the example, not by `page`: when the write changes a field the list filters on, each finished batch drops out of `query`, and numbered pages skip records while the function reports success. Add conditions by appending to `query.$and`, as above; replacing `query.$and` or `query.where` drops the selected ids or the list's filters. `selection.count` is what the dashboard showed, for the message only.
 - **Return `{ message }` to say what happened.** The dashboard shows it and reloads the record or list. Any other return value shows "<label> finished". To fail, throw `SwellError`: its message is shown, and a dialog stays open with the entered values so the merchant can correct them and retry.
 - **The function runs as the app.** `req.swell` has the app's permissions whoever clicked, and `req.session` is `null`. `$action.user_id` is the id of the dashboard user, for an audit field; read `/:users/<id>` for the name, which needs the `read_:users` scope once the app declares `permissions`.
@@ -114,7 +111,7 @@ export default async function (req: SwellRequest) {
 
 Name a workflow in `function` the same way; the workflow adds `action: true` beside `kind: 'workflow'`. The click starts a run and returns at once; the dashboard shows the run's progress and reloads the page when the run ends. Authoring is in `references/functions-workflows.md`; what is specific to actions:
 
-- **The run receives the same `req.data`** — dialog values plus `$action`. Trust `$action` only when `req.workflow.trigger === 'action'`: a function can pass anything, `$action` included, to `workflows.create()`.
+- **The run receives the same `req.data`** — dialog values plus `$action`. Only a run that an action starts has `$action`: Swell drops it from the params of `workflows.create()`.
 - **The return value is not shown.** The merchant sees completed, failed or canceled. Write the outcome to the record if they need more.
 - **Expect overlapping runs.** The dashboard stops a merchant from starting the same action again while its run is active; the platform does not. Make steps safe to repeat.
 - **`req.data` is limited to 128 KB.** A bulk action with a few thousand hand-picked rows fails with `workflow_params_too_large` before the run starts. Selecting all sends no id list and stays small.
@@ -122,28 +119,28 @@ Name a workflow in `function` the same way; the workflow adds `action: true` bes
 
 ## Who can run an action
 
-The action invocation path requires an authenticated store user. The dashboard sends this request on click; a CLI login can send the equivalent `PUT /:functions/<function record id>` request with `$action`, as shown under "Verify". An action function cannot be called as an ordinary route (`swell api /functions/...`), by another function, or by a storefront caller. Swell authenticates the store user; the handler still checks record state, supplied ids and any finer access rules.
+The action invocation path requires an authenticated store user. The dashboard sends this request on click; a CLI login sends the same request with `swell app action`, as shown under "Verify". An action function cannot be called as an ordinary route (`swell api /functions/...`), by another function, or by a storefront caller. Swell authenticates the store user; the handler still checks record state and any finer access rules.
 
 On plans with user roles Swell also requires manage access to the standard collection the content file extends (Products for `content/products.json`), or to Integrations for a settings action. Actions on the app's own collections are open to every dashboard user. Any finer rule is the function's job, from `$action.user_id`.
 
 ## Verify
 
-1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action or action field without `function`, or a second trigger on the function fail that file with a message.
-2. **Push does not check that `function` names anything.** A typo deploys cleanly and fails on click with `action_function_not_found`. After `swell app push`, confirm `swell inspect functions --app=.` lists the function with the trigger `action`, and that the name in the content or settings file matches it.
-3. **Run it.** The dashboard is the real test: click the action on the test environment, in each place it is declared. A CLI login is a dashboard user too, so the same request can be sent from the terminal:
+1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action or action field without `function`, or a second trigger on the function fail that file with a message. A `function` that names no function of the app with `action: true` is found once the push has deployed: push reports that file failed and exits non-zero, and a click answers `action_function_not_found`.
+2. **Run it.** The dashboard is the real test: click the action on the test environment, in each place it is declared. A CLI login is a dashboard user too, so `swell app action` sends the same request from the terminal:
 
    ```bash
-   swell api put '/:functions/<function record id>' --body '{"$action":{"id":"ship","source":"record","content_id":"app.<app record id>.shipments","view":"edit","record_id":"<id>","values":{"carrier":"ups"}}}'
+   swell app action ship --record <id> --values '{"carrier":"ups"}'
    ```
 
-   The function's record id is the `id` in `swell inspect functions <key>`; the app's record id is in `.swellrc`. A settings action takes `"source":"settings","settings":"<file name>"` in place of `content_id`, `view` and `record_id`; an action field takes `"source":"field"` and no `view`; a bulk action takes `"source":"bulk"`, `"view":"list"` and a `selection` of `{ "all": false, "ids": [...], "count": n, "query": { "$and": [{ "id": { "$in": [...] } }] } }`. A function answers with its result; a workflow answers `202` with the run it started.
-4. **Under `swell app dev`** action functions run from the local machine and log to the terminal. A workflow action starts the last pushed version.
+   A record action or action field takes `--record`, a bulk action `--ids <id,id>` or `--all` (what selecting all on the list does with no filters set), and `--values` the dialog's fields as JSON, refusing a key the dialog does not have. An id declared in more than one place needs `--collection` (the model's name for one of the app's own collections), `--view`, `--settings` or `--source` (`list`, `record`, `bulk`, `field` or `settings`). It prints what the function returns, or for a workflow the run it started, and when the action fails it prints the message the dashboard would show and exits non-zero. `--live` runs it in the live environment.
+3. **Under `swell app dev`** action functions run from the local machine and log to the terminal. A workflow action starts the last pushed version.
 
 | Code | Meaning |
 | --- | --- |
 | `action_function_not_found` | The named function does not exist, is disabled, or does not declare `action` |
 | `action_not_found` | The installed app declares no such action in that place, or the action is `hidden` |
 | `action_function_mismatch` | The action names a different function |
+| `action_record_not_found` | `record_id` is not a record of the action's collection |
 | `action_forbidden` | The user's role does not allow it |
 | `action_user_required` | The request did not come from a dashboard user |
 | `action_not_callable` | The function was called as a route. Through `swell api /functions/...` it surfaces as `invalid_request` |

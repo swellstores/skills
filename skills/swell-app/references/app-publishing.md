@@ -67,29 +67,28 @@ Marks a version as released for App Store publication. Released versions are rev
 
 | Field | Type | Notes |
 |------|------|------|
-| `price` | number ≥ 0 | App price; omit or `0` for free apps |
+| `price` | number ≥ 0 | App price; `0` for a free app |
 | `price_interval` | `"once"` \| `"monthly"` | Defaults to `monthly` when `price > 0` |
 | `price_trial_days` | number ≥ 0 | Free-trial length for priced apps |
 | `price_external` | boolean | Billing handled outside Swell |
 
-## Marketing fields
+## Listing
 
-App-record fields validated **server-side at release time** — missing fields fail `swell app release`, never `swell app push`:
+The App Store listing is the app record, filled from the app's files whenever a push changes them:
 
-| App type | Required before a version can be released |
+| Source | Fields |
 |---|---|
-| `theme` | `name`, `description` (≤ 70 chars) |
-| every other type | the above, plus `full_description` (≤ 3500 chars), `support_email`, an icon (`assets/icon.*` → `logo_icon`) and a cover image (`assets/image.*` → `cover_image`) |
-| `storefront` of kind `shop` whose theme provider is not `app` | the above, plus a preview image (`assets/preview.*` → `preview_image`) |
+| `swell.json` | `name`, `description` (≤ 70 chars), `support_email`, `support_url`, `documentation_url`, `demo_url`, `repository_url`, `preview_video_url`, `images`, `highlights`, the billing fields; for storefronts and themes also `use_cases`, `purchase_options`, `features` |
+| `DESCRIPTION.md` at the app root | `full_description`, as Markdown, up to 20,000 characters |
+| image files | the icon, preview images, and the images of `images` and `highlights` |
 
-There is no stricter second tier for App Store publication — staging and publishing only check that the version is released. Failures read `App must have full_description, support_email to release. Add them to swell.json.`, `App must have a cover image to release. Add image.* to the assets folder.`, or `App must have a logo icon to release. Add icon.* to the assets folder.`
+- **The files are the listing.** A key removed from `swell.json` clears its field, and deleting `DESCRIPTION.md` clears the full description. The billing fields are the exception: a removed key keeps the stored value, so a free app sets `price` to `0`. A `full_description` in `swell.json` is not applied, and push warns about it.
+- **Images bind by path, when the image file is pushed.**
+  - The icon is `assets/icon.*`, or the file `logo_src` names. Draw it with **square corners**: the surfaces that display it round it themselves.
+  - The preview images of a storefront or theme are `assets/preview.*` and `assets/preview-mobile.*`, or the files `preview_src` and `preview_mobile_src` name.
+  - Each `images` entry (`id`, `image_src`, optional `title` ≤ 40 and `description` ≤ 140 chars) and each `highlights` entry (`id`, `title` ≤ 40, `description` ≤ 140, optional `image_src`) shows the file at its `image_src`.
 
-Optional: `support_url`, `demo_url`, `documentation_url`, `preview_video_url`, `repository_url`.
-
-Text fields belong in `swell.json`, but only an allow-list of keys is applied to the app record, and the marketing subset — `description`, `full_description`, `support_url`, `documentation_url`, `support_email`, `preview_video_url`, `demo_url`, `repository_url`, `price` — is **cleared to `null` when the key is absent from the manifest**. Editing those in the dashboard is therefore temporary: the next push carrying a changed `swell.json` wipes whatever the manifest omits. Keep them all in the manifest.
-
-`full_description` has a second source, `assets/description.md`. Assets push before ordinary files, so a push carrying both applies `description.md` first and then overwrites it from `swell.json` — define it in one place.
-
-Images come from `./assets/`, matched by filename (`icon.*` → `logo_icon`, `image.*` → `cover_image`, `preview.*` → `preview_image`, `preview-mobile.*` → `preview_mobile_image`), not from manifest fields — a rename silently unbinds them and surfaces only at release. Override a path with `swell.json`'s `logo_src` / `preview_src` / `preview_mobile_src`; `highlights[].image_src` resolves the same way into `highlight_assets[].image`. Non-image content types upload but bind to nothing. None of this is validated locally — verify after any rename. Draw the icon with **square corners**: the surfaces that display it round it themselves, and a pre-rounded icon renders double-rounded.
+  Each path names a file in `assets/` by its path from the app root (`assets/logo.png`); push warns when it does not, or when the app has no such file. A path pointed at a file that is already pushed and unchanged binds nothing until the file is pushed again: `swell app push --force`. Deleting or renaming a bound file leaves its image on the listing; to change an image, replace the file under the name it is bound by.
+- **Release checks that the listing is complete**; push checks only the values it is given. Every app needs `name` and `description`; every app but a theme needs the icon and at least one bound `images` entry; a `storefront` of kind `shop` whose theme provider is not `app` also needs `assets/preview.*`. Only storefronts and themes may have preview images, `use_cases`, `purchase_options` or `features`. A failure lists what is missing, as in `App must have the following to release: name and description in swell.json; assets/icon.* and at least one image described in the images section in swell.json.` Staging and publishing check only that the version is released.
 
 `./assets/` is the app's only **public** directory: asset files are stored non-private and served from an unauthenticated CDN URL, while every other file `swell app push` uploads (functions, models, settings, `package.json`, tests) is stored private with no URL. Put nothing in `assets/` you would not publish.

@@ -37,7 +37,7 @@ An event is a notice that something changed, not the record. Read the record by 
 
 `created`, `updated` and `deleted` are the default. A model that declares its own list replaces it, so do not assume them: `payments` has `succeeded`, `failed` and `voided`, and no `payment.created`.
 
-- **Read the list from the store.** `GET /:models/<collection>` has it under `events`, app-declared events included: `root` is the first part of the type and each entry of `types` has the second part as its `id`. A child collection's list is on its field in the parent model (`fields.addresses.events`). The definition of an app's collection also has the app's record id, as `app_id`.
+- **Read the list from the store.** `GET /:models/<collection>` has it under `events`, app-declared events included: `root` is the first part of the type and each entry of `types` has the second part as its `id`. A child collection's list is on its field in the parent model (`fields.addresses.events`).
 - **Standard models have events beyond the three.** Orders: `submitted`, `paid`, `payment_failed`, `refunded`, `delivered`, `canceled`. Carts: `converted`, `abandoned`. Products: `stock_adjusted`. Subscriptions: `activated`, `invoiced`, `paid`, `payment_failed`, `paused`, `resumed`, `canceled`, `trial_will_end` and more.
 - **A type that has `hooks` in its declaration records no event.** `payment.charge`, `payment.refund`, `order.shipping` and `order.taxes` are points where an app extends the platform. A webhook subscribed to one never fires.
 
@@ -62,7 +62,7 @@ A webhook is a record in `/:webhooks`: an address, and the event types to send t
 ```
 
 - **`enabled` is `false` unless the body sets it.** A webhook created without it is stored, receives nothing and reports no error.
-- **`events` is not checked.** Any string is stored. A misspelled type, a type with the `before:` or `after:` prefix of an app's hook, or one that records no event, never fires and nothing says so. After creating a webhook, make the change once on a test record and look for its delivery row: see "A webhook that is silent".
+- **`events` is checked.** A type that no model declares, or one with the `before:` or `after:` prefix of an app's hook, refuses the write with an error on `events`. A declared type that records no event is accepted and never fires (see "Which types a model has"). An update checks only the types it adds.
 - **A store can have 20 webhooks enabled at once**, or the number its plan sets. The write that would enable one more is refused with `Your account can't have more than <n> webhooks enabled at once`. Webhooks that belong to apps are not counted.
 - **A new or changed webhook can take a few seconds to apply.**
 
@@ -77,7 +77,7 @@ A webhook is a record in `/:webhooks`: an address, and the event types to send t
 
 The plain type is enough unless two collections, or two apps, use the same type name.
 
-**The longer forms must repeat the event's own `model` and `app_id` exactly.** For an app's collection the model is `apps/<app id>/<collection>` with the app's record id, so the entries are `apps/<app id>/reviews/review.created` and `$app.<app id>.apps/<app id>/reviews/review.created`. An entry written with the app's `swell.json` id, or with the collection's short name, is stored and never matches. Copy both values from an event the store has recorded.
+**The longer forms repeat the event's own `model` and `app_id`.** For an app's collection the model is `apps/<app id>/<collection>`, so the entries are `apps/<app id>/reviews/review.created` and `$app.<app id>.apps/<app id>/reviews/review.created`. `<app id>` can be the `id` in the app's `swell.json`: the webhook stores the app's record id in its place, as the events carry it.
 
 ## What the endpoint receives
 
@@ -99,15 +99,22 @@ One `POST` per event, with the event as a JSON body:
 - **`$delivery.attempts` is `0` on the first delivery.** On a retry it counts the attempts already made, and `$delivery.date_first_failed` is present.
 - **An event can arrive more than once, and events can arrive out of order.** Recognize a repeat by the event's `id`, and read the record for its current state.
 - **The environment is in the `Swell-Env` header**, `test` for the test environment. The header is absent for the live environment, and the body does not name the environment.
-- **Nothing in the request names the store.** An endpoint that serves several stores needs an address per store.
-- **The request is not signed.** There is no signature or secret header to verify. Check that it comes from one of the addresses Swell publishes at <https://developers.swell.is/backend-api/webhooks>, put a secret of your own in the webhook's address, or both. In any case use the body as a notice and read the record by `data.id`.
+- **The store's id is in the `Swell-Store-Id` header.**
+- **The request is signed.** Verify it before acting on it. In JavaScript, `verifySwellWebhook` from `@swell/apps-sdk` checks the signature against the body as received and returns the event as `event`, with `storeId`, `webhookId` and `eventId`. It needs the `storeId` the webhook must come from, or for an app's webhook the app's `appId`, from your own configuration, and refuses a webhook of another store or app:
+
+  ```js
+  const body = await request.text();
+  const { event } = await verifySwellWebhook(request.headers, body, { storeId: STORE_ID });
+  ```
+
+  Elsewhere, verify by hand: `Swell-Signature` is a JWT signed with ES256 by a key published at `https://keys.swell.store/jwks.json`, with the header `typ` `swell-webhook+jwt`. It expires 5 minutes after it is made. Its claim `body_sha256` is the base64url SHA-256 of the body's bytes, and `store_id`, `environment_id`, `webhook_id`, `event_id` and, for an app's webhook, `app_id` (the id in its `swell.json`) say what sent it. Check `store_id`, or `app_id` for an app's webhook, against your own configuration: any store can point a webhook at your address.
 - **Answer with a 2xx status within 10 seconds.** Any other status, or no answer in time, is a failed delivery. The body of a 2xx answer is ignored. Do long work after answering.
 - **An `https` address must have a valid certificate.**
 
 ## Retries
 
-- **A failed delivery is sent again after about a minute, then at intervals that grow** from about ten minutes to two or three hours. After every tenth failure the next attempt is 12 hours later.
-- **The intervals follow the webhook's failures in a row, not the event's.** While an endpoint is down, a new event that fails does not start at one minute: it waits the interval the webhook has reached, which can be hours. One successful delivery resets the count, so after an outage the deliveries arrive spread over hours and out of order.
+- **A failed delivery is sent again after about a minute, then at intervals that grow** from about ten minutes to two or three hours. After every tenth failure the next attempt is 12 hours later. Each event's delivery counts its own failures.
+- **A `Retry-After` header on a failure answer puts off the next attempt**, in seconds or as an HTTP date, by up to 12 hours. It never brings an attempt sooner than the schedule above.
 - **Two answers stop the retries of one event:** status 410, or a failure status with a JSON body that contains `"retry": false`. Neither counts as a failure of the webhook.
 - **After 4 days of failures without one success, the webhook is switched off**: `enabled` becomes `false` and `auto_disabled` becomes `true`. The store's administrators are emailed a warning after every tenth failure, at most once a day, and again when the webhook is switched off.
 
@@ -152,7 +159,6 @@ The webhook's own record has the state across events:
 - **For a webhook the platform switched off**, the same write clears `auto_disabled` and sends again, a few seconds apart, the deliveries that were waiting. Add `retry_disabled_events: false` to switch it on without them. The value is stored, so it also applies the next time.
 - **For a webhook switched off by hand**, nothing is sent again. The deliveries that were waiting are never sent.
 - **Events recorded while a webhook was off are never delivered to it**, in either case. To catch up, read them from `/events` as below.
-- **`attempts_failed` is kept** until a delivery succeeds. If the endpoint still fails, the next retry can be hours away.
 
 ## Reading events without a webhook
 
