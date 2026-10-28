@@ -13,7 +13,7 @@ Two runtime traps no local check catches. Verify both before claiming a shipping
 | Shipping | `/settings/shipments/carriers/app_<appId>_<extId>` | `enabled`, `extension_app_id`, `extension_config_id` (**all three required for dispatch**) | No — multiple shipping carriers coexist |
 | Tax | top-level `/settings/taxes` (one slot, hence singleton) | `extension_app_id`, `extension_config_id` | **Yes** — toggling another tax extension on auto-replaces this one |
 
-The carrier row id is `app_<appId>_<extId>`, never the bare extension id. `<appId>` is the app's 24-char record id (`app_id` on the install), not the slug; `<extId>` is the manifest extension `id`, unaffected by the manifest `carrier` field. Reading `/settings/shipments/carriers/<extId>` returns nothing and is the standard way to wrongly conclude the merchant never activated. Dispatch itself scans every row in `carriers` and gates on the row's fields, not its id — a row written by hand under another id still fires — but merchant Save only ever writes the `app_<appId>_<extId>` id.
+The carrier row id is `app_<appId>_<extId>`, never the bare extension id. `<appId>` is the app's 24-char record id (`app_id` on the install), not the slug; `<extId>` is the manifest extension `id`. Reading `/settings/shipments/carriers/<extId>` returns nothing and is the standard way to wrongly conclude the merchant never activated. Dispatch itself scans every row in `carriers` and gates on the row's fields, not its id — a row written by hand under another id still fires — but merchant Save only ever writes the `app_<appId>_<extId>` id.
 
 `swell app push` does not write any of these. Until the merchant performs the steps in §Merchant Activation, dispatch silently does not fire.
 
@@ -33,7 +33,7 @@ Shipping:
 {
   "type": "integration",
   "extensions": [
-    { "id": "fedex-rates", "type": "shipping", "carrier": "fedex" }
+    { "id": "fedex-rates", "type": "shipping" }
   ]
 }
 ```
@@ -48,8 +48,6 @@ Tax:
   ]
 }
 ```
-
-`carrier` (shipping, optional) — display/asset key only, defaulting to the extension `id`; it names the carrier logo and icon assets on the app record. It does not affect the bound carrier row id and cannot redirect the binding into a differently named carrier slot.
 
 ## Hook Function Contracts
 
