@@ -104,7 +104,7 @@ The rules from them that change a design:
 `swell.functions.get`, `post`, `put` and `delete(appId, functionName, data)` call an app's route function at `/functions/<app_id>/<name>` with the storefront's key and session. Use one where a storefront feature needs app logic, such as a submission that must be checked, instead of making privileged data public.
 
 - **The route must be marked public.** Any other needs a secret key, which a storefront never carries, and rejects with status 401.
-- **Send data one way.** `get` sends `data` as the query and the other calls send it as the body; a query added to a call that has a body is dropped. The function reads both as `req.data`.
+- `get` sends `data` as the query and the other calls send it as the body. The function reads either as `req.data`.
 - **Nothing is case-converted.** On a `useCamelCase` client too, the body is sent as written and the answer comes back as the function produced it.
 - **An answer with an `error` key rejects**, whatever its status, with that status and message. A `SwellError` thrown in the function answers that way. A failing status without the key rejects as the `connection_error` above, so a response the route builds itself needs `{ error: { message, code } }`.
 
