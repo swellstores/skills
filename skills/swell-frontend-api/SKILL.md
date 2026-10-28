@@ -38,7 +38,7 @@ The cart, payments and accounts references each say which of these their calls d
 
 - A list resolves with `{ count, page, limit, results }`: 15 records unless `limit` says otherwise, sorted by `id` descending. A query key it does not know is read as a `where` condition.
 - `/carts`, `/accounts` and `/payments` are refused on these routes: use `swell.cart` and `swell.account`.
-- `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`.
+- `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`. A link the model publishes whole brings what a storefront read of the linked model returns: its public fields, of the records that read returns.
 - `include` attaches a second query to each record, in one request: `include: { <key>: { url: '<path>', params: { <query field>: '<record field>' }, data: { limit: 3 } } }` puts `{ count, results }` under `<key>`. The path can be an app collection, `/apps/<app_id>/<collection>`. A sub-query on a collection that is not public rejects the whole call.
 
 **App data.** The generic requests are how a storefront reaches an app's collections, at `/apps/<app_id>/<collection>`. **Read `references/app-data.md`** before reading or writing app data from a storefront. The rules from it that change a design:
