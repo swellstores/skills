@@ -32,6 +32,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
   readonly settings: Readonly<Record<string, unknown>>;
   readonly locale: string;
   readonly readonly: boolean;
+  readonly theme: 'light' | 'dark';
   setValidity(error: string | null): void;
   readonly fetch: typeof fetch;
   on(event: string, handler: (data: unknown) => unknown): () => void;
@@ -48,6 +49,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 | `settings` | The app's public settings. |
 | `locale` | The store's locale. |
 | `readonly` | The field is disabled or read-only. A `setValue` sent anyway is ignored. |
+| `theme` | `'light'` or `'dark'`, the dashboard's theme; a new one re-renders. The frame's root carries it as `data-theme` and `color-scheme`. |
 | `setValidity(msg)` | A message blocks saving and shows under the field when the merchant saves; `null` clears it. |
 | `fetch` | See "Calling the backend". |
 | `on` | The admin sends no events. |
@@ -73,7 +75,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 ## Layout, focus and modals
 
 - The frame is part of the form: its height follows the component's content (do not set a fixed one), its background is transparent, and the admin's popovers and sticky bars stack over it.
-- The frame has no styles: set `font-family` and colors yourself.
+- The frame has no styles: set `font-family` and colors yourself, for both themes (`:root[data-theme="dark"]`).
 - Tab and Shift+Tab move through the component's controls in form order. Use native focusable elements.
 - **Modal:** render a `position: fixed` element covering the viewport **directly into `document.body`** (`createPortal` from `preact/compat`). While it exists the frame covers the whole admin, the rest of the page is inert and does not scroll, and focus moves to the modal's first control. Removing the element restores the field. A fixed element inside the component's own root covers only the field.
 
