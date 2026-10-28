@@ -15,11 +15,11 @@ Run `swell schema content --format=dts` (and `setting`, `function`) for every pr
 | `actions[]` in a settings file | item at the top of the Actions menu on the app's page | `settings` | `settings` (the settings group name) |
 | a field with `"type": "action"` in a settings file | button among the app's settings | `field` | `settings` |
 
-- **An action has `function` or `link`, never both.** Bulk actions and action fields take `function` only. A function action needs an `id`, unique within its group: a settings file, a view's `actions` and `extra_actions` together, or a view's `bulk_actions`.
+- **An action has `function` or `link`, never both.** Bulk actions take `function` only. A function action needs an `id`, unique within its group: a settings file, a view's `actions` and `extra_actions` together, or a view's `bulk_actions`.
 - **Function actions are added to a view's defaults; a link action replaces them.** An `actions` or `extra_actions` array in which every item runs a function keeps New, Save and Delete. One link item or built-in id in the array and it replaces the defaults, so re-declare the ones to keep.
 - **Standard collections work the same way.** In `content/products.json`, function items from a record view's `actions` and `extra_actions` join the record page's Actions menu; the list page takes `actions`, `extra_actions` and `bulk_actions` from the view with id `list` only, so a list view with another id adds nothing there. Nothing native is replaced.
 - **Declaring `bulk_actions` is what makes an app collection's list selectable.**
-- **Actions run on saved data.** A record action or action field is disabled on a new record and while the form has unsaved changes; settings actions wait for the settings to be saved.
+- **Actions run on saved data.** A record action or action field that runs a function is disabled on a new record and while the form has unsaved changes; settings actions wait for the settings to be saved. A link action field whose `link` has a `{field}` placeholder is disabled until the record is saved, and while a field it names has no value.
 - **`conditions` hide, they do not protect.** They are checked in the dashboard against the current record (or the saved settings) and are ignored on bulk actions and on function actions in list views. The function must re-check any state it depends on.
 - **An action field stores no value.** It is a button placed like any other field, in a content file, a view or a settings file, but not inside a `collection` field or a dialog. The field's `id` is the action's id.
 
@@ -125,7 +125,7 @@ On plans with user roles Swell also requires manage access to the standard colle
 
 ## Verify
 
-1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action or action field without `function`, or a second trigger on the function fail that file with a message. A `function` that names no function of the app with `action: true` is found once the push has deployed: push reports that file failed and exits non-zero, and a click answers `action_function_not_found`.
+1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action without `function`, an action field with neither `function` nor `link`, or a second trigger on the function fail that file with a message. A `function` that names no function of the app with `action: true` is found once the push has deployed: push reports that file failed and exits non-zero, and a click answers `action_function_not_found`.
 2. **Run it.** The dashboard is the real test: click the action on the test environment, in each place it is declared. A CLI login is a dashboard user too, so `swell app action` sends the same request from the terminal:
 
    ```bash
