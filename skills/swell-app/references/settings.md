@@ -4,7 +4,7 @@ Settings define merchant-configurable app behavior in `./settings/*.json`. The m
 
 ## Files, groups and fields
 
-Each settings file creates a grouped panel in the App Preferences UI. Structure: `label` (panel heading), `description` (explanatory text), `fields` (array using content field syntax), and optional `actions` (items in the Actions menu of the app's page — see `references/actions.md`). Multiple files render as grouped panels.
+Each settings file is a section of the app's settings page: `label` (heading), `description` (shown under it, with Markdown links and line breaks), `fields` (content field syntax) and optional `actions` (items in the Actions menu of the app's page — see `references/actions.md`). Sections with a `position` come first, lowest first; the rest follow by label. A field's `description` is its help tooltip and its `hint` shows under it, with Markdown links; on an action field `hint` is the button's hover tooltip and `description` shows under it.
 
 - **The group key is the filename.** Settings returned by `settings()` are namespaced under it: `settings/new-section.json` is read as `settings['new-section'].<field>`. A `_` in the name deploys as a dash, and push warns about it.
 - **`field_group` does not introduce nesting** — its child fields are flattened to the parent level.
