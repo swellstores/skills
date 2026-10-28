@@ -24,11 +24,7 @@ export default class SyncOrder {
     await step.sleep('cool off', '30 seconds');
 
     await step.do('mark synced', async () => {
-      const result = await req.swell.put<{ errors?: object }>(
-        `/orders/${order.id}`,
-        req.appValues({ synced: true }),
-      );
-      if (result.errors) throw new Error(JSON.stringify(result.errors));
+      await req.swell.put(`/orders/${order.id}`, req.appValues({ synced: true }));
     });
 
     return { ok: true };
@@ -58,7 +54,7 @@ const run = await req.swell.workflows.create('sync-order', { order_id: id });
 // { id: 'wf_inst_...', status: 'active' }
 ```
 
-The first argument is the workflow's **function name**: the pushed file's basename with underscores converted to hyphens. `functions/sync_order.ts` and `functions/sync-order.ts` both register as `sync-order`; `functions/syncOrder.ts` registers as `syncOrder`. It is never the exported class name — a `SyncOrder` class buys you nothing. Confirm the deployed name with `swell inspect workflows --app=.`; a wrong name is a 404 `workflow_not_found`, and naming a non-workflow function is `workflow_manifest_not_workflow`. An app may declare at most 25 workflows (`workflow_count_exceeded` at push).
+The first argument is the workflow's **function name**: the pushed file's basename. `functions/sync-order.ts` registers as `sync-order`, `functions/syncOrder.ts` as `syncOrder`, and a `_` becomes `-`: `functions/sync_order.ts` registers as `sync-order`. It is never the exported class name — a `SyncOrder` class buys you nothing. Confirm the deployed name with `swell inspect workflows --app=.`; a wrong name is a 404 `workflow_not_found`, and naming a non-workflow function is `workflow_manifest_not_workflow`. An app may declare at most 25 workflows (`workflow_count_exceeded` at push).
 
 A dashboard action starts a workflow without a calling function: add `action: true` to the workflow's config and name the workflow in the action's `function`. The run then receives the action's dialog values and `$action` as `req.data`, under the same limits as below. Declaring the action, and what the merchant sees while the run is active, is in `references/actions.md`.
 
@@ -78,9 +74,9 @@ Inside the workflow, `req.swell` is a **narrower** client than a function's, not
 
 `..` traversal is blocked the same way (`workflow_operation_blocked`), but two neighboring cases are not: a path carrying a URL scheme fails as `workflow_runtime_api_path_invalid` — a different code, so grepping for `workflow_operation_blocked` misses it — and a literal `#` is truncated rather than rejected, so `/orders#x` silently becomes `/orders`. Only a percent-encoded `%23`/`%3F` trips the blocked check.
 
-Failures of `req.swell` calls also arrive differently than in a function:
+How failures of `req.swell` calls arrive:
 
-- **A write refused by validation resolves with `{ errors: { <field>: { code, message } } }` — it does not throw.** Check `result.errors` after every write, or the step records a success that wrote nothing.
+- **A write refused by validation throws**, as in a function, with `status` 400 and the field errors as `body`. The step fails at once, without the retries it declares: the same write would fail again. This needs `@swell/cli` 2.9.33 or later: in a workflow pushed with an older CLI the write resolves with its errors and looks like a success.
 - **A request the platform refuses throws an error that carries only a message** — a blocked path, a path outside `permissions`, an invalid query. The step fails at once, without the retries it declares. The status and the code (`workflow_operation_blocked`, `permission_denied`) are in `swell logs --type workflow`.
 - **A rate-limited request (429) or a server error throws a retryable error**, and the step retries under its own settings.
 - A read of an id that does not exist resolves empty, as in a function.
