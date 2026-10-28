@@ -113,3 +113,5 @@ Functions run on Cloudflare Workers **without** Node compatibility: use the Web 
 Under `swell api` — and on model-hook, schedule, and cron invocations — no `Swell-Session` header is sent, so `req.session` is `null`. It is never a CLI admin session. Only the storefront gateway attaches a session, and only when the caller's storefront request carries one.
 
 The trap: a `if (!req.session) throw new SwellError('unauthorized', { status: 401 })` gate rejects every local call while passing in production, and `req.session?.account_id` is always `undefined` locally. Verify customer-scoped auth paths through a real storefront request.
+
+`swell api` sends no component token either, so a route that admits only admin component calls (`req.swellContext`, see "Authentication") answers it with 403. Verify such a route through the component in the dashboard.
