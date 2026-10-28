@@ -126,7 +126,7 @@ const settings = await req.swell.settings();                       // default
 const settings = await req.swell.settings(`${req.appId}/provider`); // explicit
 ```
 
-A settings config's name is its file basename with `_` converted to `-`, and the Admin renders an extension's panel from the config whose name equals the manifest `setting`, else the extension `id`. Hyphenate both — an extension id containing `_` can never match its own deployed settings name, and the panel silently degrades to a "navigate to app settings" stub. Full resolution order in `app-integrations.md` § Settings.
+A settings config's name is its file basename, and the Admin renders an extension's panel from the config whose name equals the manifest `setting`, else the extension `id`. Full resolution order in `app-integrations.md` § Settings.
 
 ## Merchant Activation
 

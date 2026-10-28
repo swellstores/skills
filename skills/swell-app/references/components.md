@@ -9,7 +9,7 @@ Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swel
 ## Files and names
 
 - Every `.tsx` / `.jsx` file **directly in `components/`** is one component. Anything else under `components/` (`components/lib/*`, `components/tsconfig.json`) is shared code, bundled into the components that import it.
-- The name is the file name with `_` → `-`: `ColorPicker.tsx` → `ColorPicker`, `color_picker.tsx` → `color-picker`. Use only `[A-Za-z0-9_-]`: other names push but can never be referenced or loaded.
+- The name is the file name: `ColorPicker.tsx` → `ColorPicker`. Use only letters, digits and `-`: push refuses a new file with `_` in its name, and other names push but can never be referenced or loaded.
 - A **default export is required**; without it the build fails (`Unable to compile component <name> …`).
 - `export const config = { description }` is optional and must be a static object literal; the CLI reads it without running the code.
 - Scaffold: `swell create component <Name> [-d <description>] -y`. It writes the file, adds `preact` and `@swell/apps-sdk` (dev, types only) to `package.json`, writes `components/tsconfig.json`, adds `components` to the root `tsconfig.json` `exclude`, and extends the `typecheck` script. Run `npm install` after.
@@ -118,7 +118,7 @@ Any page on a `*.swell.store` address can render an installed app's components w
 
 | Message | Cause |
 |---|---|
-| `Component "<Name>" not found in app "<app>"` | No built component of that name in the installed version: not pushed, failed to compile, or the name differs (`_` → `-`). |
+| `Component "<Name>" not found in app "<app>"` | No built component of that name in the installed version: not pushed, failed to compile, or the name differs. |
 | `Component frame did not start` | The frame loaded but did not start within 10 s: the page is not on a `*.swell.store` address, or the app's address did not serve the frame. |
 | `Component field '<label>' needs an app` | The field is not in an app's content file. |
 | 401 or 404 from a function | The call did not use `props.fetch`, or the function has no `route`. |

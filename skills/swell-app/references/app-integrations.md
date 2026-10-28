@@ -41,7 +41,7 @@ Manifest for an extension whose functions read only their own settings, which ne
 }
 ```
 
-Extension config ids use **hyphens** by convention — `my-method`, never `my_method`. Underscores have historically broken two Admin lookups (settings-panel resolution, and card-gateway binding); both are being fixed, but the convention costs nothing and keeps an app off the question of which Admin version a merchant is running. Because the id doubles as an object key in billing payloads, a hyphenated id must be quoted in JS — `billing["my-method"]`, not `billing.my-method`.
+Extension config ids use hyphens by convention (`my-method`). Because the id doubles as an object key in billing payloads, a hyphenated id must be quoted in JS — `billing["my-method"]`, not `billing.my-method`.
 
 Each extension entry binds into one native flow:
 
@@ -66,7 +66,7 @@ Extension fields:
 Two payment traps in that table:
 
 - **`method` does not rename the method record.** The Admin always writes `methods.<extension.id>` (`methods.card` for card gateways) and reads `method` only to decide card vs. alt. Leave `method` unset unless the value is exactly `"card"`.
-- **A card-gateway extension needs `id: "card"` too.** Checkout matches the component by extension: of the components the platform returns for its place, it mounts the one of the method's app whose `extension.id` is the selected method id, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs is never matched, so its component can never render. Keep the extension `id` free of underscores here in particular: the Admin stores the merchant's card-gateway choice as the string `app_<appId>_<extId>`, and older builds recover the pair by splitting on every `_`, which truncates an underscored extension id into a `extension_config_id` that never binds. `<appId>` there is the app's 24-character record id, never the `swell.json` slug, so an underscore in the app id is harmless. (Alt methods are unaffected — they carry both ids through state, never through a split.)
+- **A card-gateway extension needs `id: "card"` too.** Checkout matches the component by extension: of the components the platform returns for its place, it mounts the one of the method's app whose `extension.id` is the selected method id, and the selected method id for a card gateway is always `card` — a card-gateway extension whose `id` differs is never matched, so its component can never render.
 
 An extension's `method_icon_src`, `gateway_icon_src` or `carrier_icon_src` names an image in `assets/` by its path from the app root, and the dashboard shows it for that extension in its payment or shipping settings in place of the app icon (`logo_src`, else `assets/icon.*`). `gateway_logo_src` is shown with the card method when the app is its gateway. A tax extension shows the app icon.
 
@@ -83,7 +83,7 @@ const settings = await req.swell.settings(`${req.appId}/my-method`); // explicit
 
 Mark fields `"public": true` to expose to checkout components (`settings` prop); provider secrets must remain non-public. Do not invent extension-specific settings APIs — the standard `req.swell.settings()` is the only access path.
 
-A settings config's **name** is the file basename with underscores converted to hyphens — `settings/my_method.json` deploys as name `my-method`. That name is both the settings group key passed to `req.swell.settings()` as `<appId>/<name>` and the key the Admin matches on. The Admin picks an extension's settings panel in this order:
+A settings config's **name** is the file basename — `settings/my-method.json` deploys as name `my-method`. That name is both the settings group key passed to `req.swell.settings()` as `<appId>/<name>` and the key the Admin matches on. The Admin picks an extension's settings panel in this order:
 
 1. If the app has exactly one settings config **and** exactly one extension, that config is used whatever its name.
 2. Otherwise the config whose name equals the manifest's `setting` or, when `setting` is not set, the extension `id`. A `setting` that names no config does not fall back to the `id`.
