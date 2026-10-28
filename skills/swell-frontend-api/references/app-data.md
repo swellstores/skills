@@ -10,6 +10,7 @@ An app adds data as its own collections and as fields on standard models, and a 
 - **Reads** return `id` and the public fields, and reject with `permission_error` when no field is public. Naming another field in `fields` adds nothing; expanding a link that is not public rejects.
 - **A pinned query wins without an error.** A `where` condition or a `limit` the model pins replaces the caller's value for it, while the caller's other conditions still apply. Page with `page`. A record the filter excludes resolves by id with an empty string, like any missing record.
 - **Writes** reject with `permission_error` unless the model declares `input`. A field outside `input.fields` rejects the whole write, and `param` names it. Field validation resolves with `errors` instead: `{ errors: { note: { code: 'REQUIRED' } } }`, or `UNIQUE` for a duplicate.
+- **A path below a record**, `/apps/<app_id>/<collection>/<id>/<field>`, goes by the record's rules. A read answers the value at the path from the record's read; a link or child collection at the path is read as the caller's `expand` of it would be. A write, POST included, is an update of the record ("Who can write"): `input.fields` must allow the field, and an item of a child collection or a record of a link to many is named by its id, so changing one (`PUT …/<id>/items/<item_id>`) needs `items.id` allowed too.
 
 ## Who can write
 
