@@ -106,7 +106,7 @@ const preview = await props.fetch('/app-api/label-preview'); // the app's fronte
 - `swell app dev` serves component modules from the machine (`Component modules at: http://localhost:<port>/.swell/components/<Name>.js`) and rebuilds on change; reload the admin to see edits. Route functions a component calls still run the **pushed** version — push after changing them.
 - `swell app push` builds each component as an ES module. Its change hash includes the files it imports, so a `components/lib/*` edit redeploys the importers without `--force`.
 - The admin loads the build of the **installed version**; a development install uses the current unversioned build.
-- `swell inspect` has no component topic: confirm from the push output and by opening the field.
+- `swell inspect components --app=.` lists the built components with their targets and extension. Open the field to see one render.
 
 ## Other pages
 
