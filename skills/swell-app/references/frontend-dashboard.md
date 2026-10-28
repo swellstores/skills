@@ -58,7 +58,6 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
     {
       "id": "edit",
       "actions": [
-        "save",
         { "id": "open-app", "label": "Open in app", "link": "frontend://shipments/{id}" }
       ]
     }
@@ -69,7 +68,7 @@ Nothing links to the frontend automatically. The app declares each way in, as a 
 - **A sidebar entry needs a content model.** It comes from a list-type view with a `nav` object, in a content file for a collection that exists. Give the frontend page a view of its own, as `overview` above: each list-type view with `nav` gets its own sidebar entry, while `nav.link` on the collection's `list` view would point that entry at the frontend and leave the native list without one. `nav.parent` and `nav.icon` follow the rules in `references/content-models.md`. An app with no collection to hang it on is reached from its own page under Apps, through a settings action.
 - **Placeholders.** `{id}` and other `{field}` placeholders expand from the current record in row links, record view actions and action fields on a record. Sidebar, list header and settings links have no record, so they take a fixed path.
 - **Leave `target` unset.** The link then opens inside the dashboard with the store user signed in. `"target": "blank"` opens the frontend's own address in a new tab; only a view action signs the store user in on the way, so from a sidebar or settings link the page can open in its visitor state.
-- **A link action replaces the view's default actions.** Record views default to `actions: ["save"]` with `extra_actions: ["delete"]`; list views default to `actions: ["new"]`. Declaring only `open-app` on an edit view ships a record the merchant can open in the app but can no longer save — re-declare every default that should stay. (An array holding only function actions is added to the defaults instead.)
+- **A link action is added to the view's default actions**, as a function action is: an edit view that declares only `open-app` keeps Save and Delete. An array that names a built-in id (`new`, `save`, `delete`) is the whole list.
 - **An action has either `link` or `function`, never both.** Bulk actions run functions only; an action field opens a `link` the same way a view action does.
 
 ## Authorize store users
