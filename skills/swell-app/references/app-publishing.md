@@ -79,7 +79,7 @@ The App Store listing is the app record, filled from the app's files whenever a 
 | Source | Fields |
 |---|---|
 | `swell.json` | `name`, `description` (≤ 70 chars), `support_email`, `support_url`, `documentation_url`, `demo_url`, `repository_url`, `preview_video_url`, `images`, `highlights`, the billing fields; for storefronts and themes also `use_cases`, `purchase_options`, `features` |
-| `DESCRIPTION.md` at the app root | `full_description`, as Markdown, up to 20,000 characters |
+| `DESCRIPTION.md` at the app root | `full_description`, as Markdown without HTML, up to 20,000 characters |
 | image files | the icon, preview images, and the images of `images` and `highlights` |
 
 - **The files are the listing.** A key removed from `swell.json` clears its field, and deleting `DESCRIPTION.md` clears the full description. The billing fields are the exception: a removed key keeps the stored value, so a free app sets `price` to `0`. A `full_description` in `swell.json` is not applied, and push warns about it.
