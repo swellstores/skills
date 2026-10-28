@@ -16,7 +16,7 @@ Run `swell schema content --format=dts` (and `setting`, `function`) for every pr
 | a field with `"type": "action"` in a settings file | button among the app's settings | `field` | `settings` |
 
 - **An action has `function` or `link`, never both.** Bulk actions take `function` only. A function action needs an `id`, unique within its group: a settings file, a view's `actions` and `extra_actions` together, or a view's `bulk_actions`.
-- **Function actions are added to a view's defaults; a link action replaces them.** An `actions` or `extra_actions` array in which every item runs a function keeps New, Save and Delete. One link item or built-in id in the array and it replaces the defaults, so re-declare the ones to keep.
+- **Actions are added to a view's defaults.** An `actions` or `extra_actions` array of function and link actions keeps New, Save and Delete. One that names a built-in id (`new`, `save`, `delete`) is the whole list, so it re-declares the defaults to keep.
 - **Standard collections work the same way.** In `content/products.json`, function items from a record view's `actions` and `extra_actions` join the record page's Actions menu; the list page takes `actions`, `extra_actions` and `bulk_actions` from the view with id `list` only, so a list view with another id adds nothing there. Nothing native is replaced.
 - **Declaring `bulk_actions` is what makes an app collection's list selectable.**
 - **Actions run on saved data.** A record action or action field that runs a function is disabled on a new record and while the form has unsaved changes; settings actions wait for the settings to be saved. A link action field whose `link` has a `{field}` placeholder is disabled until the record is saved, and while a field it names has no value.
@@ -125,7 +125,7 @@ On plans with user roles Swell also requires manage access to the standard colle
 
 ## Verify
 
-1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action without `function`, an action field with neither `function` nor `link`, or a second trigger on the function fail that file with a message. A `function` that names no function of the app with `action: true` is found once the push has deployed: push reports that file failed and exits non-zero, and a click answers `action_function_not_found`.
+1. **Validate.** `swell schema function ./functions/<name>.ts` checks the function. Push validates the declaration: both `function` and `link`, a missing or duplicate `id`, a bulk action without `function`, an action field with neither `function` nor `link`, a view's `record_actions` (use `extra_actions`), or a second trigger on the function fail that file with a message. A `function` that names no function of the app with `action: true` is found once the push has deployed: push reports that file failed and exits non-zero, and a click answers `action_function_not_found`.
 2. **Run it.** The dashboard is the real test: click the action on the test environment, in each place it is declared. A CLI login is a dashboard user too, so `swell app action` sends the same request from the terminal:
 
    ```bash
