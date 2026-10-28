@@ -231,7 +231,7 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 
 | Command | Use it to |
 |---|---|
-| `swell inspect {content\|extensions\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
+| `swell inspect {components\|content\|extensions\|frontend\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
 | `swell schema <type> --format=dts` | The authoritative structure for a resource type — consult before authoring |
 | `swell schema <type> ./file` | Validate one manifest locally |
 | `swell create {content\|function\|model\|notification\|setting\|webhook\|component\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
@@ -272,7 +272,7 @@ Pass: You have the schema output and understand the structural requirements for 
 
 ### Gate 3 — Author & Validate
 
-For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes; when the CLI lacks the required shape, follow the resource reference's adaptation (for example, actions start from a route scaffold). Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
+For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes. Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
 Pass: Supported local validation and relevant type checks pass. Name unavailable checks and any pre-existing failures separately; do not claim deployment validation from local checks alone.
 
 ### Gate 4 — Deploy & Verify
