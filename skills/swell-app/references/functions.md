@@ -34,7 +34,7 @@ export default async function (req: SwellRequest) {
 
 Conditions accept MongoDB-style operators against `$record`, `$data`, `$event`, `$settings`, or `$formula` (string expression for complex cases). Child collection events use dot notation: `review.comment.created`, `review.reaction.deleted`.
 
-An event does not wake the function whose run made the write, except that a scheduled function's own write still moves its run. An `updated` event whose write changed app fields and nothing else wakes only the functions of the apps whose fields it changed, including the other functions of the app that wrote them. Writes by functions that follow from one request run functions for at most 10 events of a record: past that, the record's later events in the request run no function, and each function stopped logs why. Scheduled runs still follow their times.
+An event does not wake the function whose run made the write, except that a scheduled function's own write still moves its run. An `updated` event whose write changed app fields and nothing else wakes only the functions of the apps whose fields it changed, including the other functions of the app that wrote them. Writes by functions that follow from one request run functions for at most 10 events of a record: past that, the record's later events in the request run no function, and each function stopped logs why. A scheduled run whose time has already come when a write sets it continues that write's chain, so past the limit it is not made; a run at a later time starts a chain of its own.
 
 Runs of a function for one record go one at a time, in the order of the record's events. A run that failed and waits for its retry, or one still unsent 5 minutes after its event, does not hold back later ones.
 
