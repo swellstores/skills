@@ -4,12 +4,12 @@ An app component is a Preact UI that renders a **content field** in the admin in
 
 A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component.
 
-Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`).
+Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`). `theme` is typed from `@swell/apps-sdk` 2.0.0-alpha.9.
 
 ## Files and names
 
 - Every `.tsx` / `.jsx` file **directly in `components/`** is one component. Anything else under `components/` (`components/lib/*`, `components/tsconfig.json`) is shared code, bundled into the components that import it.
-- The name is the file name: `ColorPicker.tsx` → `ColorPicker`. Use only letters, digits and `-`: push refuses a new file with `_` in its name, and other names push but can never be referenced or loaded.
+- The name is the file name: `ColorPicker.tsx` → `ColorPicker`. Use letters, digits and `-`. A `_` deploys as `-`, with a warning; push refuses a new file with any other character in its name, as one that would never load.
 - A **default export is required**; without it the build fails (`Unable to compile component <name> …`).
 - `export const config = { description }` is optional and must be a static object literal; the CLI reads it without running the code.
 - Scaffold: `swell create component <Name> [-d <description>] -y`. It writes the file, adds `preact` and `@swell/apps-sdk` (dev, types only) to `package.json`, writes `components/tsconfig.json`, adds `components` to the root `tsconfig.json` `exclude`, and extends the `typecheck` script. Run `npm install` after.
@@ -108,7 +108,7 @@ const preview = await props.fetch('/app-api/label-preview'); // the app's fronte
 - `swell app dev` serves component modules from the machine (`Component modules at: http://localhost:<port>/.swell/components/<Name>.js`) and rebuilds on change; reload the admin to see edits. Route functions a component calls still run the **pushed** version — push after changing them.
 - `swell app push` builds each component as an ES module. Its change hash includes the files it imports, so a `components/lib/*` edit redeploys the importers without `--force`.
 - The admin loads the build of the **installed version**; a development install uses the current unversioned build.
-- `swell inspect components --app=.` lists the built components with their targets and extension. Open the field to see one render.
+- `swell inspect components --app=.` (`@swell/cli` 2.9.33 or later) lists the built components with their targets and extension. Open the field to see one render.
 
 ## Other pages
 

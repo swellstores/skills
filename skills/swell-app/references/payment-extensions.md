@@ -216,7 +216,7 @@ export const config = {
 };
 
 export default function MyMethodPay({ context, settings, on, call }: ComponentProps<never, PaymentContext>) {
-  // Register in an effect: the frame runs only the first handler registered for an event, and `on` returns the unsubscribe
+  // Register in an effect: its cleanup, the function `on` returns, removes the previous render's handler
   useEffect(
     () =>
       on("submit", async (): Promise<PaymentSubmitResult> => {
@@ -230,7 +230,6 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
     [on, call, context],
   );
 
-  // Render something first: an empty frame does not switch to overlay when a provider modal opens
   return <p>You will complete the payment in the next step.</p>;
 }
 ```
@@ -265,7 +264,7 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
 - `createIntent` takes the account from `context.cart.account_id` and the gateway from the platform: do not pass either. `data` arrives in the hook as `req.data.intent`; send only what the hook needs (`amount`, `currency`).
 - A thrown `Error` in a handler (or a rejected `call`) shows its message to the shopper and returns the form to a usable state. Throw shopper-readable messages, for example `Payment cancelled` when the shopper closes the provider modal.
 - `submit` must return `{ billing }`: with none, the shopper sees "The payment method did not respond" and no order is placed. `redirect` is the reverse: a handler that returns no `billing` is ignored, so return nothing for returns that are not the provider's (a URL with only utm parameters).
-- Register handlers in `useEffect(() => on("submit", ...), [on, call, context])`. The frame runs only the **first** handler registered for an event, so a handler registered on every render would keep the first render's closure. Either re-register through the effect as above (the cleanup returned by `on` unsubscribes the old one) or register once and read the latest props through a ref.
+- Register handlers in `useEffect(() => on("submit", ...), [on, call, context])`, whose cleanup removes the previous render's handler, or register once and read the latest props through a ref. Handlers run in the order registered, each after the previous one settles, until one throws: the first error answers the checkout, otherwise the last result other than `undefined` does. A handler registered again, as an effect does on a re-render, moves to the end, so keep steps that depend on each other in one handler. One removed while the event runs is skipped, and one registered meanwhile runs from the next event.
 - The component never writes the cart. Return `{ billing }` and the host saves it; the handler's result is the only way billing gets in.
 
 ### Billing Persistence Contract
@@ -311,7 +310,7 @@ The function receives this under `req.data.intent` and answers with `{ result }`
 1. Hosted checkout mounts the place `checkout.payment.methods` into the body of the selected method, and of the components the platform returns it mounts the one of the method's app whose `extension.id` is the method id. A method without a component submits as before. Switching methods unmounts the frame.
 2. An app method pays through its component only while payment is collected (`capture_total > 0`, or a payment is required); otherwise the method has no component and submits as before. The submit button is disabled while checkout is loading, until the component has started, and while it reports a validity message or an error. A component that fails to start shows its error and keeps that method's submit disabled; the shopper can switch to another method, except while checkout is loading, when the method options of an app method are locked.
 3. The frame is its own document: load a provider's script with a `<script>` element in the component, once per frame, and mount third-party widgets into your own ref.
-4. **Render visible content before opening a provider modal.** Provider modals are fixed full-screen elements; when one appears the frame turns into a viewport overlay by itself and goes back when it closes. Content in the frame is what the shopper sees in the methods list before the modal opens. If the provider's modal lets the shopper retry after a failed attempt, do not reject `submit` on a failure: keep the last error and settle only on success, or when the shopper closes the modal (reject with the last error, or `Payment cancelled`).
+4. **A provider modal covers the page by itself.** Provider modals are fixed full-screen elements; when one appears the frame turns into a viewport overlay, whatever the component renders, and goes back when it closes. What the component renders is what the shopper sees in the methods list before the modal opens. If the provider's modal lets the shopper retry after a failed attempt, do not reject `submit` on a failure: keep the last error and settle only on success, or when the shopper closes the modal (reject with the last error, or `Payment cancelled`).
 5. In `submit`, validate and run the provider UI first, then `call("createIntent", data)` if the provider needs a server-created order or session, and return the billing.
 6. If the provider can redirect away from checkout, handle `redirect` too: read `params`, verify the provider's status (`call("getIntent", params)` is the browser trigger for the `payment.get_intent` hook), return `{ billing }`, and throw a shopper-readable error on failure. Redirect handlers must be idempotent: shoppers reload return URLs. Public keys may come from app settings; secret keys stay in functions.
 
@@ -350,6 +349,5 @@ Common mistakes:
 - Returning raw provider errors or large provider objects instead of the platform return contract.
 - Reading secret settings in the checkout component.
 - No `targets` in the component, or `extension` that is not an object: hosted checkout renders nothing for it.
-- Registering `submit` on every render without the effect cleanup: the frame runs only the first handler registered, so it keeps stale props.
-- Opening a provider modal from an empty component.
+- Registering `submit` on every render without the effect cleanup: every registered handler runs, so the provider opens once per render.
 - Assuming deploy alone proves the native payment flow selected the extension (Critical Contract #2).
