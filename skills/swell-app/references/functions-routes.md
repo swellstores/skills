@@ -80,7 +80,7 @@ Use the installed app's own public key. A function reads it as `req.publicKey` a
 
 ## Headers
 
-By default, all incoming headers are forwarded to `req.headers` (a standard `Headers` object). Set `route.headers` to an allow-list to restrict which headers reach the function.
+By default, the incoming headers are forwarded to `req.headers` (a standard `Headers` object), except `Swell-*` headers, which only the platform sets (`Swell-Session` among them), and, on a call from another origin, the shopper's `swell-session` and `swell-data` cookies. Set `route.headers` to an allow-list to restrict which headers reach the function.
 
 For local testing, forward caller headers via repeatable `-H 'Name: value'` on `swell api`. Header forwarding applies to `/functions/*` paths only.
 
