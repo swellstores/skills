@@ -51,7 +51,7 @@ Each folder holds one kind of block, and a file's name decides what it becomes: 
 
 ### Manifest — `swell.json`
 
-The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and marketing fields are used at release time — `references/app-publishing.md`.
+The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and listing fields fill the App Store listing: `references/app-publishing.md`, "Listing".
 
 ### Data models — `models/*.json`
 
@@ -63,7 +63,7 @@ The database schema. Three shapes:
 
 Models also declare relationships (links), formulas, and the custom events that functions, webhooks and notifications subscribe to. Data logic belongs here; how the data looks in the dashboard belongs in content views.
 
-**Nothing is visible to a storefront by default.** An app collection is closed to the Frontend API until the model declares what is public. The declaration can open reads, pin a filter, allow writes to listed fields, and scope a customer's reads and writes to their own records. Start with these model capabilities for customer-owned data such as a wishlist. Scoping gives ownership, not login: a visitor who is not logged in can still create a record, stored without an owner. A feature that requires login, and data that everyone reads and customers submit, such as reviews, need an authenticated server write path; read "Storefront exposure" in `references/data-models.md` and the Frontend API skill's `references/app-data.md`. Fields added to a standard model are different: only the app's own frontend reads them, and only those marked public. Any other storefront never does, whatever the field declares — for it, plan the data as an app collection or behind a route function.
+**Nothing is visible to a storefront by default.** An app collection is closed to the Frontend API until the model declares what is public. The declaration can open reads, pin a filter, allow writes to listed fields, and scope a customer's reads and writes, or only writes, to their own records behind a login. That covers customer-owned data such as a wishlist, and data that everyone reads and customers submit, such as reviews; read "Storefront exposure" in `references/data-models.md` and the Frontend API skill's `references/app-data.md`. Fields added to a standard model are visible to storefronts when marked public.
 
 Read `references/data-models.md` before authoring a model.
 
@@ -81,7 +81,7 @@ Read `references/content-models.md` before authoring views; `swell schema conten
 
 A dashboard button or menu item that runs one of the app's functions or workflows: on a record, on selected rows, among a record's fields, or on the app's own page, optionally after a dialog that asks for inputs. This is how a merchant triggers an operation without a custom frontend.
 
-- Swell authenticates the store user on the action invocation path, used by the dashboard and by the CLI's equivalent request. Ordinary function calls and storefront callers cannot invoke an action function. The handler still checks record state and any finer access rules — `references/actions.md` owns the invocation and authorization contract.
+- Swell authenticates the store user on the action invocation path, used by the dashboard and by `swell app action`. Ordinary function calls and storefront callers cannot invoke an action function. The handler still checks record state and any finer access rules — `references/actions.md` owns the invocation and authorization contract.
 - The merchant waits for the result, within the function timeout. Longer work, or a bulk action over many records, runs as a workflow.
 
 Read `references/actions.md` before adding one.
@@ -92,9 +92,9 @@ Server logic. Each top-level file is one function with exactly one trigger; shar
 
 | Trigger | Runs | Scope and limits |
 | --- | --- | --- |
-| Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure |
-| Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Any declared event can be hooked: the hook runs inside the write that triggers the event. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. → `references/functions-hooks.md` |
-| Model schedule | At a date taken from a record field | Re-schedules when the field changes |
+| Model event (async) | After a record change is saved | For downstream effects: denormalization, fan-out, sync. Any declared event, standard or custom. Retried on failure. One run at a time per record, in order. Not woken by its own writes, or by an update that changes only other apps' fields |
+| Model hook (sync) | Inside the API request, `before:` or `after:` the write | A `before:` hook can change what is saved or reject the write. Any declared event can be hooked: the hook runs inside the write that triggers the event. A hook does not run for writes inside a transaction, so back a critical rule with model validation as well. Not run for its own writes. → `references/functions-hooks.md` |
+| Model schedule | At a time taken from the record | One pending run per record: a new time moves it, an empty one cancels it |
 | Cron | On a fixed schedule | No record context |
 | HTTP route | On a call to `/functions/<app_id>/<function_name>` | Fixed path, no path parameters. Callers need a key — see below. → `references/functions-routes.md` |
 | Dashboard action | On an authenticated store-user action request | Dashboard click or equivalent CLI request; not a route call. → `references/actions.md` |
@@ -117,7 +117,7 @@ Read `references/functions.md` before writing a function — the `req` object, p
 
 A durable background process: a sequence of steps, each with its own timeout and retry policy, recorded so a completed step never runs twice, and able to sleep for long periods. Use it for work that outlives a function timeout or must survive a failure between steps — a sync to an external system, a long bulk operation, a delayed follow-up.
 
-- Started by another function or by a dashboard action. Nothing else starts one, and a workflow cannot start another workflow.
+- Started by a function, by a frontend's server code or by a dashboard action. A workflow cannot start another workflow.
 - Its store client is narrower than a function's: no transactions, and only the app's own settings.
 - Workflows do not run under `swell app dev`; they are tested after a push.
 
@@ -138,8 +138,7 @@ A manifest that makes Swell POST an event to an external URL. Use it when the ha
 
 - Async events only: a webhook cannot validate or block a write.
 - The endpoint must answer within 10 seconds. A failed delivery is retried for days, then the webhook is disabled.
-- **Created disabled**: `enabled` is `false` unless the manifest sets it.
-- Requests are unsigned and carry no store identifier. The receiver identifies the store by its own URL and re-fetches the record before acting.
+- Requests are signed: verify them with `verifySwellWebhook` from `@swell/apps-sdk` before acting. The `Swell-Store-Id` header names the store.
 
 Read `references/webhooks.md` before adding one.
 
@@ -179,7 +178,7 @@ Shipping and tax have no component place, and a storefront renders components on
 
 ### Assets and tests
 
-- **`assets/`** is the app's only **public** directory: its files are served from an unauthenticated CDN address, while every other file push uploads is stored private. Put nothing there you would not publish. The app's icon and listing images are picked up from it by filename (`icon.*`, `image.*`, `preview.*`), so a rename silently unbinds them — `references/app-publishing.md`.
+- **`assets/`** is the app's only **public** directory: its files are served from an unauthenticated CDN address, while every other file push uploads is stored private. Put nothing there you would not publish. The app's icon and listing images are taken from its files, by name or by the paths `swell.json` gives — `references/app-publishing.md`, "Listing".
 - **`test/`** holds the Vitest suite: `test/unit/` and `test/integration/`, plus helpers — `mock-request.ts` mocks the function context, and `swell-client.ts` reaches the store through the CLI's login, with no credentials to configure. Scaffold it with `swell create tests`.
 
 ## Integration apps and extensions
@@ -239,12 +238,13 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 | `swell app push` | Deploy every app resource to the test environment |
 | `swell app dev` | Local tunnel; model hooks, model events and dashboard actions execute locally, and the frontend is previewed through Swell |
 | `swell app pull` | Adopt an existing app — a two-way sync, not a download |
+| `swell app action <id>` | Run an app action as a dashboard user does: `references/actions.md`, "Verify" |
 | `swell app version` / `install` / `release` | Publishing lifecycle — see `references/app-publishing.md` |
 | `swell logs [-f]` | Remote logs for functions, webhooks and API calls |
 
 Five behaviours that decide whether a deploy actually did what you think:
 
-- **`swell app push` is not all-or-nothing and exits 0 on per-file failures.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys. Never read a clean exit as proof — check the output for `Ignoring file:` / `Unable to compile`.
+- **`swell app push` is not all-or-nothing.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys, and the push then exits non-zero naming the failed files. Check the output for `Ignoring file:` / `Unable to compile` to see why.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
 - **Push skips unchanged files by hash.** From `@swell/cli` 2.9.27 the hash covers the files a function or component imports; older CLIs leave importers stale after a lib-only edit — use `--force` there.
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
@@ -286,7 +286,7 @@ Confirm the affected behavior under realistic conditions. Run relevant existing 
 
 - Event-driven resources (model-triggered functions, webhooks, notifications): Trigger via `swell api [post|put|delete] /apps/<app_id>/<collection>` with payloads matching event conditions (model events propagate asynchronously).
 - Route functions: Call via `swell api [get|post|put|delete] /functions/<app_id>/<function_name>` with appropriate `--body`.
-- Action functions: cannot be called as routes. Run the action from the dashboard, or send the dashboard's request from the CLI as shown in `references/actions.md`.
+- Action functions: cannot be called as routes. Run the action from the dashboard, or with `swell app action <id>` (`references/actions.md`).
 - Data models: Execute create → read → update → delete cycle via `swell api` or integration test. Test relationship expansion with `?expand=`.
 
 Pass: The affected behavior produces the expected result and relevant tests pass. State any runtime checks that could not be performed within the task's scope.

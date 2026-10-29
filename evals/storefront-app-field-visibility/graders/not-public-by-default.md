@@ -1,14 +1,15 @@
 ---
 type: llm
 criteria: |
-  The response must state that the field being absent is expected rather than a bug: a storefront
-  does not receive app extension fields (`$app` paths) on standard models through the Frontend API
-  with the store's public key.
-  It must name at least one real way to expose the data: moving it to an app-defined collection
-  with public permissions, or serving it through an app route function. Extending the public key
-  record's custom field permissions may be named as well.
-  FAIL if it claims the field should already be returned, tells the user to add `expand`, suggests
-  only marking the field `"public": true` on the model as sufficient, or invents an API for it.
+  The response must state that the field is absent because the app has not marked it public: an
+  app's field on a standard model reaches a storefront only when the app's model declares it
+  `"public": true` (in the app's `models/products.json`), and after a push any storefront key,
+  the store's own included, gets it as `$app.<app_id>.average_rating`.
+  Credit, but do not require, naming an app route function or an app collection for data that
+  needs logic or permissions beyond a public field.
+  FAIL if it says a store's key can never read app fields on standard models, tells the user to
+  add `expand`, or invents an API for it.
 ---
-The skills previously said extension fields "appear automatically" — true on the backend, false for
-storefront callers. This breaks the flagship product-reviews use case.
+A storefront reads an app's field on a standard model once the app marks it public, on any key.
+A model that misses this tells the user to move the data or build a route for something one
+flag does.

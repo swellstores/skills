@@ -17,16 +17,18 @@ export default class SyncOrder {
   async run(req: SwellWorkflowRequest, step: SwellWorkflowStep) {
     const { order_id } = req.data as { order_id: string };
 
-    const order = await step.do('load order', async () => {
-      return (await req.swell.get(`/orders/${order_id}`)) as { id: string };
-    });
+    const order = await step.do('load order', () =>
+      req.swell.get<{ id: string }>(`/orders/${order_id}`),
+    );
 
     await step.sleep('cool off', '30 seconds');
 
     await step.do('mark synced', async () => {
-      return req.swell.put(`/orders/${order.id}`, {
-        $app: { [req.appId]: { synced: true } },
-      });
+      const result = await req.swell.put<{ errors?: object }>(
+        `/orders/${order.id}`,
+        req.appValues({ synced: true }),
+      );
+      if (result.errors) throw new Error(JSON.stringify(result.errors));
     });
 
     return { ok: true };
@@ -34,7 +36,7 @@ export default class SyncOrder {
 }
 ```
 
-`req.data` is typed `unknown` and every `req.swell.*` call resolves `Promise<unknown>` on `SwellWorkflowRequest` — cast at the boundary as above or Gate 3 `npm run typecheck` fails.
+`req.data` is typed `unknown`: cast it at the boundary as above. A `req.swell.*` call resolves `unknown` unless it names the result type, as `get<{ id: string }>` does; Gate 3 `npm run typecheck` refuses an `unknown` result read without one.
 
 ## Step semantics
 
@@ -49,7 +51,7 @@ await step.do('call warehouse', {
 
 ## Starting a workflow
 
-From any app function (route, model event, cron, action):
+From any app function (route, model event, cron, action), and from a frontend's server code through its Backend client (`getBackend()` in Vinext), which has the same `workflows.create()`:
 
 ```typescript
 const run = await req.swell.workflows.create('sync-order', { order_id: id });
@@ -60,7 +62,7 @@ The first argument is the workflow's **function name**: the pushed file's basena
 
 A dashboard action starts a workflow without a calling function: add `action: true` to the workflow's config and name the workflow in the action's `function`. The run then receives the action's dialog values and `$action` as `req.data`, under the same limits as below. Declaring the action, and what the merchant sees while the run is active, is in `references/actions.md`.
 
-The second argument of `workflows.create()` is passed through as `req.data` inside the workflow. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
+The second argument of `workflows.create()` is passed through as `req.data` inside the workflow, less a `$action` key: only a run that an action starts has one. Params must be JSON-safe and ≤128 KB, both checked before any instance is created: `workflow_params_too_large` over 128 KB, `workflow_params_unserializable` for anything JSON can't round-trip — `undefined`, functions, symbols, `NaN`/`Infinity`, cyclic references, sparse arrays, and **any object whose prototype isn't `Object.prototype`**, so a `Date` rejects (pass an ISO string). Pass identifiers and re-fetch inside the workflow.
 
 Inside the workflow, `req.swell` is a **narrower** client than a function's, not the same one:
 
@@ -72,16 +74,9 @@ Inside the workflow, `req.swell` is a **narrower** client than a function's, not
 | `:`-prefixed paths (`/:functions`, `/:cache`, …) | Rejected: `workflow_operation_blocked` |
 | `/:batch` | Allowed (the one `:` exception) — child ops are re-validated *without* it, so no nested batch, `/:transaction`, `/settings`, or `..` inside |
 | `/:transaction` | Rejected — no transactions inside a workflow |
-| `appValues()` | **Does not exist** |
 | `workflows.create()` | **Does not exist** — a workflow cannot start another workflow |
 
-`..` traversal is blocked the same way (`workflow_operation_blocked`), but two neighboring cases are not: a path carrying a URL scheme fails as `workflow_runtime_api_path_invalid` — a different code, so grepping for `workflow_operation_blocked` misses it — and a literal `#` is truncated rather than rejected, so `/orders#x` silently becomes `/orders`. Only a percent-encoded `%23`/`%3F` trips the blocked check. Because `appValues()` is absent — `swell schema function --format=dts` lists it on the workflow request, but the runtime does not have it — build the extension envelope by hand:
-
-```typescript
-await req.swell.put(`/orders/${orderId}`, { $app: { [req.appId]: { synced: true } } });
-```
-
-Calling `req.appValues(...)` instead throws `TypeError: req.appValues is not a function` inside the step, and the step-retry machinery retries that TypeError to exhaustion — the run reads as a flaky integration, not a typo.
+`..` traversal is blocked the same way (`workflow_operation_blocked`), but two neighboring cases are not: a path carrying a URL scheme fails as `workflow_runtime_api_path_invalid` — a different code, so grepping for `workflow_operation_blocked` misses it — and a literal `#` is truncated rather than rejected, so `/orders#x` silently becomes `/orders`. Only a percent-encoded `%23`/`%3F` trips the blocked check.
 
 Failures of `req.swell` calls also arrive differently than in a function:
 
@@ -90,14 +85,14 @@ Failures of `req.swell` calls also arrive differently than in a function:
 - **A rate-limited request (429) or a server error throws a retryable error**, and the step retries under its own settings.
 - A read of an id that does not exist resolves empty, as in a function.
 
-`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `'function'` for `workflows.create()` and `'action'` for a dashboard action. `req.app.admin_url` is the app's page in the dashboard, as in functions. `req.isLocalDev` is always `false`.
+`req.workflow` identifies the run (`workflow_id`, `workflow_name`, `workflow_instance_id`, `trigger`, `request_id`); `trigger` is `'function'` for `workflows.create()` and `'action'` for a dashboard action. `req.app.admin_url` and `req.app.frontend_url` are as in functions. `req.environmentId` is `'test'` in the test environment and `null` in live, as in functions (`@swell/cli` 2.9.30 or later). `req.isLocalDev` is always `false`.
 
 ## Deploy-only iteration loop
 
 Workflows do **not** execute under `swell app dev` — your other functions still do, but workflow instances run only after `swell app push`. Iterate as:
 
 1. `swell app push`
-2. Trigger from a function (`swell api` against the calling route or model event) or run the action that starts it
+2. Trigger from a function (`swell api` against the calling route or model event) or run the action that starts it (`swell app action <id>`)
 3. Inspect: `swell inspect workflows --app=.` (deployed workflows), `swell inspect workflow-runs --app=.` (recent instances + status)
 4. Logs: `swell logs --type workflow --app <id>` (step-level logs)
 

@@ -39,7 +39,7 @@ The clients send the same paths, queries and bodies, so the references give a wr
 Swell is schema-driven: every collection (standard and custom) is described by a live model definition. Discover instead of guessing:
 
 - `GET /:models` — list model definitions; `GET /:models/<name>` — full definition with `fields` (types, required, enums, formulas, links), `events`, and query defaults. It is the authoritative field reference for this store, with what apps and the merchant added.
-- The name is not always the collection's path. A collection under `content/` is `/:models/content_<name>`, and an app's collection is `/:models/app_<record id>.<collection>`; the bare name can answer with another model of the same name. A child collection has no definition of its own: it is described on its field in the parent (`fields.addresses` of `accounts`).
+- The name is not always the collection's path. A collection under `content/` is `/:models/content_<name>`, and an app's collection is `/:models/app_<app_id>.<collection>`; the bare name can answer with another model of the same name. A child collection has no definition of its own: it is described on its field in the parent (`fields.addresses` of `accounts`).
 - Custom models and fields are made in the dashboard (Developer > Models) or by an app (`swell-app`).
 
 Paths:
@@ -53,7 +53,7 @@ Paths:
 
 An app's own function and frontend clients also reach its collections by the short path, `/<collection>`, in a transaction's operations too. An app's fields on a standard record are under `$app.<app_id>` in the record.
 
-`<app_id>` is the `id` in the app's `swell.json`. The paths above also take the app's record id, 24 hexadecimal characters; `/:models` and the longer forms of a webhook's event entries take only that one. Read it from `app_id` on the collection's entry in `GET /:models`.
+`<app_id>` is the `id` in the app's `swell.json`. The app's record id, 24 hexadecimal characters, which events carry, works in its place.
 
 Records address by `id`, and many collections also by a secondary field usable in the URL: products/categories/pages/`content/blogs`/`content/blog-categories` → `slug`, orders/carts/invoices/payments/shipments/returns/subscriptions → `number`, accounts/contacts → `email`, gift cards and `coupons:codes` → `code`, coupons/promotions/purchase links → `name`. The lookup is generic, not a fixed list — read `secondary_field` on any model's `/:models/<name>` definition.
 
@@ -84,8 +84,8 @@ Read `references/events-webhooks.md` before reacting to store activity. Four of 
 
 - **An event is a notice, not the record.** Most events carry the record's id and little else, so read the record before acting.
 - **Not every change records an `updated` event.** A payment that settles an order records `order.paid` and no `order.updated`.
-- **A webhook created through the API is off** until `enabled: true` is sent, and the event names it lists are not checked.
-- **A webhook request is not signed**, and it can arrive twice or out of order.
+- **A webhook created through the API is off** until `enabled: true` is sent.
+- **A webhook request is signed**: verify it before acting. It can arrive twice or out of order.
 
 The reference also covers the event log and type names, the forms of a webhook's event entries, retries and automatic disabling, reading delivery rows, and reading `/events` in place of a webhook.
 

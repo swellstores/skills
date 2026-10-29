@@ -8,7 +8,9 @@ Creating, updating and deleting records on the Backend API: how an update merges
 - **`PUT /<collection>/<id>` updates a record by merging** the body into what is stored, and answers with the whole record as it is afterwards.
 - **A `PUT` to an id that does not exist creates a record with that id.** It is validated as a new record, so required fields are asked for. Read the record first when the code must not create one.
 - **`DELETE /<collection>/<id>` removes the record for good** and answers with what it removed. Orders and subscriptions are no exception. Canceling one is an update, not a delete: `references/orders-payments.md`.
+- **A `PUT` with `where` updates the record only while it matches.** `PUT /orders/<id>` with `{ where: { status: 'pending' }, status: 'processing' }` writes only if the order is still pending, and otherwise answers empty, as a read of a missing id does, and creates nothing: test `if (!result)`. When the write changes what `where` tests, as here, one of concurrent writes with that condition succeeds, so this claims a record for work that must run once. A write that leaves the tested fields as they are lets every concurrent writer through.
 - **A write that fails field validation writes nothing** and answers with `{ errors }`.
+- **A `unique` field holds under concurrent writes outside a transaction.** Of several writes of one value at once, one is written and the others fail validation with code `UNIQUE`.
 - **Nothing can be undone.** There is no history and no rollback outside a transaction. Run operator writes and writes over many records against test records first.
 
 ## An update merges

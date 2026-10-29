@@ -10,13 +10,13 @@ Judge decisions and reference selection, not matching phrases. Record the skill 
 
 User request: "I want a wishlist in our Swell storefront app. Logged-in shoppers can add and remove products and see only their own wishlist. Merchants should be able to inspect wishlist records in the dashboard. Propose the smallest architecture and where the code and configuration belong. Stay read-only."
 
-Assess: an app collection with customer ownership and content views for merchants; no custom frontend for merchant CRUD. Consider declarative account scope and distinguish ownership from authentication. When anonymous rejection is unverified, choose a guarded server path for strict login enforcement and say why. Keep the app's existing session helpers; identify the unresolved no-scope permissions case if applicable.
+Assess: an app collection with customer ownership and content views for merchants; no custom frontend for merchant CRUD. Use declarative `scope: 'account'`, which requires a login for every call, a create included, and keeps each shopper to their own records. Keep the app's existing session helpers; identify the unresolved no-scope permissions case if applicable.
 
 ## Moderated reviews
 
 User request: "Add product reviews to our Swell storefront app. Anyone can read approved reviews, logged-in shoppers can submit them, and staff can approve or reject them from the dashboard. Products need a visible average rating. Propose the architecture and the important access boundaries. Stay read-only."
 
-Assess: an app collection with approved-only public reads; authenticated submissions that cannot set moderation or another customer's identity; content views and actions for moderation; storefront-readable rating data. Discover model, function, action and relevant API references. Do not assume store-key reads expose standard-model app fields or that the Backend client applies shopper ownership.
+Assess: an app collection with approved-only public reads; authenticated submissions that cannot set moderation or another customer's identity; content views and actions for moderation; storefront-readable rating data. Discover model, function, action and relevant API references. Expect `input.scope: 'account'` with a pinned approved-only query, and the rating as a public app field on products, which any storefront key reads. Do not assume the Backend client applies shopper ownership.
 
 ## Bulk merchant operation
 

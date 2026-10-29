@@ -44,8 +44,8 @@ The cart, payments and accounts references each say which of these their calls d
 **App data.** The generic requests are how a storefront reaches an app's collections, at `/apps/<app_id>/<collection>`. **Read `references/app-data.md`** before reading or writing app data from a storefront. The rules from it that change a design:
 
 - A collection answers only what its model declares public. With nothing public, every call is refused.
-- `scope: 'account'` gives ownership, not login: a visitor who is not logged in can still create a record. A write that needs a login, moderation or fields the server sets goes through an app route function ("Calling App Functions").
-- Fields an app adds to a standard model are returned only to that app's own key, so only the app's own frontend can read them.
+- `scope: 'account'` limits reads and writes to the logged-in customer's own records, and `input.scope: 'account'` limits writes only. A scoped call, a create included, needs a login.
+- Fields an app adds to a standard model are returned to any storefront when the app marks them public.
 
 **TypeScript.** swell-js ships its own declarations: never install `@types/swell-js`. `SwellClient` is the type of a client. The declarations differ from the runtime in a few places. Where a call the references describe does not compile, cast, and leave the call as it is:
 

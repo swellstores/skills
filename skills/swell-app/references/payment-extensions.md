@@ -11,10 +11,10 @@ Two payment-extension behaviors fail at runtime in ways no local check catches �
 Two-phase auth/capture requires all three: the order's billing method is in the platform's hardcoded native authorizable set (`card`, `paypal`, `amazon`, `affirm`, `resolve`, `ideal`, `klarna`, `bancontact`, `google`, `apple`, `twint`, `paysafecard`, `sezzle`), `/settings/orders/features/require_authorized_payment` is true (the default), and the order is not a subscription order (`subscription_id` unset). For extensions that means card-gateway replacements only.
 
 - **Card gateway (`method: "card"`) → two calls.** First: `req.data.captured === false` → authorize the provider intent without capturing. Second: `req.data.captured === true` → capture it. A single-shot "create + capture" handler succeeds on the first call (capturing too early), then fails or double-charges on the second.
-- **Alt method (any extension `id` outside that native set — `my-method`, `wallet-pay`, …) → one call**, with `req.data.captured === undefined`. `captured` is a plain `bool` with no model default, and the native default handler that would set it is skipped whenever `extension_app_id` is set. Subscription orders are single-shot too, even on `card`.
-- One handler must cover both: treat `captured === false` as the only authorize signal, every other value — `undefined` included — as a capture request, and stay correct when the authorize phase never happens.
+- **Alt method (any extension `id` outside that native set — `my-method`, `wallet-pay`, …) → one call**, with `req.data.captured === true`. Subscription orders are single-shot too, even on `card`.
+- One handler covers both: `captured: false` authorizes, `captured: true` captures, and the authorize phase may never happen.
 - Canonical handler shape: see Charge Function below — branch on `captured` and look up the existing provider intent (`req.data.intent.<provider>.id` or `req.data.transaction_id`) before creating a new one.
-- **Verify:** create one test order, then run `swell logs --type function --app=.`. Card gateway: two consecutive `payment.charge` invocations, `captured: false` then `captured: true`, returning the same `transaction_id`. Alt method: exactly one, `captured: undefined`. Hunting a missing second call on an alt method is hunting a bug that does not exist.
+- **Verify:** create one test order, then run `swell logs --type function --app=.`. Card gateway: two consecutive `payment.charge` invocations, `captured: false` then `captured: true`, returning the same `transaction_id`. Alt method: exactly one, `captured: true`. Hunting a missing second call on an alt method is hunting a bug that does not exist.
 
 ### 2. Merchant Save activates the extension, not `swell app push`
 
@@ -69,7 +69,7 @@ Merchant UI sequence (code-only agents cannot perform this; surface to the user)
 
 Verify with `swell inspect extensions app.<slug>.<extId>` — it checks both `extension_app_id` and `gateway = app_<appId>_<extId>` and reports `gateway missing` if either is wrong. When `action_owner === "merchant"`, surface `action` verbatim and stop debugging.
 
-**Dispatch vs. visibility.** For payment-alt, `extension_app_id` alone gates dispatch; `enabled` is checkout-list visibility only. A method with `enabled: false` and `extension_app_id` set still dispatches from carts that reach checkout but won't appear in the payment list. (Shipping is the only extension type where `enabled: false` blocks dispatch.)
+**`enabled` is checkout-list visibility**, as for a native payment method: a method with `enabled: false` and `extension_app_id` set is not listed in checkout and still dispatches for a payment made with it.
 
 ## Hook Function Contracts
 
@@ -124,7 +124,7 @@ When two-phase applies (Critical Contract #1 — card gateway, `require_authoriz
 1. With `req.data.captured === false`: authorize the provider intent without capturing funds. The order flow posts a payment record with `captured: false`, which triggers the charge handler.
 2. With `req.data.captured === true`: capture the authorized intent. The order flow PUTs the payment to `captured: true`; the charge trigger fires again on that `false → true` transition.
 
-Otherwise — every alt method, and subscription orders on any method — the flow posts one payment record with no `captured` key at all and the handler runs once with `req.data.captured === undefined`. The platform's own extension test asserting exactly two invocations configures the extension on `/settings/payments/methods/card`; it does not generalize to alt methods.
+Otherwise — every alt method, and subscription orders on any method — the handler runs once with `req.data.captured === true`.
 
 The canonical handler covers both cases: two-branched, and idempotent on the existing provider intent id.
 
@@ -179,7 +179,7 @@ export default async function (req: SwellRequest) {
 
 Invariants the handler must preserve:
 
-- `captured === false` → authorize only. Any other value — including `undefined`, which is what every alt-method invocation carries — is a capture request. Nothing defaults `captured` for extension methods: the native handler that would set it is skipped whenever `extension_app_id` is present.
+- `captured === false` → authorize only; `captured === true` → capture.
 - Always look up the existing provider intent (`req.data.intent.<provider>.id` or `req.data.transaction_id`) before creating a new one. Creating a fresh intent on the second call double-charges.
 - Return the same `transaction_id` on the second call as on the first when continuing the same provider intent. The platform persists it as the payment's authoritative transaction id.
 - Validate provider state per phase: on authorize, `requires_capture` is the only valid result; on capture, accept `requires_capture` (then capture) or `succeeded` (already captured) and reject anything else. Silent acceptance of unexpected statuses returns `success: true` for payments that are not actually authorized.
@@ -339,7 +339,7 @@ Verify in order:
 5. The checkout component frame loads: `swell inspect extensions app.<slug>.<extId>` lists the component among the extension's bound components, and in hosted checkout the selected method shows its content and the order button enables.
 6. `call("createIntent", data)` resolves with browser-safe provider data.
 7. `submit` returns billing with the method's token under `billing.<methodId>` and the provider intent id under `billing.intent.<provider>.id`; the order's billing carries them.
-8. Creating an order invokes `payment.charge` — **twice** for a card gateway (`captured: false` then `captured: true`, same `transaction_id` both times), **exactly once** for an alt method (`captured: undefined`). Every call returns `success: true`, or `{ async: true }` for a charge the extension finishes later, which then records `success` on the payment.
+8. Creating an order invokes `payment.charge` — **twice** for a card gateway (`captured: false` then `captured: true`, same `transaction_id` both times), **exactly once** for an alt method (`captured: true`). Every call returns `success: true`, or `{ async: true }` for a charge the extension finishes later, which then records `success` on the payment.
 9. Refunding invokes `payment.refund` and returns `success: true` with a refund `transaction_id`.
 10. `swell logs --type function --app=.` shows the expected invocations and no hidden provider errors. On a card gateway it shows two `payment.charge` calls for the order.
 

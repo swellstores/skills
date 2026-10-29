@@ -7,7 +7,7 @@ Each top-level file exports a `config` object with exactly one trigger (`model`,
 ## Runtime and limits
 
 - **Edge runtime, not Node.js.** Functions run on Cloudflare Workers in service-worker format with no `nodejs_compat`: no Node built-ins, no `process.env`. Use Web APIs (`fetch`, Web Crypto).
-- **Timeout.** 10 s by default, configurable via `config.timeout` (1000–10000 ms; values up to 20000 ms require platform feature enablement). Sync hooks ignore `config.timeout` — see `references/functions-hooks.md`.
+- **Timeout.** 10 s by default, configurable via `config.timeout` (1000–10000 ms; values up to 20000 ms require platform feature enablement). Sync hooks ignore `config.timeout` — see `references/functions-hooks.md`. A run that reaches it is cut off, and its log says `Function timed out after <n> s`; work that may not fit belongs in a workflow.
 - **No environment variables or secrets.** Functions receive configuration only through `await req.swell.settings()` — see `references/settings.md`.
 - **A function acts as the app.** `req.swell` carries the installed app's credentials, limited by `permissions` in `swell.json` (`references/permissions.md`), whoever or whatever triggered it.
 
@@ -34,22 +34,27 @@ export default async function (req: SwellRequest) {
 
 Conditions accept MongoDB-style operators against `$record`, `$data`, `$event`, `$settings`, or `$formula` (string expression for complex cases). Child collection events use dot notation: `review.comment.created`, `review.reaction.deleted`.
 
+An event does not wake the function whose run made the write, except that a scheduled function's own write still moves its run. An `updated` event whose write changed app fields and nothing else wakes only the functions of the apps whose fields it changed, including the other functions of the app that wrote them. Writes by functions that follow from one request run functions for at most 10 events of a record: past that, the record's later events in the request run no function, and each function stopped logs why. Scheduled runs still follow their times.
+
+Runs of a function for one record go one at a time, in the order of the record's events. A run that failed and waits for its retry, or one still unsent 5 minutes after its event, does not hold back later ones.
+
 A `before:` or `after:` prefix on the event turns the function into a sync hook. Read `references/functions-hooks.md` before using one.
 
 > **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.
 
-**Model schedule triggers** execute at a future date derived from a record field. The field must exist in the data model.
+**Model schedule triggers** execute at the time `schedule.formula` gives for the record as stored, usually a date field. The field must exist in the data model.
 
 ```typescript
 export const config: SwellConfig = {
-  description: "Capture scheduled payment",
+  description: "Send a reminder when it is due",
   model: {
-    events: ["payment.created", "payment.updated"],
-    conditions: { date_scheduled: { $exists: true } },
-    schedule: { formula: "date_scheduled" }, // re-schedules on field change
+    events: ["reminder.created", "reminder.updated"],
+    schedule: { formula: "date_due" },
   },
 };
 ```
+
+The function keeps one pending run per record. On each of its events for the record, a changed time moves the run, an empty time or `conditions` that no longer match cancel it, and an unchanged time leaves it. Conditions are checked on every event, so one on the write (`$data`, `$origData`, `$event`) cancels the run on any write it does not match: test the record's own fields (`remind_at: { $ne: null }`) for what must hold while the run waits. A time that has passed runs at once when the write sets it. Deleting the record cancels its run. The formula reads the same names as conditions.
 
 **Cron triggers** execute on a fixed schedule with no record context.
 
@@ -97,6 +102,8 @@ Authenticated context for the handler. Common fields across triggers:
 - `req.appId` — current app identifier. Use instead of hardcoding.
 - `req.store` — store metadata: `id` and the storefront `url`.
 - `req.app.admin_url` — the app's page in the dashboard, in the function's environment.
+- `req.app.frontend_url` — the app's address in the function's environment, where its frontend answers when it has one (`references/frontend.md`, "Where it is served"), such as a callback page to give a provider.
+- `req.environmentId` — `'test'` in the test environment, `null` in live. Requires `@swell/cli` 2.9.30 and `@swell/app-types` 1.2.11 (types), or later: push bundles the code that sets it, so in a function pushed with an older CLI it is `undefined` and `req.environmentId === 'test'` reads as live.
 - `req.session` — user session (routes only); `null` unless the storefront gateway attached one, so gate with `req.session?.account_id`.
 - `req.context.waitUntil(promise)` — run work after the response returns (logs, metrics, non-blocking side effects); the Worker continues until the promise resolves or CPU time expires.
 - `await req.swell.settings()` — app settings from `./settings/`. Pass another app's id to read its settings cross-app.
@@ -114,7 +121,7 @@ They come back under `$app.<app_id>.*` automatically — no explicit `expand` ne
 
 ## Return values and errors
 
-Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error; on event-triggered functions, add `retry: false` to record the failed delivery without scheduling further retries. In `before:` hooks, thrown errors do **not** block the mutation — throw `req.reject(code, message, { status })` to reject the write (see `references/functions-hooks.md`). Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. A write refused by validation throws as well, with status 400 and the field errors as `error.body` (`{ <field>: { code, message } }`); it does not resolve with an `errors` object to check. No other failure has a field map as its body: the rest have `error.body.error` or no body. A read of an id that does not exist is not an error: it resolves empty (an empty string, not `null`), so test `if (!record)`. Inside a workflow these rules differ — see `references/functions-workflows.md`. Model and cron handlers typically return nothing.
+Plain object → JSON 200. String → `text/plain` 200. For custom status/headers, return `new SwellResponse(data, { status, headers })` (preferred over native `Response`). Throw `SwellError(msg, { status })` to error. An event-triggered function's failed delivery is retried as a webhook delivery is (the `swell-backend-api` skill's `references/events-webhooks.md`, "Retries"); add `retry: false` to record it without scheduling further retries, or `retryAfter: <seconds>` to put off the next call by that long, up to 12 hours and never sooner than the retry schedule. In `before:` hooks, thrown errors do **not** block the mutation — throw `req.reject(code, message, { status })` to reject the write (see `references/functions-hooks.md`). Errors from `req.swell.*` expose `error.status` (HTTP status) and `error.body` (structured payload) — don't parse `error.message`. A write refused by validation throws as well, with status 400 and the field errors as `error.body` (`{ <field>: { code, message } }`); it does not resolve with an `errors` object to check. No other failure has a field map as its body: the rest have `error.body.error` or no body. A read of an id that does not exist is not an error: it resolves empty (an empty string, not `null`), so test `if (!record)`. Inside a workflow these rules differ — see `references/functions-workflows.md`. Model and cron handlers typically return nothing.
 
 ## When a function does not run
 
