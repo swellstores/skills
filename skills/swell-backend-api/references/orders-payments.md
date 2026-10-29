@@ -1,6 +1,6 @@
 # Orders, payments and subscriptions
 
-How an order is paid, shipped, returned and refunded, and how subscriptions and their invoices bill, and which channel created each. Merge rules and import flags are in `references/writes.md`, what an event carries in `references/events-webhooks.md`, and the events of each model in `GET /:models/<collection>`. Coupons and gift cards are in `references/promotions-discounts.md`, stock in `references/products-inventory.md`, and account credit in `references/accounts.md`.
+How an order is paid, shipped, returned and refunded, and how subscriptions and their invoices bill. Merge rules and import flags are in `references/writes.md`, what an event carries in `references/events-webhooks.md`, and the events of each model in `GET /:models/<collection>`. Coupons and gift cards are in `references/promotions-discounts.md`, stock in `references/products-inventory.md`, and account credit in `references/accounts.md`.
 
 ## State is derived
 
@@ -58,22 +58,21 @@ Cancel with `PUT /orders/<id>` and `{ canceled: true }`.
 
 ## Channel
 
-`channel` on a cart, an order and a subscription says who created it. The platform sets it when the record is created and never changes it.
+`channel` on a cart, an order or a subscription says what created it. The platform sets it when the record is created, and nothing changes it afterwards.
 
-| `channel.type` | Created by | Fields set |
+| `channel.type` | Created by | Id it carries |
 | --- | --- | --- |
-| `storefront` | A storefront: Frontend API calls on its domain or with its public key, or a key that belongs to a custom (headless) storefront | `storefront_id`, `app_id` of the storefront's app, `key_id` for a key that belongs to the storefront |
-| `purchase_link` | A purchase link, `/buy/<id>` | `purchase_link_id` |
-| `admin` | The dashboard, including draft orders and the test checkout | none |
-| `app` | An app's key, token, function or workflow, outside a storefront | `app_id` |
-| `api` | Any other secret key, and Zapier | `key_id`, or `integration: 'zapier'` |
-| `subscription` | A subscription, for its renewal orders | `subscription_id` |
+| `storefront` | A storefront's Frontend API calls and checkout | `storefront_id` (`null` when none was resolved), `app_id` of the storefront's app |
+| `app` | An app's key, token, functions and workflows | `app_id` |
+| `api` | Any other secret key | `key_id`; Zapier sets `integration: 'zapier'` |
+| `admin` | The dashboard | none |
+| `purchase_link` | A purchase link | `purchase_link_id` |
+| `subscription` | A renewal order | `subscription_id` |
 
-- **The object always has every field**: `type`, `storefront_id`, `app_id`, `key_id`, `integration`, `purchase_link_id`, `subscription_id`, with `null` for those the type doesn't use. Names are not stored: look up the storefront or the app by its id.
-- **A record created from another one inherits its channel.** An order from a cart has the cart's, also when the merchant converts an abandoned cart in the dashboard. A subscription bought on an order has the order's. The first order of a subscription created without an order has the subscription's, and every later order is `subscription`. Paying an invoice or editing an order through a cart with `target_order_id` leaves the order's channel as it is.
-- **`channel` is `null` on records created before channels existed**, and on an order made from such a cart. `storefront_id` is `null` when a storefront request resolved no storefront.
-- **Nothing can change it.** A write that would change `channel` or `attribution` in any form, as the field, a dotted key such as `'channel.type'`, or inside `$set`, `$unset`, `$inc`, `$push` and the other operators, leaves them as they are: the platform drops that part of the write, applies the rest and logs it. A later release refuses such writes with code `READONLY`, so never send them. A URL that targets the field, such as `PUT /orders/<id>/channel/type`, is refused with `READONLY` already. A `PUT` that writes back the value the record has, as code that reads a record and writes it back whole does, is accepted, and `$replace` keeps both fields. Code that copies an order by reading it and posting it again drops both fields first; the copy gets the channel of the key that posts it. `attribution` is reserved for ad attribution.
-- **Filter on it like any field**: `GET /orders` with `where: { 'channel.type': 'app', 'channel.app_id': '<app id>' }`, or `where: { 'channel.storefront_id': '<storefront id>' }`.
+- **An order has its cart's channel, and a subscription its order's.** Records created before channels existed, and orders made from such carts, have `null`.
+- **Only ids are stored**, with `null` for the ones a type doesn't use. `GET /:storefronts/<id>` gives a storefront's name.
+- **Filter on it like any field:** `where: { 'channel.type': 'app', 'channel.app_id': '<app id>' }`.
+- **Leave `channel` and `attribution` out of every write.** A value in a body is dropped without an error, and a later release refuses it with `READONLY`. To keep where an imported order came from, write it to a field of your own, such as `metadata.source`.
 
 ## Shipments
 

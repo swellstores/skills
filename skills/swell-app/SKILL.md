@@ -110,7 +110,6 @@ Limits that hold for every function:
 - **A 10-second limit**, detailed in `references/functions.md`. Work that does not fit is a workflow.
 - **No environment variables or secrets.** Configuration comes from the app's settings only (see "Configuration and secrets").
 - **A function acts as the app**, with the app's `permissions`, whoever or whatever triggered it. `req.swell` is its client to the store's data and follows Backend API semantics.
-- **The app is the sales channel of what it creates.** Carts, orders and subscriptions created by its functions, workflows and keys get `channel: { type: 'app', app_id }`, whatever the app's `type`, and nothing can change it. A storefront app's Frontend API calls are the exception: they act in a storefront and get `channel.type: 'storefront'`. The channel rules are in `swell-backend-api`, "Channel" in `references/orders-payments.md`.
 
 Read `references/functions.md` before writing a function — the `req` object, payload shapes per trigger, errors, local testing — and the trigger's own reference where the table names one. When a deployed function, hook or webhook does not fire, start with "When a function does not run" there — except for an extension function of an integration app, where `swell inspect extensions` comes first (see "Integration apps and extensions").
 
