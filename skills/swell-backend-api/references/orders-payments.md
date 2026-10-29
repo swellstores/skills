@@ -62,15 +62,15 @@ Cancel with `PUT /orders/<id>` and `{ canceled: true }`.
 
 | `channel.type` | Created by | Id it carries |
 | --- | --- | --- |
-| `storefront` | A storefront's Frontend API calls and checkout | `storefront_id` (`null` when none was resolved), `app_id` of the storefront's app |
+| `storefront` | A storefront's Frontend API calls and checkout | `storefront_id` (missing when none was resolved), `app_id` of the storefront's app |
 | `app` | An app's key, token, functions and workflows | `app_id` |
 | `api` | Any other secret key | `key_id`; Zapier sets `integration: 'zapier'` |
 | `admin` | The dashboard | none |
 | `purchase_link` | A purchase link | `purchase_link_id` |
 | `subscription` | A renewal order | `subscription_id` |
 
-- **An order has its cart's channel, and a subscription its order's.** Records created before channels existed, and orders made from such carts, have `null`.
-- **Only ids are stored**, with `null` for the ones a type doesn't use. `GET /:storefronts/<id>` gives a storefront's name.
+- **An order has its cart's channel, and a subscription its order's.** Records created before channels existed have no `channel`, and orders made from such carts have `null`: check `if (!record.channel)`.
+- **Only ids are stored**, and only those that apply: `{ type: 'admin' }`, `{ type: 'app', app_id: '…' }`. Check an id by its value, not with `=== null`. `GET /:storefronts/<id>` gives a storefront's name.
 - **Filter on it like any field:** `where: { 'channel.type': 'app', 'channel.app_id': '<app id>' }`.
 - **Leave `channel` and `attribution` out of every write.** A value in a body is dropped without an error, and a later release refuses it with `READONLY`. To keep where an imported order came from, write it to a field of your own, such as `metadata.source`.
 

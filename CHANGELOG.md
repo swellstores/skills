@@ -9,7 +9,7 @@ versioning follows [SemVer](https://semver.org/).
 Sales channel: carts, orders and subscriptions record what created them.
 
 ### Added
-- `swell-backend-api`: "Channel" in `references/orders-payments.md`. `channel.type` and the id each type carries, inheritance from cart to order and from order to subscription, `null` on records created before the release, a storefront's name through `GET /:storefronts/<id>`, and filtering on `channel`. `channel` and `attribution` are set by the platform: a value in a body is dropped without an error, and a later release refuses it with `READONLY`.
+- `swell-backend-api`: "Channel" in `references/orders-payments.md`. `channel.type` and the id each type carries, inheritance from cart to order and from order to subscription, only the ids that apply, no `channel` (or `null`) on records created before the release, a storefront's name through `GET /:storefronts/<id>`, and filtering on `channel`. `channel` and `attribution` are set by the platform: a value in a body is dropped without an error, and a later release refuses it with `READONLY`.
 - `swell-backend-api`: `references/writes.md` says an import keeps the source platform in a field of its own, because `channel` in an import body is dropped.
 
 ## [0.10.0] - 2026-10-27
