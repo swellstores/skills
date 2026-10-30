@@ -4,6 +4,38 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.12.0] - 2026-10-30
+
+App platform fixes, third group: storefront access to app data, routes, hooks, push and inspect, dashboard actions and settings, components and webhook signatures behave as the skills now state, and the workarounds for the fixed bugs are gone.
+
+Baseline: `@swell/cli` 2.9.33, `@swell/apps-sdk` 2.0.0-alpha.9 (`next`), `@swell/app-types` 1.3.0. A workflow's refused write throws once the workflow is pushed with this CLI, and `verifySwellWebhook` in this SDK requires `url`.
+
+### Added
+- `swell-app`: `swell inspect components` lists the built components with their targets and extension, and `swell inspect frontend` shows the hosting, the framework and the app address.
+- `swell-app`: `swell create function <name> action -y` scaffolds an action function.
+- `swell-app`: components get the dashboard's `theme`, `'light'` or `'dark'`, and the frame's root carries it as `data-theme` and `color-scheme`.
+- `swell-app`: an action field can open a `link`, as a view action does, and action `conditions` read the app's settings as `$settings`.
+- `swell-app`: settings sections with a `position` come first, and a section's `description` and a field's `hint` show with Markdown links.
+- `swell-app`, `swell-frontend-api`: a path below an app record, `/apps/<app_id>/<collection>/<id>/<field>`, reads and writes by the record's rules.
+
+### Changed
+- `swell-app`, `swell-frontend-api`: an expanded link, a link's fields listed in `public_permissions.fields` and a model's `expands` bring what a storefront read of the linked model returns.
+- `swell-app`, `swell-frontend-api`: a route gets the query along with any body, and a body that is not JSON as text. A call through the gateway without a key reaches the live environment. A route never gets the caller's `Swell-*` headers or, from another origin, the shopper's session cookies.
+- `swell-app`: Swell withholds a shopper's session from another origin's writes, as it does a store user's.
+- `swell-app`: hooks get each app's data by its slug as the write's operators leave it, on a create too, and the app operators a hook returns apply in its turn.
+- `swell-app`: a scheduled run whose time has come when a write sets it continues that write's chain.
+- `swell-app`, `swell-backend-api`: a workflow's write refused by validation throws, as in a function, and fails the step without retries.
+- `swell-app`: `swell app push` never uploads `.env` or `.env.*` files and `swell app pull` never writes them. Push names each file Swell refuses with its reasons, warns about `_` in config file names and about extension fields nothing reads, refuses a new component whose name would never load, and switches the app's auto-disabled functions back on. `swell inspect functions` marks failing and auto-disabled functions and those of an inactive app.
+- `swell-app`: link actions are added to a view's defaults, as function actions are. Push refuses `record_actions` and an `admin_zone` the collection's pages do not have. A `field_group` is a tab at the top level and shows in place in a row.
+- `swell-app`: the dashboard passes the query to the frame and signs the store user in on `"target": "blank"` links. A link to another address opens only over http or https.
+- `swell-app`: every handler of a component event runs, in the order registered, and a provider modal covers the page from any component.
+- `swell-app`, `swell-backend-api`: `verifySwellWebhook` needs `url` and refuses a request Swell signed for another endpoint. The signature's `aud` is the webhook's address.
+- `swell-app`: `swell inspect extensions` checks the method and the gateway record and reports `app id mismatch`, `id mismatch` and `settings unavailable`. An extension's settings panel takes `_` and `-` in its id as the same, and does not fall back to the id when `setting` names no config.
+- `swell-app`: `DESCRIPTION.md` takes Markdown without HTML, and a route that admits only admin component calls answers 403 to `swell api`.
+
+### Removed
+- Workarounds and warnings for the fixed bugs: routes that drop the query or a body that is not JSON and need a key for a public call, an `Origin` check in shopper writes, `result.errors` checks after workflow writes, `--force` pushes to switch functions back on, `.gitignore` as what keeps `.env` files out of a push, kebab-case names to keep the dashboard's settings and gateway lookups working, inert extension fields, the route scaffold for action functions, link actions that drop Save and Delete, a frame address without its query, a visible render before a provider modal, a component handler that only runs when registered first, and silent `record_actions` and `admin_zone`.
+
 ## [0.11.0] - 2026-10-29
 
 Sales channel: carts, orders and subscriptions record what created them.
