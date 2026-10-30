@@ -4,6 +4,14 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [0.11.0] - 2026-10-29
+
+Sales channel: carts, orders and subscriptions record what created them.
+
+### Added
+- `swell-backend-api`: "Channel" in `references/orders-payments.md`. `channel.type` and the id each type carries, inheritance from cart to order and from order to subscription, only the ids that apply, no `channel` (or `null`) on records created before the release, a storefront's name through `GET /:storefronts/<id>`, and filtering on `channel`. `channel` and `attribution` are set by the platform: a value in a body is dropped without an error, and a later release refuses it with `READONLY`.
+- `swell-backend-api`: `references/writes.md` says an import keeps the source platform in a field of its own, because `channel` in an import body is dropped.
+
 ## [0.10.0] - 2026-10-27
 
 App platform fixes: app fields and app features behave as native ones, so the skills state the contract and drop the workarounds for the fixed bugs.
