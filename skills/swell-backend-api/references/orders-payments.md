@@ -56,6 +56,24 @@ Cancel with `PUT /orders/<id>` and `{ canceled: true }`.
 - **It refunds nothing.** Payments stay as they are, and so do shipments and any subscription the order created. Refund the payments and cancel the rest in separate writes.
 - **To cancel part of an order**, write the count to the item: `items: [{ id, quantity_canceled: 1 }]`. The totals and the balance are recomputed and the stock comes back. No money moves.
 
+## Channel
+
+`channel` on a cart, an order or a subscription says what created it. The platform sets it when the record is created, and nothing changes it afterwards.
+
+| `channel.type` | Created by | Id it carries |
+| --- | --- | --- |
+| `storefront` | A storefront's Frontend API calls and checkout | `storefront_id` (missing when none was resolved), `app_id` of the storefront's app |
+| `app` | An app's key, token, functions and workflows | `app_id` |
+| `api` | Any other secret key | `key_id`; Zapier sets `integration: 'zapier'` |
+| `admin` | The dashboard | none |
+| `purchase_link` | A purchase link | `purchase_link_id` |
+| `subscription` | A renewal order | `subscription_id` |
+
+- **An order has its cart's channel, and a subscription its order's.** Records created before channels existed have no `channel`, and orders made from such carts have `null`: check `if (!record.channel)`.
+- **Only ids are stored**, and only those that apply: `{ type: 'admin' }`, `{ type: 'app', app_id: '…' }`. Check an id by its value, not with `=== null`. `GET /:storefronts/<id>` gives a storefront's name.
+- **Filter on it like any field:** `where: { 'channel.type': 'app', 'channel.app_id': '<app id>' }`.
+- **Leave `channel` and `attribution` out of every write.** A value in a body is dropped without an error, and a later release refuses it with `READONLY`. To keep where an imported order came from, write it to a field of your own, such as `metadata.source`.
+
 ## Shipments
 
 A shipment says which units of an order went out, and is what makes an order `delivered`: `POST /shipments` with `order_id` and `items: [{ order_item_id, product_id, quantity }]`.

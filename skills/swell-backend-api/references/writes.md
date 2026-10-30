@@ -112,6 +112,7 @@ A value in the body is used in place of the one the platform would generate. `id
 - **An `id` in any other format is dropped without an error**, and the record gets a generated one.
 - **A `POST` with an `id` that already exists writes over that record.** It does not fail and it does not add a second one: the body is merged into the stored record, and `date_created` and fields with defaults are set again. An import that runs twice therefore rewrites what the first run created.
 - **`number` can be set when the record is created and not changed afterwards.**
+- **`channel` and `attribution` are set by the platform.** A value in an import body is dropped without an error; keep the source platform in a field of your own (see "Channel" in `references/orders-payments.md`).
 
 ## Localized and per-currency values
 
