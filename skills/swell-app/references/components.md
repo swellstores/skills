@@ -4,12 +4,12 @@ An app component is a Preact UI that renders a **content field** in the admin in
 
 A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component.
 
-Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`).
+Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`). `theme` is typed from `@swell/apps-sdk` 2.0.0-alpha.9.
 
 ## Files and names
 
 - Every `.tsx` / `.jsx` file **directly in `components/`** is one component. Anything else under `components/` (`components/lib/*`, `components/tsconfig.json`) is shared code, bundled into the components that import it.
-- The name is the file name with `_` → `-`: `ColorPicker.tsx` → `ColorPicker`, `color_picker.tsx` → `color-picker`. Use only `[A-Za-z0-9_-]`: other names push but can never be referenced or loaded.
+- The name is the file name: `ColorPicker.tsx` → `ColorPicker`. Use letters, digits and `-`. A `_` deploys as `-`, with a warning; push refuses a new file with any other character in its name, as one that would never load.
 - A **default export is required**; without it the build fails (`Unable to compile component <name> …`).
 - `export const config = { description }` is optional and must be a static object literal; the CLI reads it without running the code.
 - Scaffold: `swell create component <Name> [-d <description>] -y`. It writes the file, adds `preact` and `@swell/apps-sdk` (dev, types only) to `package.json`, writes `components/tsconfig.json`, adds `components` to the root `tsconfig.json` `exclude`, and extends the `typecheck` script. Run `npm install` after.
@@ -32,6 +32,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
   readonly settings: Readonly<Record<string, unknown>>;
   readonly locale: string;
   readonly readonly: boolean;
+  readonly theme: 'light' | 'dark';
   setValidity(error: string | null): void;
   readonly fetch: typeof fetch;
   on(event: string, handler: (data: unknown) => unknown): () => void;
@@ -48,6 +49,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 | `settings` | The app's public settings. |
 | `locale` | The store's locale. |
 | `readonly` | The field is disabled or read-only. A `setValue` sent anyway is ignored. |
+| `theme` | `'light'` or `'dark'`, the dashboard's theme; a new one re-renders. The frame's root carries it as `data-theme` and `color-scheme`. |
 | `setValidity(msg)` | A message blocks saving and shows under the field when the merchant saves; `null` clears it. |
 | `fetch` | See "Calling the backend". |
 | `on` | The admin sends no events. |
@@ -73,7 +75,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 ## Layout, focus and modals
 
 - The frame is part of the form: its height follows the component's content (do not set a fixed one), its background is transparent, and the admin's popovers and sticky bars stack over it.
-- The frame has no styles: set `font-family` and colors yourself.
+- The frame has no styles: set `font-family` and colors yourself, for both themes (`:root[data-theme="dark"]`).
 - Tab and Shift+Tab move through the component's controls in form order. Use native focusable elements.
 - **Modal:** render a `position: fixed` element covering the viewport **directly into `document.body`** (`createPortal` from `preact/compat`). While it exists the frame covers the whole admin, the rest of the page is inert and does not scroll, and focus moves to the modal's first control. Removing the element restores the field. A fixed element inside the component's own root covers only the field.
 
@@ -106,7 +108,7 @@ const preview = await props.fetch('/app-api/label-preview'); // the app's fronte
 - `swell app dev` serves component modules from the machine (`Component modules at: http://localhost:<port>/.swell/components/<Name>.js`) and rebuilds on change; reload the admin to see edits. Route functions a component calls still run the **pushed** version — push after changing them.
 - `swell app push` builds each component as an ES module. Its change hash includes the files it imports, so a `components/lib/*` edit redeploys the importers without `--force`.
 - The admin loads the build of the **installed version**; a development install uses the current unversioned build.
-- `swell inspect` has no component topic: confirm from the push output and by opening the field.
+- `swell inspect components --app=.` (`@swell/cli` 2.9.33 or later) lists the built components with their targets and extension. Open the field to see one render.
 
 ## Other pages
 
@@ -118,7 +120,7 @@ Any page on a `*.swell.store` address can render an installed app's components w
 
 | Message | Cause |
 |---|---|
-| `Component "<Name>" not found in app "<app>"` | No built component of that name in the installed version: not pushed, failed to compile, or the name differs (`_` → `-`). |
+| `Component "<Name>" not found in app "<app>"` | No built component of that name in the installed version: not pushed, failed to compile, or the name differs. |
 | `Component frame did not start` | The frame loaded but did not start within 10 s: the page is not on a `*.swell.store` address, or the app's address did not serve the frame. |
 | `Component field '<label>' needs an app` | The field is not in an app's content file. |
 | 401 or 404 from a function | The call did not use `props.fetch`, or the function has no `route`. |

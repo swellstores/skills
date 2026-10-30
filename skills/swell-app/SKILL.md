@@ -47,7 +47,7 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 
 ## Building blocks
 
-Each folder holds one kind of block, and a file's name decides what it becomes: its collection, its endpoint, its settings group. Push removes a deployed resource whose file is gone, so renaming a file replaces the resource.
+Each folder holds one kind of block, and a file's name decides what it becomes: its collection, its endpoint, its settings group. Keep `_` out of these names: it deploys as a dash, and push warns about it. Push removes a deployed resource whose file is gone, so renaming a file replaces the resource, unless the new name deploys as the old one did: `my_report.ts` renamed `my-report.ts` keeps it.
 
 ### Manifest — `swell.json`
 
@@ -209,7 +209,7 @@ Use the client the runtime supplies. Pair this skill with the API skill when imp
 | Frontend Backend client (`getBackend()` in Vinext) | The app; server code authorizes business operations for the caller | `references/frontend.md` and the relevant viewer reference | `swell-backend-api` |
 | Frontend Storefront clients (`getStorefront()` / `useSwell()` in Vinext) | The shopper's session, shared between server and browser | `references/frontend.md` and `references/frontend-storefront.md` | `swell-frontend-api` |
 
-Clients share API operations, not necessarily initialization, methods or error behavior. Follow the selected client's contract: for example, a function's `req.swell` and the frontend Backend client throw on a write refused by validation, whereas a workflow's `req.swell` resolves with an `errors` object. Workflow restrictions still apply when reading Backend API guidance.
+Clients share API operations, not necessarily initialization, methods or error behavior: follow the selected client's contract. A workflow's `req.swell`, for example, has no transactions and reaches only the app's own settings, and those limits still apply when reading Backend API guidance.
 
 ### Permissions
 
@@ -231,7 +231,7 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 
 | Command | Use it to |
 |---|---|
-| `swell inspect {content\|extensions\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
+| `swell inspect {components\|content\|extensions\|frontend\|functions\|models\|notifications\|settings\|webhooks\|workflows\|workflow-runs}` | Read deployed state. List mode discovers, detail mode verifies after a push |
 | `swell schema <type> --format=dts` | The authoritative structure for a resource type — consult before authoring |
 | `swell schema <type> ./file` | Validate one manifest locally |
 | `swell create {content\|function\|model\|notification\|setting\|webhook\|component\|tests\|frontend\|app}` | Scaffold; do not hand-author what a scaffold produces |
@@ -244,7 +244,7 @@ The CLI runs the whole cycle: discover → scaffold → validate → deploy → 
 
 Five behaviours that decide whether a deploy actually did what you think:
 
-- **`swell app push` is not all-or-nothing.** A file the CLI cannot parse or compile prints one line and is skipped while the rest deploys, and the push then exits non-zero naming the failed files. Check the output for `Ignoring file:` / `Unable to compile` to see why.
+- **`swell app push` is not all-or-nothing.** A file the CLI cannot parse, compile or accept prints one line saying why and is skipped while the rest deploys, and the push then ends with `<n> file(s) failed to push: …` and exits non-zero. A file Swell refuses stops the push there, with its reasons.
 - **Push deletes.** Per config type, remote configs whose local file is gone are removed with no prompt.
 - **Push skips unchanged files by hash.** From `@swell/cli` 2.9.27 the hash covers the files a function or component imports; older CLIs leave importers stale after a lib-only edit — use `--force` there.
 - **`swell app dev` pushes first, then intercepts** that environment's model hooks, model events and dashboard actions for every caller until it exits.
@@ -272,13 +272,13 @@ Pass: You have the schema output and understand the structural requirements for 
 
 ### Gate 3 — Author & Validate
 
-For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes; when the CLI lacks the required shape, follow the resource reference's adaptation (for example, actions start from a route scaffold). Use kebab-case for resource naming. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
+For new schema-backed resources, scaffold with `swell create {content|function|model|notification|setting|webhook} [name] [flags] -y`. Use a scaffold for supported shapes. Keep `_` out of file names. Explore `--help` for resource-specific flags. Edit existing resources in place. Validate affected files with `swell schema {type} ./path/file`. For functions and components, also run `npm run typecheck` when configured. Fix errors caused by the change.
 Pass: Supported local validation and relevant type checks pass. Name unavailable checks and any pre-existing failures separately; do not claim deployment validation from local checks alone.
 
 ### Gate 4 — Deploy & Verify
 
 When deployment is in scope, push resources to the platform test environment with `swell app push`. The platform performs additional validation beyond local schema checks: reference integrity (e.g., links to non-existent collections), reserved field conflicts, and event binding validity. Deployment errors indicate issues local validation cannot catch. Verify the affected deployed resources with `swell inspect <type> --app=.` for list-level state (enabled, trigger, failure indicators) and `swell inspect <type> <key>` for the full record. For runtime probing, paste the commands printed under `Next steps` (e.g. `/events`, `/events:webhooks`) rather than constructing event or log queries by hand. For integration apps, also run `swell inspect extensions --app=.` and act on `action_owner`/`action` per `references/app-integrations.md`.
-Pass: Deployment completes without errors and no `Ignoring file:` or `Unable to compile` lines appeared in the push output. List-mode meta shows the resource enabled with the expected trigger/binding; detail-mode JSON matches the source manifest.
+Pass: Push exits 0 with no `file(s) failed to push` line. List-mode meta shows the resource enabled with the expected trigger/binding; detail-mode JSON matches the source manifest.
 
 ### Gate 5 — Test
 

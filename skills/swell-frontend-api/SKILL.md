@@ -38,7 +38,7 @@ The cart, payments and accounts references each say which of these their calls d
 
 - A list resolves with `{ count, page, limit, results }`: 15 records unless `limit` says otherwise, sorted by `id` descending. A query key it does not know is read as a `where` condition.
 - `/carts`, `/accounts` and `/payments` are refused on these routes: use `swell.cart` and `swell.account`.
-- `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`.
+- `expand` takes only fields the model makes public. Any other rejects with `You can only expand public fields (<field>)`. A link the model publishes whole brings what a storefront read of the linked model returns: its public fields, of the records that read returns.
 - `include` attaches a second query to each record, in one request: `include: { <key>: { url: '<path>', params: { <query field>: '<record field>' }, data: { limit: 3 } } }` puts `{ count, results }` under `<key>`. The path can be an app collection, `/apps/<app_id>/<collection>`. A sub-query on a collection that is not public rejects the whole call.
 
 **App data.** The generic requests are how a storefront reaches an app's collections, at `/apps/<app_id>/<collection>`. **Read `references/app-data.md`** before reading or writing app data from a storefront. The rules from it that change a design:
@@ -104,7 +104,7 @@ The rules from them that change a design:
 `swell.functions.get`, `post`, `put` and `delete(appId, functionName, data)` call an app's route function at `/functions/<app_id>/<name>` with the storefront's key and session. Use one where a storefront feature needs app logic, such as a submission that must be checked, instead of making privileged data public.
 
 - **The route must be marked public.** Any other needs a secret key, which a storefront never carries, and rejects with status 401.
-- **Send data one way.** `get` sends `data` as the query and the other calls send it as the body; a query added to a call that has a body is dropped. The function reads both as `req.data`.
+- `get` sends `data` as the query and the other calls send it as the body. The function reads either as `req.data`, values sent as the query as strings.
 - **Nothing is case-converted.** On a `useCamelCase` client too, the body is sent as written and the answer comes back as the function produced it.
 - **An answer with an `error` key rejects**, whatever its status, with that status and message. A `SwellError` thrown in the function answers that way. A failing status without the key rejects as the `connection_error` above, so a response the route builds itself needs `{ error: { message, code } }`.
 

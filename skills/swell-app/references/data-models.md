@@ -56,8 +56,9 @@ Hook-specific event properties (`hooks`, `hook_timeout`, `hook_retry_attempts`) 
 
 **Storefront exposure is opt-in and off by default.** An app collection with no public declaration produces no permissions record at all, so *every* Frontend API verb fails with `You do not have permission to perform this action on '<model>'`. Declare it in the model JSON: `"public": true` at the model root publishes every field of the model, while fields other apps add to it stay as those apps declare them; a per-field `"public": true` publishes just that field. `public_permissions` then refines it:
 
-- `fields` is an explicit read whitelist.
+- `fields` is an explicit read whitelist. A link's fields listed there (`"vendor.name"`) come as a storefront read of the linked model gives them, as with `expands`.
 - `query` pins a filter the caller cannot widen (`"query": { "where": { "status": "approved" } }` keeps unmoderated records inside the store, since config values override the caller's).
+- `expands` names a URL that `expand=<key>` reads with each record (`"expands": { "product": { "url": "/products/{product_id}" } }`). The URL answers what a storefront reading it directly would get: the expand is refused where storefronts do not read, and a URL of an account-scoped model needs a login and brings only the customer's own records.
 - `input.fields` is **required for any storefront write** (without it POST/PUT/DELETE fail with `You may not update <model> without public permissions`), and a field outside that list is *rejected* (`You are not allowed to update <field>`), not ignored. A collection with `input` and no public field takes writes and refuses reads.
 - `scope: "account"` limits reads and writes to the logged-in customer's own records, and `input.scope: "account"` limits writes only. A scoped call, a create included, needs a login. A record's owner is its `account_id`, or, in a model without one, its only link to `accounts`; declare `account_id` in a model that links to `accounts` more than once.
 

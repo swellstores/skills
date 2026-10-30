@@ -3,13 +3,13 @@
   "owner": { "name": "Swell Commerce" },
   "metadata": {
     "description": "Swell Commerce skills and tooling",
-    "version": "0.11.0"
+    "version": "0.12.0"
   },
   "plugins": [
     {
       "name": "swell",
       "description": "Swell development for AI agents: apps, the Backend API and the Frontend API",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "source": "./",
       "strict": false,
       "skills": [
