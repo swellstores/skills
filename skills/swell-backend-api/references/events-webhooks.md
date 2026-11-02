@@ -100,14 +100,14 @@ One `POST` per event, with the event as a JSON body:
 - **An event can arrive more than once, and events can arrive out of order.** Recognize a repeat by the event's `id`, and read the record for its current state.
 - **The environment is in the `Swell-Env` header**, `test` for the test environment. The header is absent for the live environment, and the body does not name the environment.
 - **The store's id is in the `Swell-Store-Id` header.**
-- **The request is signed.** Verify it before acting on it. In JavaScript, `verifySwellWebhook` from `@swell/apps-sdk` checks the signature against the body as received and returns the event as `event`, with `storeId`, `webhookId` and `eventId`. It needs the `storeId` the webhook must come from, or for an app's webhook the app's `appId`, from your own configuration, and refuses a webhook of another store or app:
+- **The request is signed.** Verify it before acting on it. In JavaScript, `verifySwellWebhook` from `@swell/apps-sdk` checks the signature against the body as received and returns the event as `event`, with `storeId`, `webhookId` and `eventId`. It needs, from your own configuration, the `storeId` the webhook must come from, or for an app's webhook the app's `appId`, and refuses a webhook of another store or app. It also needs `url` (`@swell/apps-sdk` 2.0.0-alpha.9 or later), the address the webhook is set to in Swell, from your configuration rather than the request's `Host` or `X-Forwarded-*` headers, and refuses a request Swell signed for another endpoint, such as one that another endpoint of the store received and sent on:
 
   ```js
   const body = await request.text();
-  const { event } = await verifySwellWebhook(request.headers, body, { storeId: STORE_ID });
+  const { event } = await verifySwellWebhook(request.headers, body, { storeId: STORE_ID, url: WEBHOOK_URL });
   ```
 
-  Elsewhere, verify by hand: `Swell-Signature` is a JWT signed with ES256 by a key published at `https://keys.swell.store/jwks.json`, with the header `typ` `swell-webhook+jwt`. It expires 5 minutes after it is made. Its claim `body_sha256` is the base64url SHA-256 of the body's bytes, and `store_id`, `environment_id`, `webhook_id`, `event_id` and, for an app's webhook, `app_id` (the id in its `swell.json`) say what sent it. Check `store_id`, or `app_id` for an app's webhook, against your own configuration: any store can point a webhook at your address.
+  Elsewhere, verify by hand: `Swell-Signature` is a JWT signed with ES256 by a key published at `https://keys.swell.store/jwks.json`, with the header `typ` `swell-webhook+jwt`. It expires 5 minutes after it is made. Its claim `body_sha256` is the base64url SHA-256 of the body's bytes, `aud` is the webhook's address, and `store_id`, `environment_id`, `webhook_id`, `event_id` and, for an app's webhook, `app_id` (the id in its `swell.json`) say what sent it. Check `store_id`, or `app_id` for an app's webhook, against your own configuration: any store can point a webhook at your address. Check `aud` against the address the webhook is set to in Swell, compared as a URL (origin, path and query): every endpoint of a store receives signed requests and can send one on. A JWT library that checks `aud` by default, such as PyJWT, refuses the token unless it is given that address as the expected audience.
 - **Answer with a 2xx status within 10 seconds.** Any other status, or no answer in time, is a failed delivery. The body of a 2xx answer is ignored. Do long work after answering.
 - **An `https` address must have a valid certificate.**
 

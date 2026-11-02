@@ -119,7 +119,7 @@ The API answers a failed call in one of three ways, and the clients do not hand 
 | Apps SDK Backend client | **Throws** a `SwellError` with status 400 and the field map as `err.body` | Throws a `SwellError` with `status`, `code` and `body` |
 | Direct HTTP | Status 200 with an `errors` key in the body | The status and the body |
 
-The app clients differ among themselves too: a function's `req.swell` throws on a refused write and a workflow's resolves with `errors`. `swell-app` states each contract. Results of a batch or a transaction are per operation: `references/writes.md`.
+The clients inside an app differ among themselves in other ways; `swell-app` states each contract. Results of a batch or a transaction are per operation: `references/writes.md`.
 
 **Rate limits** apply per store and per environment, to both throughput and concurrency. The figures depend on the plan and are not published; a test environment always has the lower tier. Requests over the limit are queued, not rejected, so a 429 means a request waited more than 60 seconds: the load is sustained, not a spike. Back off with increasing delays, spread bulk work over time, and make each request lighter — every `expand` level and `include` adds to a request's weight. There are no rate-limit response headers to read.
 

@@ -58,9 +58,9 @@ Neither bypass is visible to the caller. Never make a rejection hook the only en
 
 ## App-field changes in hook data
 
-`before:*` hooks receive app-field updates in nested, slug-keyed `$app` form regardless of the caller's write shape — dotted keys (`{ "$app.my_app.status": "ready" }`) and `$unset` paths normalize to `req.data.$app.my_app.*`. Hook code does not need to handle internal `__app.{canonicalId}` fields.
+`before:*` hooks receive app data in nested `$app` form keyed by each app's slug, whatever the caller's write named the app by and however it wrote: dotted keys (`{ "$app.my_app.status": "ready" }`), `$set` and `$unset` are applied first, so `req.data.$app.my_app` is the app's data as the write leaves it, on a create too. A hook's `conditions` read the same keys. Hook code does not need to handle internal `__app.{canonicalId}` fields.
 
-On updates, `req.data.$app.<slug>` is the record's **stored** app subdocument merged with the incoming write, not just the keys the caller sent — and `$unset` paths are resolved by deletion, so an unset field is simply absent rather than flagged. Never read `req.data.$app` as "what changed". `req.data.$record.$app.<slug>` is decoded the same way on `updated` and holds the pre-write values; diff against it.
+On updates, `req.data.$app.<slug>` is the record's **stored** app subdocument merged with the incoming write, not just the keys the caller sent, and an unset field is simply absent rather than flagged. Never read `req.data.$app` as "what changed". `req.data.$record.$app.<slug>` is keyed the same way on `updated` and holds the pre-write values; diff against it. App data a hook returns takes the operators of a write (`$app.$set`, `$unset` paths) and merges into the app data as the write and the hooks before it leave it.
 
 ## Writes from a hook
 

@@ -52,7 +52,7 @@ The rules that hold for every template and every app type:
 - **Backend failures throw.** The Backend client rejects with a `SwellError` (`status`, `code`, `body`), including on a write that fails validation — not the `result.errors` object swell-node returns. A read of an id that does not exist is not a failure: it resolves empty, so test `if (!record)`.
 - **Endpoints live under `/app-api`.** Swell answers `/api`, `/graphql`, `/playground`, `/checkout/` and `/functions/` itself on every address it routes to the frontend, so declare no page or handler under them. Push warns about Vinext route files under `/api`, and cannot see routes declared any other way.
 - **Swell sets the caching, framing and cross-origin headers.** Every response of a managed frontend goes out as `Cache-Control: private, no-store`, except the build's content-hashed assets, and with Swell's own `Access-Control-Allow-Origin` and frame policy in place of the app's. Do not design around response caching, and do not rely on headers of that kind set in app code. The `Cache-Control: private, no-store` that the scaffold's examples send is harmless; keep it.
-- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI explicitly excludes `.dev.vars*` from uploads; `.env*` exclusion relies on the scaffold's `.gitignore`. Read merchant configuration with the Backend client's `settings()`. Settings are not a secret store (`references/settings.md`), and the read needs the `read_settings` scope once `permissions` is non-empty (`references/permissions.md`).
+- **Runtime configuration comes from app settings.** Managed hosting does not provision custom runtime variables or bindings. Local environment files are not a deployment configuration mechanism, but build tools can embed environment values into compiled output. The CLI does not upload `.dev.vars*`, nor, from `@swell/cli` 2.9.33, `.env` or `.env.*` (an older CLI uploads a `.env` file that `.gitignore` does not match); a change to the frontend's `.env` files still deploys the frontend again, so values the build embeds stay current. Read merchant configuration with the Backend client's `settings()`. Settings are not a secret store (`references/settings.md`), and the read needs the `read_settings` scope once `permissions` is non-empty (`references/permissions.md`).
 
 ## Frontend endpoint or app function
 
@@ -102,14 +102,14 @@ Building managed <framework> frontend...
 Deployed managed frontend package <digest>.
 ```
 
-- A managed frontend is built and deployed on **every** unscoped `swell app push` — there is no "unchanged, skipped" case. A scoped push of `frontend/`, any file or directory under it, or the root `package.json` also rebuilds and deploys the frontend. Pushes scoped to other paths leave the frontend deployment alone. `--no-deploy` uploads sources without building or deploying, so the previous build stays live.
+- A managed frontend is built and deployed on **every** unscoped `swell app push` — there is no "unchanged, skipped" case. A scoped push of `frontend/`, any file or directory under it, or the root `package.json` also rebuilds and deploys the frontend, except a `.env` or `.dev.vars` file named alone, which push refuses. Pushes scoped to other paths leave the frontend deployment alone. `--no-deploy` uploads sources without building or deploying, so the previous build stays live.
 - Push always targets the **test** environment. Releasing to other environments and stores goes through `swell app version` / `install` — see `references/app-publishing.md`.
-- **Where it is served.** Every deployed frontend answers at the app address, `https://<storeId>--<installedAppId>--app.swell.store`; the id is the one of the app's installation in that environment, not the `id` in `swell.json` and not the app record's id in `.swellrc`: it is the `id` of the app's entry in `swell api get '/:clients/:self/apps'`. Functions and workflows get the address as `req.app.frontend_url`. A host built with the record id redirects to the dashboard, which is not the app refusing a visitor. A dashboard app is opened from the dashboard; a storefront app is opened at its storefront's address. The specialized references say which address to give people.
+- **Where it is served.** Every deployed frontend answers at the app address, `https://<storeId>--<installedAppId>--app.swell.store`; the id is the one of the app's installation in that environment, not the `id` in `swell.json` and not the app record's id in `.swellrc`: `swell inspect frontend --app=.` (`@swell/cli` 2.9.33 or later) prints the address. Functions and workflows get the address as `req.app.frontend_url`. A host built with the record id redirects to the dashboard, which is not the app refusing a visitor. A dashboard app is opened from the dashboard; a storefront app is opened at its storefront's address. The specialized references say which address to give people.
 - **The Worker profile is fixed.** Keep `compatibility_date` and `compatibility_flags` in `frontend/wrangler.jsonc` as scaffolded and add no bindings or `vars` to the ones it has; a changed profile is rejected. Node.js built-ins are available as is.
 - The built package (Worker plus assets) is limited to 8 MiB.
 - Managed hosting supports Vinext and client-side React + Vite. Next.js with OpenNext is refused with a message pointing to self-hosting.
 
-There is no `swell inspect frontend` resource type — the push output above, then opening the frontend, is the confirmation.
+`swell inspect frontend --app=.` lists the hosting, the framework and the address, and `swell inspect frontend app.<app_id>` shows the deployed package or URL. Neither says whether a deploy finished: the push output above, then opening the frontend, is the confirmation.
 
 ## Gate alignment
 
@@ -117,7 +117,7 @@ Apply the skill's five gates to the requested frontend change. For a new fronten
 
 - **Gate 2 (Schema)** — n/a, no schema-backed manifest. The scaffold's README and the SDK's README are the references.
 - **Gate 3 (Author & Validate)** — `npm run check` in `frontend/` must pass.
-- **Gate 4 (Deploy & Verify)** — confirm `Deployed managed frontend package <digest>.` in the push output. There is no frontend inspect command; verify the deployed frontend.
+- **Gate 4 (Deploy & Verify)** — confirm `Deployed managed frontend package <digest>.` in the push output, then open the deployed frontend.
 - **Gate 5 (Test)** — use the "Preview and verify" checklist of the specialized reference for the affected behavior. Full frontend delivery checks every kind of viewer the app has, first under `swell app dev` and again against the deployed build. Local-only work leaves deployment checks unverified; architecture and read-only reviews do not start dev or push.
 
 ## Self-hosting on Cloudflare
