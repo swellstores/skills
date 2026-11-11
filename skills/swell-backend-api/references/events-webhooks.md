@@ -39,7 +39,7 @@ An event is a notice that something changed, not the record. Read the record by 
 
 - **Read the list from the store.** `GET /:models/<collection>` has it under `events`, app-declared events included: `root` is the first part of the type and each entry of `types` has the second part as its `id`. A child collection's list is on its field in the parent model (`fields.addresses.events`).
 - **Standard models have events beyond the three.** Orders: `submitted`, `paid`, `payment_failed`, `refunded`, `delivered`, `canceled`. Carts: `converted`, `abandoned`. Products: `stock_adjusted`. Subscriptions: `activated`, `invoiced`, `paid`, `payment_failed`, `paused`, `resumed`, `canceled`, `trial_will_end` and more.
-- **A type that has `hooks` in its declaration records no event.** `payment.charge`, `payment.refund`, `order.shipping` and `order.taxes` are points where an app extends the platform. A webhook subscribed to one never fires.
+- **A type that has `hooks` in its declaration records no event.** `payment.charge`, `payment.refund`, `payment.void_charge`, `order.shipping` and `order.taxes` are points where an app extends the platform. A webhook subscribed to one never fires.
 
 ### Which events a change records
 

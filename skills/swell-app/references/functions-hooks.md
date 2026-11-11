@@ -78,7 +78,7 @@ A hook can name any event the model declares: `created`, `updated` and `deleted`
 
 List a model's declared events with `swell inspect models /orders` and read `events.types`. Standard models already ship their domain events; subscribe to them, never redeclare them.
 
-Extension events (`payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are not triggered by writes: platform code invokes them for the app configured on that method. They record no event, so `after:payment.charge` is a hook or nothing.
+Extension events (`payment.charge`, `payment.refund`, `payment.void_charge`, `order.shipping`, `order.taxes`) are not triggered by writes: platform code invokes them for the app configured on that method. They record no event, so `after:payment.charge` is a hook or nothing.
 
 ## Custom hook events
 
