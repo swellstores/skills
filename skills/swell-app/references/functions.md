@@ -40,7 +40,7 @@ Runs of a function for one record go one at a time, in the order of the record's
 
 A `before:` or `after:` prefix on the event turns the function into a sync hook. Read `references/functions-hooks.md` before using one.
 
-> **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.
+> **Integration apps**: platform-owned extension events (`payment.create_intent`, `payment.charge`, `payment.refund`, `payment.void_charge`, `order.shipping`, `order.taxes`) are model hooks with `config.extension` set and platform-filtered dispatch — see `references/app-integrations.md` for binding rules and the type-specific reference for the hook contract.
 
 **Model schedule triggers** execute at the time `schedule.formula` gives for the record as stored, usually a date field. The field must exist in the data model.
 

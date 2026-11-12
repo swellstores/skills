@@ -4,6 +4,11 @@ All notable changes to this marketplace are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- `swell-app`: every app payment method is charged in two phases, as the built-in methods are: `payment.charge` authorizes with `captured: false` when the order is placed and captures the same payment with `captured: true` and its `transaction_id`. A handler that cannot authorize separately answers the authorize call with `captured: true`. `payment.void_charge` releases an authorization that is voided.
+
 ## [0.12.0] - 2026-11-02
 
 App platform fixes, third group: storefront access to app data, routes, hooks, push and inspect, dashboard actions and settings, components and webhook signatures behave as the skills now state, and the workarounds for the fixed bugs are gone.

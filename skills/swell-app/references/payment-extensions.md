@@ -6,15 +6,16 @@ Payment extensions provide custom payment methods or card gateway behavior in an
 
 Two payment-extension behaviors fail at runtime in ways no local check catches — not `swell schema`, not `swell app push`, not `npm run typecheck`. Verify both before claiming a payment extension is done.
 
-### 1. `payment.charge` fires once or twice depending on the method
+### 1. `payment.charge` authorizes first, then captures the same payment
 
-Two-phase auth/capture requires all three: the order's billing method is in the platform's hardcoded native authorizable set (`card`, `paypal`, `amazon`, `affirm`, `resolve`, `ideal`, `klarna`, `bancontact`, `google`, `apple`, `twint`, `paysafecard`, `sezzle`), `/settings/orders/features/require_authorized_payment` is true (the default), and the order is not a subscription order (`subscription_id` unset). For extensions that means card-gateway replacements only.
+Every app payment method, a card gateway or an alternative method, is charged in the phases of the built-in methods, following the store's order settings:
 
-- **Card gateway (`method: "card"`) → two calls.** First: `req.data.captured === false` → authorize the provider intent without capturing. Second: `req.data.captured === true` → capture it. A single-shot "create + capture" handler succeeds on the first call (capturing too early), then fails or double-charges on the second.
-- **Alt method (any extension `id` outside that native set — `my-method`, `wallet-pay`, …) → one call**, with `req.data.captured === true`. Subscription orders are single-shot too, even on `card`.
-- One handler covers both: `captured: false` authorizes, `captured: true` captures, and the authorize phase may never happen.
-- Canonical handler shape: see Charge Function below — branch on `captured` and look up the existing provider intent (`req.data.intent.<provider>.id` or `req.data.transaction_id`) before creating a new one.
-- **Verify:** create one test order, then run `swell logs --type function --app=.`. Card gateway: two consecutive `payment.charge` invocations, `captured: false` then `captured: true`, returning the same `transaction_id`. Alt method: exactly one, `captured: true`. Hunting a missing second call on an alt method is hunting a bug that does not exist.
+- **Authorize.** With `/settings/orders/features/require_authorized_payment` on (the default), placing an order calls `payment.charge` with `req.data.captured === false`. Authorize the provider payment without capturing it and return `{ success: true, transaction_id }`. Swell records the payment as authorized and not captured (`authorized: true`, `captured: false`, `status: "authorized"`) and sets it as the order's `authorized_payment_id`. A failed authorization refuses the order.
+- **Capture.** A second call on the same Swell payment, with `req.data.captured === true` and the authorization's `req.data.transaction_id`. It comes right after the order is placed when `/settings/orders/features/auto_order_payment` is on (the default), and otherwise when the merchant charges the order in the dashboard. Capture the authorization and return the same `transaction_id`.
+- **A provider that cannot authorize separately** charges on the authorize call and returns `{ success: true, captured: true, transaction_id }`. Swell records the payment as captured and makes no capture call.
+- **One call with `captured: true`** when `require_authorized_payment` is off, for subscription orders (`subscription_id` set), and for a payment created with `POST /payments` without `captured: false`.
+- One handler covers every case: `captured: false` authorizes, `captured: true` captures, and the authorize phase may never happen. Canonical handler shape: see Charge Function below — branch on `captured` and look up the existing provider payment (`req.data.transaction_id` or `req.data.intent.<provider>.id`) before creating a new one.
+- **Verify:** create one test order with the default settings, then run `swell logs --type function --app=.`: two consecutive `payment.charge` invocations, `captured: false` then `captured: true`, returning the same `transaction_id`, or one invocation when the handler answered `captured: true`.
 
 ### 2. Merchant Save activates the extension, not `swell app push`
 
@@ -79,8 +80,11 @@ Each payment event is a synchronous platform hook. The platform merges **every**
 |----------|-------|-----------|--------------|------------------|----------------|----------------|
 | Intent | `after:payment.create_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `call("createIntent", data)` in the component) | `{ result: { ...browserSafeData } }` | `{ error: "msg" }` |
 | Get Intent | `after:payment.get_intent` | `after` only — `before:` rejected at deploy with `EventHookTypeError` | `["result", "error"]` | `account`, `intent` (the payload from `call("getIntent", data)` in the component) — same shape as `create_intent` | `{ result: { ...browserSafeState } }` | `{ error: "msg" }` |
-| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id"]` | `id` (the Swell payment being charged, in both phases), `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data["my-method"]`) | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
+| Charge | `before:` or `after:payment.charge` | either | `["success", "error", "transaction_id", "captured"]` | `id` (the Swell payment being charged, in both phases), `amount`, `currency`, `captured`, `intent`, `transaction_id`, `<methodId>` (e.g. `req.data["my-method"]`) | `{ success: true, transaction_id }`, with `captured: true` when an authorize call charged | `{ success: false, error: { message } }` |
 | Refund | `before:` or `after:payment.refund` | either | `["success", "error", "transaction_id"]` | `amount`, `currency`, `transaction_id` | `{ success: true, transaction_id }` | `{ success: false, error: { message } }` |
+| Void | `before:` or `after:payment.void_charge` | either | `["error"]` | `id`, `currency`, `transaction_id`, `intent`, `<methodId>`, `$record` (the payment, with `amount`) | `{}` | `{ error: { message } }` |
+
+`payment.void_charge` runs when an authorized, uncaptured payment is voided (`PUT /payments/<id>` with `{ void: true }`): by the merchant, when an order is canceled, or when the order owes nothing to capture. Release the provider authorization there. Swell saves the void only when the handler returns no `error`; a refused void leaves the payment authorized. Without the hook the payment is voided in Swell and the provider authorization expires on its own.
 
 Implement `payment.get_intent` only when the provider needs in-flight intent state refreshed from the platform — typically for redirect-return recovery, where checkout reopens after the shopper bounced through a provider page and the cart's persisted intent state is stale. The component triggers it with `call("getIntent", data)`, which the Swell vault routes to the hook. Skip it for fully inline flows.
 
@@ -119,12 +123,12 @@ If a request payload differs from the table, add structured logs to the function
 
 ## Charge Function: Auth/Capture Phases
 
-When two-phase applies (Critical Contract #1 — card gateway, `require_authorized_payment` on, non-subscription order), the order payment flow invokes `payment.charge` **twice**:
+With `require_authorized_payment` on and an order that is not a subscription order (Critical Contract #1), the order payment flow invokes `payment.charge` on one Swell payment in two phases:
 
-1. With `req.data.captured === false`: authorize the provider intent without capturing funds. The order flow posts a payment record with `captured: false`, which triggers the charge handler.
-2. With `req.data.captured === true`: capture the authorized intent. The order flow PUTs the payment to `captured: true`; the charge trigger fires again on that `false → true` transition.
+1. With `req.data.captured === false`: authorize the provider payment without capturing funds. The order flow posts a payment record with `captured: false`, which triggers the charge handler.
+2. With `req.data.captured === true` and `req.data.transaction_id` from phase 1: capture the authorization. The order flow (with `auto_order_payment` on) or the merchant PUTs the payment to `captured: true`; the charge trigger fires again on that `false → true` transition.
 
-Otherwise — every alt method, and subscription orders on any method — the handler runs once with `req.data.captured === true`.
+Phase 1 answered with `captured: true` records the payment as captured, and phase 2 does not happen. Otherwise the handler runs once with `req.data.captured === true`.
 
 The canonical handler covers both cases: two-branched, and idempotent on the existing provider intent id.
 
@@ -193,7 +197,7 @@ Invariants the handler must preserve:
 
 `<methodId>` is `card` for card gateways, or the extension `id` for alt methods. Billing on the order is sufficient — no account-level billing pre-setup required.
 
-Verify: `swell logs --type function --app=.` — two `payment.charge` entries for a card gateway, exactly one for an alt method (Critical Contract #1). Zero entries means dispatch didn't reach the extension (check activation, not code).
+Verify: `swell logs --type function --app=.` — two `payment.charge` entries with the default order settings, `captured: false` then `captured: true` (Critical Contract #1). Zero entries means dispatch didn't reach the extension (check activation, not code).
 
 ## Checkout Component
 
@@ -338,9 +342,10 @@ Verify in order:
 5. The checkout component frame loads: `swell inspect extensions app.<slug>.<extId>` lists the component among the extension's bound components, and in hosted checkout the selected method shows its content and the order button enables.
 6. `call("createIntent", data)` resolves with browser-safe provider data.
 7. `submit` returns billing with the method's token under `billing.<methodId>` and the provider intent id under `billing.intent.<provider>.id`; the order's billing carries them.
-8. Creating an order invokes `payment.charge` — **twice** for a card gateway (`captured: false` then `captured: true`, same `transaction_id` both times), **exactly once** for an alt method (`captured: true`). Every call returns `success: true`, or `{ async: true }` for a charge the extension finishes later, which then records `success` on the payment.
+8. Creating an order with the default order settings invokes `payment.charge` twice (`captured: false` then `captured: true`, same `transaction_id` both times), or once when the handler answered `captured: true`. Every call returns `success: true`, or `{ async: true }` for a charge the extension finishes later, which then records `success` on the payment.
 9. Refunding invokes `payment.refund` and returns `success: true` with a refund `transaction_id`.
-10. `swell logs --type function --app=.` shows the expected invocations and no hidden provider errors. On a card gateway it shows two `payment.charge` calls for the order.
+10. Voiding an authorized payment invokes `payment.void_charge` when the extension implements it, and the provider authorization is released.
+11. `swell logs --type function --app=.` shows the expected invocations and no hidden provider errors.
 
 Common mistakes:
 
