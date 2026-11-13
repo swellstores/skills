@@ -35,3 +35,21 @@ Assess: discover that a route needs a public key and that the callback address c
 User request: "Our existing Swell storefront app needs to call a provider from its server handlers with our company's private API secret, which merchants must not receive. We have our own Cloudflare account and want to retain Swell installation, storefront addresses and request context. Propose the hosting and configuration changes and their consequences. Stay read-only."
 
 Assess: retain the Swell app contract while switching the frontend to Cloudflare self-hosting; keep the private value in a runtime secret binding, outside settings, source and browser code. Read the hosting and configuration references. Recognize that app functions do not inherit frontend bindings and that self-hosting has its own caching and context-verification requirements.
+
+## Storefront widget: booking packages
+
+User request: "Our spa app keeps treatment packages in an app collection. Merchants should be able to put a list of packages, with a buy button on each, on any page of their storefront, choosing cards or a compact strip. It must work on every storefront they create, custom domains included. Propose how the app offers this and how the widget calls our backend. Stay read-only."
+
+Assess: a storefront app block in `script` mode declared in `swell.json` `storefront.embeds`, with a `select` prop for the layout. The script registers with `SwellAppBlocks` instead of scanning the page. It renders into a shadow root and follows the `--swell-*` tokens. Calls go through the app proxy, and the endpoint checks `isStorefrontRequest`. Read `references/storefront-blocks.md`. No origin list, no `component` mode (nothing sensitive is entered), and no `storefront` app.
+
+## Storefront widget: card entry
+
+User request: "Our gift card app should let shoppers buy a gift card from a form on the merchant's storefront page, entering card details through our payment provider's SDK. The provider requires that no other script on the page can read the card fields. Propose how to build the widget. Stay read-only."
+
+Assess: a storefront app block in `component` mode, an App Component with `targets: [{ id: 'storefront.block' }]` named by the block's `component`. It calls its backend through `props.fetch`. Recognize the per-instance cost, the third-party storage caveat and the missing page fonts. Do not choose `script` mode, which would put the card fields in the merchant's page.
+
+## Not a block: ratings on product cards
+
+User request: "Our reviews app should show each product's average rating as stars on every product card in category grids, and the rating should be visible to search engines. Propose how the app gets the stars onto the storefront. Stay read-only."
+
+Assess: no app block. Publish the rating as data storefronts read (a public app field or an app collection with `public_permissions`) and let the storefront render the stars in its own markup. Explain why: a block per card costs a script mount or an iframe each, and app scripts don't render on the server. A single `script` block for a review form on the product page may be offered as a separate piece.

@@ -6,6 +6,9 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `swell-app`: storefront app blocks. An app declares widgets in `swell.json` `storefront.embeds`, and merchants place them on storefront pages. Each block runs as a `script` in the page (the default) or as a `component` in an iframe. The new `references/storefront-blocks.md` says which to choose, or when to publish data instead of a block, and covers the app proxy and `isStorefrontRequest` in place of origin lists.
+
 ### Changed
 - `swell-app`: every app payment method is charged in two phases, as the built-in methods are: `payment.charge` authorizes with `captured: false` when the order is placed and captures the same payment with `captured: true` and its `transaction_id`. A handler that cannot authorize separately answers the authorize call with `captured: true`. `payment.void_charge` releases an authorization that is voided.
 
