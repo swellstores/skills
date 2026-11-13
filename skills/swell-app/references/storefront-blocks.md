@@ -108,10 +108,11 @@ export default function GiftCardForm({ params, context, fetch }: ComponentProps)
   import { verifySwellContext, isStorefrontRequest } from '@swell/apps-sdk';
   const context = await verifySwellContext(request.headers);
   if (!isStorefrontRequest(context)) return new Response(null, { status: 403 });
-  // context.storeId, context.storefrontId, context.storefrontHost, context.accountId
+  // context.storeId, context.storefrontId, context.storefrontHost, context.accountId, context.clientIp
   ```
 
-- The context proves the request came through one of the store's storefronts. It doesn't prove who the shopper is, because storefront pages are public. Rate-limit storefront endpoints. `accountId` is the logged-in customer or `null`: check that they own any private data returned.
+- The context proves the request came through one of the store's storefronts. It doesn't prove who the shopper is, because storefront pages are public. Rate-limit storefront endpoints on `context.clientIp`: behind the proxy the request's own address is Swell's, the same for every shopper. `accountId` is the logged-in customer or `null`: check that they own any private data returned.
+- The proxy forwards only `accept`, `accept-language`, `content-type`, `if-none-match`, `idempotency-key` and `X-App-Authorization`. Send the app's own credential (a token your app issued its signed-in customer) in `X-App-Authorization`. `Authorization` is read as a Swell key and never reaches the app.
 - `public` route functions stay reachable at `/functions/<app_id>/<name>` on the store's addresses (`references/functions-routes.md`), with the same storefront fields in their context.
 
 ## Test
