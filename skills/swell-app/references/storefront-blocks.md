@@ -52,7 +52,7 @@ When unsure, choose `script`. Changing a block's mode later changes only the app
 
 Scaffold with `swell create block <id> [--render script|component] -y`. Do not hand-write what it produces. Push validates the declaration. Hosts read it strictly: **one invalid key, block or prop removes every block of the app**, with no partial result.
 
-- `script`: required when any block is `script` mode. A `frontend://<path>` link to a file the app's frontend serves, at most 500 characters, no spaces or quotes. `"integrity": "auto"` makes push pin the hash of the built file, so stores run the bytes that were released. Set it for a self-hosted frontend.
+- `script`: required when any block is `script` mode. A `frontend://<path>` link to a file the app's frontend serves, at most 500 characters, no spaces or quotes. `"integrity": "auto"` makes push pin the hash of the file and give the script a new URL whenever it changes (Swell caches app files by URL), so stores run the bytes that were released. Keep `"auto"` in `swell.json`; push writes the resolved values to the app only once the frontend serving the new file is deployed. This needs `@swell/cli` newer than 2.9.38: through 2.9.38 `"auto"` stays on the app record and hosts drop every block. Set it for a self-hosted frontend too. An explicit hash that the local file doesn't have fails the push.
 - `connect` / `img`: at most 10 `https://host` origins each, and only for third-party origins (`img` also takes `"data:"`). The app's own backend goes through the app proxy and needs no entry. An undeclared origin is blocked by the page's CSP.
 - A block: `id` `[a-z0-9_]{1,40}`, `label` 1–80 characters, optional `description` (1–300) and `icon` (`[a-z0-9-]{1,40}`), `render` (`script` default, or `component` with `component` naming a top-level file in `components/`), `pages`, `props`. At most 20 blocks.
 - `pages`: `home`, `product`, `category`, `category_list`, `search`, `cart`, `content`, `blog`, `blog_post`, `account`, `not_found`. Absent means every page type except `account`. Blocks in a cart drawer count as the `cart` page's.
@@ -86,11 +86,11 @@ Register with the host's block registry. **Do not search the page or run a Mutat
 
 ## Write a `component` block
 
-A component in `components/` (`references/components.md`) whose config opts into the storefront place:
+A component in `components/` (`references/components.md`) that the block names in `component`. It declares no target: the storefront finds it by name, and the platform refuses targets other than its checkout places.
 
 ```tsx
 import type { ComponentProps } from '@swell/apps-sdk/components';
-export const config = { targets: [{ id: 'storefront.block' }] };
+export const config = { description: 'Gift card form' };
 export default function GiftCardForm({ params, context, fetch }: ComponentProps) { /* … */ }
 ```
 
