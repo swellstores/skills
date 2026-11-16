@@ -63,14 +63,18 @@ Marks a version as released for App Store publication. Released versions are rev
 - `--release-notes <file>` attaches release notes from a file; `--not-supported` marks the version as not officially supported by the developer.
 - One version can be staged at a time — releasing a different version unstages the currently staged one (confirmed interactively; `-y` covers it).
 
-## Billing fields (`swell.json`)
+## Price
 
-| Field | Type | Notes |
+An app's price is set in the partner dashboard, not in `swell.json`: open the app and choose **Edit price**. A change applies at once, with no release or review, and is logged in the app's price history. `swell.json` price fields (`price`, `price_interval`, `price_trial_days`, `price_external`) are ignored; `swell app push` warns about them and drops them, so remove them.
+
+| Setting | Values | Notes |
 |------|------|------|
-| `price` | number ≥ 0 | App price; `0` for a free app |
-| `price_interval` | `"once"` \| `"monthly"` | Defaults to `monthly` when `price > 0` |
-| `price_trial_days` | number ≥ 0 | Free-trial length for priced apps |
-| `price_external` | boolean | Billing handled outside Swell |
+| Free, Paid or Paid to the provider | | Paid to the provider (`price_external`) means the provider bills the merchant; Swell bills nothing |
+| Amount (`price`) | USD | Themes $100 to $500 one-time; other apps $5 to $1,000 monthly or $5 to $5,000 one-time |
+| Billing (`price_interval`) | Monthly or One-time | Themes are one-time. A paid app with installs can't switch between the two |
+| Free trial (`price_trial_days`) | 0 to 30 days | Not for themes |
+
+Companion apps are always free. A price can't change while a sale is scheduled or running. When a monthly price goes up (or a free app becomes paid monthly), stores that already have the app keep the old price for 30 days and are emailed; new installs pay the new price at once. A one-time app's existing installs pay the price they installed at, or nothing if they installed it while it was free.
 
 ## Listing
 
@@ -82,7 +86,7 @@ The App Store listing is the app record, filled from the app's files whenever a 
 | `DESCRIPTION.md` at the app root | `full_description`, as Markdown without HTML, up to 20,000 characters |
 | image files | the icon, preview images, and the images of `images` and `highlights` |
 
-- **The files are the listing.** A key removed from `swell.json` clears its field, and deleting `DESCRIPTION.md` clears the full description. The billing fields are the exception: a removed key keeps the stored value, so a free app sets `price` to `0`. A `full_description` in `swell.json` is not applied, and push warns about it.
+- **The files are the listing.** A key removed from `swell.json` clears its field, and deleting `DESCRIPTION.md` clears the full description. Price fields are ignored (see "Price"). A `full_description` in `swell.json` is not applied, and push warns about it.
 - **Images bind by path, when the image file is pushed.**
   - The icon is `assets/icon.*`, or the file `logo_src` names. Draw it with **square corners**: the surfaces that display it round it themselves.
   - The preview images of a storefront or theme are `assets/preview.*` and `assets/preview-mobile.*`, or the files `preview_src` and `preview_mobile_src` name.

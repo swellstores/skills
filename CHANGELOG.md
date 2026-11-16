@@ -7,6 +7,7 @@ versioning follows [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- `swell-app`: an app's price is set in the partner dashboard (Edit price), not in `swell.json`. The `swell.json` price fields are ignored, and push warns about them. `app-publishing.md` "Price" gives the limits and what existing installs pay when a price changes.
 - `swell-app`: every app payment method is charged in two phases, as the built-in methods are: `payment.charge` authorizes with `captured: false` when the order is placed and captures the same payment with `captured: true` and its `transaction_id`. A handler that cannot authorize separately answers the authorize call with `captured: true`. `payment.void_charge` releases an authorization that is voided.
 
 ## [0.12.0] - 2026-11-02
