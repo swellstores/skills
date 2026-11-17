@@ -64,7 +64,7 @@ export default async function (req: SwellRequest) {
 ```
 
 - `state` is an opaque random id. Swell keeps what it stands for: the store, environment, install, callback and `data`. It expires in 10 minutes and works once.
-- `callback` must name a route function of the app that answers GET (no `route.methods`, or one that includes `get`). `start()` refuses any other with `oauth_callback_invalid`.
+- `callback` must name a route function of the app that answers GET (no `route.methods`, or one that includes `get`). `start()` refuses any other with `oauth_callback_invalid`. The function must also handle GET in code: a default export, or a `get` export (`export function get` or `export default { get }`). `start()` can't see the exports, so a callback module with only a `post` export fails on every redirect, after the state is used.
 - `data` is JSON up to 2 KB for values the callback needs and the browser must not see, such as a PKCE `code_verifier` (`oauth_data_too_large` over it).
 - The UI opens a window on the click (`const w = window.open('about:blank')`) and sets `w.location = url` after the call returns: a window opened after an awaited call is blocked as a popup. The provider page can't run inside the app frame.
 
@@ -109,10 +109,12 @@ export default async function (req: SwellRequest) {
 }
 ```
 
-- Swell checks the state (known, not expired, not used, this app's) and that the install is still installed before calling the function. `req.oauth.callback` is `{ params, data, name }` on that call only, and `null` on any other call: a caller can't fake it.
+- Swell checks the state (known, not expired, not used, this app's) and that the install is still installed before calling the function. `req.oauth.callback` is `{ params, data, name, redirectUri }` on that call only, and `null` on any other call through Swell: a caller can't fake it.
   - `params`: every parameter the provider sent, as raw strings, from the query string or from the form body when the provider posts the response (`response_mode=form_post`). Swell doesn't interpret them.
   - `data`: what was passed to `start()`.
-- The callback is always called with GET, whatever method the provider used. It can be non-public: Swell calls it internally, not through the storefront gateway. It always runs on Swell's workers, never on a `swell app dev` machine, so it has `req.appSecrets`.
+  - `redirectUri`: the URL `start()` returned. Providers that check it again in the token request (Google, Meta and most OAuth 2.0 providers) need it as `redirect_uri` there. TikTok doesn't.
+  - Trust `params` only once the provider has accepted the code exchange: a request sent straight to the function's worker, outside Swell, can carry any `Swell-OAuth` header, but it gets no `req.appSecrets`, so its exchange fails.
+- The callback is always called with GET, whatever method the provider used, so it needs a default export or a `get` export. It can be non-public: Swell calls it internally, not through the storefront gateway. It always runs on Swell's workers, never on a `swell app dev` machine, so it has `req.appSecrets`.
 - Return `{ redirect }` to send the merchant's window to the app's page in the dashboard (`req.app.admin_url`, or a path under it) or to the app's frontend in that store. Any other target is replaced by the app's dashboard page, which is also the default. A callback that fails shows the merchant a page with a link back to the app.
 - The relay's page answers an expired or reused state with "connect again".
 
@@ -130,5 +132,5 @@ if (!connection?.access_token) {
 ## Local development and tests
 
 - `swell app dev` runs hooks and actions locally with an empty `req.appSecrets`. Settings, the token among them, read the same way locally, so a connected store works end to end. Connect once through the deployed flow (`swell app push`, then Connect): the callback runs on Swell either way.
-- Unit tests pass a fake `req` with `appSecrets`, `oauth.start` and `oauth.callback`.
+- Unit tests pass a fake `req` with `appSecrets`, `oauth.start` and `oauth.callback` (`{ params, data, name, redirectUri }`).
 - A `secret` settings field is still readable by store staff and by other apps with access to settings (`references/settings.md`).
