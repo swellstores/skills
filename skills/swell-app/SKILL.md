@@ -51,7 +51,7 @@ Each folder holds one kind of block, and a file's name decides what it becomes: 
 
 ### Manifest — `swell.json`
 
-The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Billing fields (`price`, `price_interval`, `price_trial_days`, `price_external`) and listing fields fill the App Store listing: `references/app-publishing.md`, "Listing".
+The app's `id`, `name`, `type`, `version` and `permissions`, plus `frontend.hosting` when there is a frontend and `extensions[]` for integration slots. **Always declare `permissions`**: empty or absent means full access to the store (see "Permissions"). Listing fields fill the App Store listing: `references/app-publishing.md`, "Listing". The price is set in the partner dashboard, not `swell.json`: same file, "Price".
 
 ### Data models — `models/*.json`
 
