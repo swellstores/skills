@@ -6,6 +6,9 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `swell-app`: hooks on an update get only the changed fields in `req.data`, and the docs now say so. `functions-hooks.md` and `shipping-tax-extensions.md` read the record from `{ ...req.data.$record, ...req.data }`, and the shipping and tax examples no longer read `req.data.items`, which is absent when a shopper changes only the address. `shipping-tax-extensions.md` also notes that a change of items alone re-rates only when a shipping service is selected.
+
 ### Changed
 - `swell-app`: an app's price is set in the partner dashboard (Edit price), not in `swell.json`. The `swell.json` price fields are ignored, and push warns about them. `app-publishing.md` "Price" gives the limits and what existing installs pay when a price changes.
 - `swell-app`: every app payment method is charged in two phases, as the built-in methods are: `payment.charge` authorizes with `captured: false` when the order is placed and captures the same payment with `captured: true` and its `transaction_id`. A handler that cannot authorize separately answers the authorize call with `captured: true`. `payment.void_charge` releases an authorization that is voided.

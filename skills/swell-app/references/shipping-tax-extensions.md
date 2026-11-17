@@ -58,11 +58,13 @@ Both events are platform-owned model hooks. Use explicit `before:`/`after:` phas
 | Shipping rating | `order.shipping` | `after` (default) | `["shipment_rating"]` | shipping address, items, currency/locale, existing `shipment_rating.services` | `{ shipment_rating: { services: [...] } }` |
 | Tax calc | `order.taxes` | `before` (preferred) | `["items", "taxes"]` | items, currency/locale | `{ items: [{id, taxes: [...]}], taxes: [{id, name, amount}] }` |
 
+**Read the cart from `{ ...req.data.$record, ...req.data }`, never from `req.data` alone.** On an update, `req.data` holds only the fields the write changed. When a shopper enters an address after adding items, `req.data.items` is absent and a handler reading `req.data.items ?? []` rates an empty parcel without any error. `$record` is the stored cart before the write; it is `null` when the cart is created in the same request, and spreading `null` is safe. `req.data` comes second so the fields this write changed win. A nested object that the write changed, such as `shipping`, arrives in `req.data` already merged with the stored one, so the shallow spread does not lose its other keys. The merged object also carries `$record`, `$event` and stored `__locale` keys: read from it, but never send it to a provider or return it.
+
 Phase choice:
 
 - `after:order.shipping` — default; add or replace services after native rating and the order webhook run.
 - `before:order.shipping` — rare; mutate inputs before native rating.
-- Both shipping phases sit behind a shipment-params fingerprint. A save that changes nothing shipping-relevant (address, items, shipment settings) fires neither phase — that is a stale rating, not a broken function.
+- Both shipping phases sit behind a shipment-params fingerprint. A save that changes nothing shipping-relevant (address, items, shipment settings) fires neither phase — that is a stale rating, not a broken function. A change of items alone re-rates only when the cart already has a `shipping.service`; without one the rating stays stale until checkout requests rates again with `shipment_rating: null`.
 - Binding — not phase — is what disables native tax calculation. Once `/settings/taxes.extension_app_id` is set, `applyTaxRules` and the tax integration webhooks are skipped for **both** phases, so an `after:` handler has no native result to coexist with.
 - `before:order.taxes` — runs after existing taxes are cleared and before the order webhook. Prefer this one.
 - `after:order.taxes` — runs after the order webhook. A recalculation where no tax-relevant field changed fires neither phase.
@@ -83,10 +85,18 @@ export const config: SwellConfig = {
 };
 
 export default async function (req: SwellRequest) {
+  // req.data holds only the changed fields; the rest of the cart is in $record
+  const cart = { ...req.data.$record, ...req.data };
+  const quantity = (cart.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+  // Keep the native services, replace ours
+  const services = (cart.shipment_rating?.services || []).filter((s) => s.id !== "fedex_ground");
+
   return {
     shipment_rating: {
       services: [
-        { id: "fedex_ground", name: "FedEx Ground", price: 10, carrier: "fedex" },
+        ...services,
+        { id: "fedex_ground", name: "FedEx Ground", price: 5 + quantity, carrier: "fedex" },
       ],
     },
   };
@@ -105,7 +115,10 @@ export const config: SwellConfig = {
 };
 
 export default async function (req: SwellRequest) {
-  const item = req.data.items?.[0];
+  // req.data holds only the changed fields; the rest of the cart is in $record
+  const cart = { ...req.data.$record, ...req.data };
+  const item = cart.items?.[0];
+  if (!item) return {};
   return {
     items: [
       { id: item.id, taxes: [{ id: "provider_tax", amount: 5 }] },
