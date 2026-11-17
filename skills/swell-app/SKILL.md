@@ -1,6 +1,6 @@
 ---
 name: swell-app
-description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends. Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
+description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends, and their UI built from the Swell UI kit (@swell/swell-ui, <swell-*> elements). Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -165,7 +165,7 @@ What decides whether it fits:
 - **Managed hosting has a fixed profile**: no custom variables, bindings or secrets, Vinext or React + Vite only, a package of up to 8 MiB. An app that needs more, secrets of its own included, can host its frontend in the developer's own Cloudflare account and stay an app. A site hosted anywhere else is not an app frontend.
 - A frontend can also have server endpoints, under `/app-api`. Work that must happen with nobody looking at the frontend — reacting to store events, schedules — belongs in a function.
 
-Read `references/frontend.md` before touching `frontend/`, then `references/frontend-dashboard.md` or `references/frontend-storefront.md` for what is being built.
+Read `references/frontend.md` before touching `frontend/`, then `references/frontend-dashboard.md` or `references/frontend-storefront.md` for what is being built. Build its UI from the Swell UI kit, installed from npm: `references/ui-kit.md`.
 
 ### Components — `components/*.{jsx,tsx}`
 
@@ -175,6 +175,8 @@ Browser UI written in Preact. Each top-level file is one component, of one of tw
 - **Checkout payment component**: one whose `config.extension` is `{ id }` of a `payment` extension in `swell.json`, with `targets: [{ id: 'checkout.payment.methods' }]`. Hosted checkout renders it in the same kind of iframe, in the body of the payment method bound to the extension; it returns `{ billing }` from `submit` handlers and calls `call('createIntent', data)`. Scaffold with `swell create component <Name> --extension <id> --target checkout.payment.methods -y` and read `references/payment-extensions.md` before writing one.
 
 Shipping and tax have no component place, and a storefront renders components only when its own page mounts them with `createComponents` (`references/components.md`, "Other pages"). Components are unrelated to `frontend/`; an app may ship both.
+
+Build a component's UI from the Swell UI kit (`<swell-button>`, `<swell-input>`, …): with `ui: true` in its `config` the platform loads the kit into the frame with the host's look and theme, so a payment component looks like the checkout around it. Read `references/ui-kit.md` before writing the UI.
 
 ### Assets and tests
 
@@ -316,6 +318,7 @@ Load a reference when its block is in play; none of them needs to be read up fro
 | `references/frontend-storefront.md` | The site of a `storefront` app |
 | `references/app-integrations.md` | Integration apps and `extensions[]` — read first |
 | `references/components.md` | A component for an admin content field |
+| `references/ui-kit.md` | The UI of a component or a frontend: the Swell UI kit (`@swell/swell-ui`) |
 | `references/payment-extensions.md` | A `payment` extension or a checkout payment component |
 | `references/shipping-tax-extensions.md` | A `shipping` or `tax` extension |
 | `references/app-publishing.md` | Versions, installing in other stores, releasing, billing and listing fields |

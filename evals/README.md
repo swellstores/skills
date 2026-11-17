@@ -76,6 +76,7 @@ assertions. Each one is a mistake an agent makes without the skill:
 | `cli-environment-safety` | `swell api` writes to **test** unless `--live` is passed |
 | `product-import-stock-tracking` | `stock_tracking` must be set or stock never decrements |
 | `webhook-not-firing` | `enabled` defaults to false; there is no signing secret to set |
+| `component-ui-kit` | a component matches its host through the kit the platform loads with `ui: true`, not bundled or hand-copied styles |
 
 ## Conventions
 

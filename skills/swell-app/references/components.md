@@ -4,20 +4,20 @@ An app component is a Preact UI that renders a **content field** in the admin in
 
 A component with `config.extension: { id }` and `targets` is a checkout payment component: the same iframe mechanism, rendered by hosted checkout in the body of a payment method, with its own contract (`context: { cart, method }`, `submit` and `redirect` handlers, `call`) — `references/payment-extensions.md`. Never put `config.extension` on a field component.
 
-Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`). `theme` is typed from `@swell/apps-sdk` 2.0.0-alpha.9.
+Requires `@swell/cli` 2.9.27, `@swell/apps-sdk` 2.0.0-alpha.6 (types) and `@swell/app-types` 1.2.9 (`req.swellContext`), or later. Earlier SDK releases have no `./components` entry. Payment components need `@swell/cli` 2.9.28 and `@swell/apps-sdk` 2.0.0-alpha.7 (`call`, `targets`). `theme` is typed from `@swell/apps-sdk` 2.0.0-alpha.9. The UI kit (`config.ui`, `ui`) needs `@swell/cli` 2.9.36 and `@swell/apps-sdk` 2.1.0.
 
 ## Files and names
 
 - Every `.tsx` / `.jsx` file **directly in `components/`** is one component. Anything else under `components/` (`components/lib/*`, `components/tsconfig.json`) is shared code, bundled into the components that import it.
 - The name is the file name: `ColorPicker.tsx` → `ColorPicker`. Use letters, digits and `-`. A `_` deploys as `-`, with a warning; push refuses a new file with any other character in its name, as one that would never load.
 - A **default export is required**; without it the build fails (`Unable to compile component <name> …`).
-- `export const config = { description }` is optional and must be a static object literal; the CLI reads it without running the code.
+- `export const config = { description, ui }` is optional and must be a static object literal; the CLI reads it without running the code.
 - Scaffold: `swell create component <Name> [-d <description>] -y`. It writes the file, adds `preact` and `@swell/apps-sdk` (dev, types only) to `package.json`, writes `components/tsconfig.json`, adds `components` to the root `tsconfig.json` `exclude`, and extends the `typecheck` script. Run `npm install` after.
 
 ## Build limits
 
 - JSX always compiles with Preact's automatic runtime. `react` and `react-dom` resolve to `preact/compat`, so React libraries bundle; React 19-only APIs (`use`, Actions, `useOptimistic`) do not exist.
-- **No CSS or other non-JS imports** — the build fails. Use inline styles or a `<style>` element.
+- **No CSS or other non-JS imports** — the build fails. Build the UI from the Swell UI kit, which the frame loads with `config.ui = true` while the build leaves imports of `@swell/swell-ui` out of the bundle (`ui-kit.md`), and style the rest with inline styles or a `<style>` element.
 - `@swell/apps-sdk` is types only: `import type { ComponentProps } from '@swell/apps-sdk/components'`.
 - Bundles are public: no secrets in a component.
 
@@ -33,6 +33,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
   readonly locale: string;
   readonly readonly: boolean;
   readonly theme: 'light' | 'dark';
+  readonly ui?: { readonly config?: object };
   setValidity(error: string | null): void;
   readonly fetch: typeof fetch;
   on(event: string, handler: (data: unknown) => unknown): () => void;
@@ -50,6 +51,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 | `locale` | The store's locale. |
 | `readonly` | The field is disabled or read-only. A `setValue` sent anyway is ignored. |
 | `theme` | `'light'` or `'dark'`, the dashboard's theme; a new one re-renders. The frame's root carries it as `data-theme` and `color-scheme`. |
+| `ui` | With `config.ui = true`: `{ config }`, the kit configuration the host passed and the frame already applied. The admin passes none, so `config` is absent and the kit keeps its default look. |
 | `setValidity(msg)` | A message blocks saving and shows under the field when the merchant saves; `null` clears it. |
 | `fetch` | See "Calling the backend". |
 | `on` | The admin sends no events. |
@@ -75,7 +77,7 @@ interface ComponentProps<TValue = unknown, TContext = Record<string, unknown>> {
 ## Layout, focus and modals
 
 - The frame is part of the form: its height follows the component's content (do not set a fixed one), its background is transparent, and the admin's popovers and sticky bars stack over it.
-- The frame has no styles: set `font-family` and colors yourself, for both themes (`:root[data-theme="dark"]`).
+- With `config.ui = true` the kit's elements bring the host's look and theme (`ui-kit.md`). Without it the frame has no styles: set `font-family` and colors yourself, for both themes (`:root[data-theme="dark"]`).
 - Tab and Shift+Tab move through the component's controls in form order. Use native focusable elements.
 - **Modal:** render a `position: fixed` element covering the viewport **directly into `document.body`** (`createPortal` from `preact/compat`). While it exists the frame covers the whole admin, the rest of the page is inert and does not scroll, and focus moves to the modal's first control. Removing the element restores the field. A fixed element inside the component's own root covers only the field.
 

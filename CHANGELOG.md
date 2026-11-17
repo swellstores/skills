@@ -6,6 +6,9 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `swell-app`: the Swell UI kit (`@swell/swell-ui`) for an app's UI, in the new `ui-kit.md`. A component with `ui: true` in its `config` gets the kit from the platform, configured like the host: hosted checkout passes its look to payment components, and admin field components draw the kit's default look. The build leaves imports of the kit out of the component bundle. A frontend installs the kit from npm and loads it in the browser only. Needs `@swell/cli` 2.9.36 and `@swell/apps-sdk` 2.1.0.
+
 ### Changed
 - `swell-app`: an app's price is set in the partner dashboard (Edit price), not in `swell.json`. The `swell.json` price fields are ignored, and push warns about them. `app-publishing.md` "Price" gives the limits and what existing installs pay when a price changes.
 - `swell-app`: every app payment method is charged in two phases, as the built-in methods are: `payment.charge` authorizes with `captured: false` when the order is placed and captures the same payment with `captured: true` and its `transaction_id`. A handler that cannot authorize separately answers the authorize call with `captured: true`. `payment.void_charge` releases an authorization that is voided.
