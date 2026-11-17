@@ -1,0 +1,1 @@
+Our Swell app has a payment extension with a checkout payment component in `components/`. It renders a plain form with inline styles, and it looks out of place in the merchant's checkout, in both the light and the dark theme. How do we make it look like the checkout around it?

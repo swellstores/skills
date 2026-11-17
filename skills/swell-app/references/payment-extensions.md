@@ -201,7 +201,7 @@ Verify: `swell logs --type function --app=.` — two `payment.charge` entries wi
 
 ## Checkout Component
 
-A payment method that needs browser UI (a card form, a provider's modal) ships a **payment component**: a Preact component in the same iframe mechanism as admin field components, with a place of its own in hosted checkout. Read `components.md` for files, build limits, layout and the props they share. Requires `@swell/apps-sdk` 2.0.0-alpha.7 and `@swell/cli` 2.9.28.
+A payment method that needs browser UI (a card form, a provider's modal) ships a **payment component**: a Preact component in the same iframe mechanism as admin field components, with a place of its own in hosted checkout. Read `components.md` for files, build limits, layout and the props they share. Requires `@swell/apps-sdk` 2.0.0-alpha.7 and `@swell/cli` 2.9.28. With `ui: true` in its `config` the component gets the Swell UI kit, whose elements draw the checkout's own colors, font and radius (`ui-kit.md`).
 
 Scaffold it with the extension of `swell.json` and the place:
 
@@ -217,6 +217,7 @@ export const config = {
   description: "Checkout UI for the my-method extension",
   extension: { id: "my-method" },
   targets: [{ id: "checkout.payment.methods" }],
+  ui: true,
 };
 
 export default function MyMethodPay({ context, settings, on, call }: ComponentProps<never, PaymentContext>) {
@@ -234,7 +235,7 @@ export default function MyMethodPay({ context, settings, on, call }: ComponentPr
     [on, call, context],
   );
 
-  return <p>You will complete the payment in the next step.</p>;
+  return <swell-text>You will complete the payment in the next step.</swell-text>;
 }
 ```
 

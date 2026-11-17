@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: component-ui-kit
+prompt_file: prompt.md
+runs: 3
+tags: [regression, app]
