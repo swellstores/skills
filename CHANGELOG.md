@@ -6,6 +6,9 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `swell-app`: the Swell UI kit (`@swell/swell-ui`) for an app's UI, in the new `ui-kit.md`. A component with `ui: true` in its `config` gets the kit from the platform, configured like the host: hosted checkout passes its look to payment components, and admin field components draw the kit's default look. The build leaves imports of the kit out of the component bundle. A frontend installs the kit from npm and loads it in the browser only. Needs `@swell/cli` 2.9.36 and `@swell/apps-sdk` 2.1.0.
+
 ### Fixed
 - `swell-app`: hooks on an update get only the changed fields in `req.data`, and the docs now say so. `functions-hooks.md` and `shipping-tax-extensions.md` read the record from `{ ...req.data.$record, ...req.data }`, and the shipping and tax examples no longer read `req.data.items`, which is absent when a shopper changes only the address. `shipping-tax-extensions.md` also notes that a change of items alone re-rates only when a shipping service is selected.
 
