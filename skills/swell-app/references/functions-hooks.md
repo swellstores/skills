@@ -28,7 +28,9 @@ The phase determines whether the return value affects state, and which state:
 
 ## Pre-mutation context
 
-`req.data.$record` holds the pre-mutation record on `before:updated` and `after:updated` only. It is absent on create (check with `if (!$record)`) and on deletes (the record itself is spread into `req.data` instead). Use it for state-transition checks:
+`req.data.$record` holds the pre-mutation record on updates: `before:updated`, `after:updated`, and domain events raised by an update (`order.shipping`, `order.taxes`). It is absent or `null` on create (check with `if (!$record)`) and on deletes (the record itself is spread into `req.data` instead).
+
+On an update, `req.data` carries only the fields of the write, not the whole record. To read a field the write may not have changed, merge: `const record = { ...req.data.$record, ...req.data };`. The fields of this write win, and the spread works on create too, where `$record` is `null`. Use `$record` alone for state-transition checks:
 
 ```typescript
 if ($record.status !== req.data.status) { /* react to transition */ }
