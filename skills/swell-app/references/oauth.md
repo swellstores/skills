@@ -65,13 +65,18 @@ export default async function (req: SwellRequest) {
     throw new SwellError('Admin component calls only', { status: 403 });
   }
 
+  const appId = req.appSecrets.TIKTOK_APP_ID;
+  if (!appId) {
+    throw new SwellError('TIKTOK_APP_ID is not set: run swell app secret set TIKTOK_APP_ID', { status: 500 });
+  }
+
   const { state, redirectUri } = await req.oauth.start({
     callback: 'tiktok-callback', // the route function that receives the redirect
     // data: { codeVerifier },   // optional, returned to the callback, never sent to the browser
   });
 
   const url = new URL('https://business-api.tiktok.com/portal/auth');
-  url.searchParams.set('app_id', req.appSecrets.TIKTOK_APP_ID!);
+  url.searchParams.set('app_id', appId);
   url.searchParams.set('state', state);
   url.searchParams.set('redirect_uri', redirectUri);
   return { url: url.toString() };
@@ -206,14 +211,20 @@ export default async function (req: SwellRequest) {
     return fail(callback.params.error || 'no_code'); // the merchant cancelled
   }
 
+  const { TIKTOK_APP_ID, TIKTOK_APP_SECRET } = req.appSecrets;
+  if (!TIKTOK_APP_ID || !TIKTOK_APP_SECRET) {
+    const name = TIKTOK_APP_ID ? 'TIKTOK_APP_SECRET' : 'TIKTOK_APP_ID';
+    return fail(`${name} is not set: run swell app secret set ${name}`);
+  }
+
   const res = await fetch(
     'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        app_id: req.appSecrets.TIKTOK_APP_ID,
-        secret: req.appSecrets.TIKTOK_APP_SECRET,
+        app_id: TIKTOK_APP_ID,
+        secret: TIKTOK_APP_SECRET,
         auth_code: callback.params.auth_code,
       }),
     },
