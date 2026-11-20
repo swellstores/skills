@@ -40,6 +40,8 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 | Tell an external service that something happened | Webhook; a function when the call needs logic, signing or a custom payload |
 | Send an email when a record is created or changes | Notification |
 | Let the merchant configure the app, including provider credentials | Settings |
+| Keep the developer's own credentials, such as an OAuth client secret | App secrets — `references/settings.md` |
+| Connect the merchant's account at a provider with OAuth | OAuth relay — `references/oauth.md` |
 | A dashboard screen that views and actions cannot express | Frontend of an `admin` or `integration` app |
 | The store's own site for shoppers | Frontend of a `storefront` app |
 | A payment method, shipping rates or tax calculation inside Swell's checkout | Integration extension |
@@ -108,7 +110,7 @@ Limits that hold for every function:
 
 - **Edge runtime (Cloudflare Workers), not Node.js**: Web APIs such as `fetch` and Web Crypto, no Node built-ins.
 - **A 10-second limit**, detailed in `references/functions.md`. Work that does not fit is a workflow.
-- **No environment variables or secrets.** Configuration comes from the app's settings only (see "Configuration and secrets").
+- **No environment variables.** Configuration comes from the app's settings, and the developer's credentials from app secrets, `req.appSecrets` (see "Configuration and secrets").
 - **A function acts as the app**, with the app's `permissions`, whoever or whatever triggered it. `req.swell` is its client to the store's data and follows Backend API semantics.
 
 Read `references/functions.md` before writing a function — the `req` object, payload shapes per trigger, errors, local testing — and the trigger's own reference where the table names one. When a deployed function, hook or webhook does not fire, start with "When a function does not run" there — except for an extension function of an integration app, where `swell inspect extensions` comes first (see "Integration apps and extensions").
@@ -128,7 +130,7 @@ Read `references/functions-workflows.md` before writing one.
 The app's configuration, edited by the merchant on the app's page in the dashboard and read in code with `settings()`. Use it for the merchant's own provider credentials, feature flags and options; every kind of condition reads it as `$settings`. Settings files can also carry actions.
 
 - Values belong to one store and environment. An installed app starts with empty values.
-- Settings are the only configuration channel for functions and managed frontends, and they are not a secret store (see "Configuration and secrets").
+- Settings are the configuration channel for functions and managed frontends, and they are not a secret store (see "Configuration and secrets").
 
 Read `references/settings.md` before authoring a settings file.
 
@@ -222,8 +224,9 @@ Read `references/permissions.md` before declaring or changing permissions. It ow
 ### Configuration and secrets
 
 - Settings are the configuration channel for deployed functions and managed frontends; local environment files do not provision runtime variables or bindings. A frontend self-hosted on Cloudflare can use its own bindings and secrets.
-- A `secret` settings field hides the value in the dashboard. It is stored and returned like any other setting, and other installed apps with access to settings can read it.
-- A secret the merchant must not see cannot live in settings, functions or a managed frontend. Keep it in the developer's own service, or in a frontend hosted in the developer's own Cloudflare account. Never put one in app code or in `assets/`.
+- **App secrets** hold the developer's own credentials, the same for every store: `swell app secret set <NAME>`, read in functions as `req.appSecrets.<NAME>`. No API returns them; functions under `swell app dev` don't get them; workflows and frontends don't either.
+- A `secret` settings field hides the value in the dashboard. It is stored and returned like any other setting, and other installed apps with access to settings can read it. Use it for a credential of one store, such as a token the app obtains with OAuth (`references/oauth.md`).
+- Never put a secret in app code or in `assets/`.
 
 `references/settings.md` owns configuration and credential handling; `references/frontend.md` owns provisioning through Cloudflare self-hosting.
 
@@ -310,6 +313,7 @@ Load a reference when its block is in play; none of them needs to be read up fro
 | `references/functions-routes.md` | The function is an HTTP route |
 | `references/functions-workflows.md` | Writing a workflow |
 | `references/settings.md` | Authoring settings; handling credentials |
+| `references/oauth.md` | Connecting a provider with OAuth: callback URL, `req.oauth`, the token in settings |
 | `references/permissions.md` | Declaring or changing `permissions`; a 403 from the app's own client |
 | `references/webhooks.md` | Adding or debugging a webhook |
 | `references/notifications.md` | Authoring an email notification |

@@ -8,7 +8,7 @@ Each top-level file exports a `config` object with exactly one trigger (`model`,
 
 - **Edge runtime, not Node.js.** Functions run on Cloudflare Workers in service-worker format with no `nodejs_compat`: no Node built-ins, no `process.env`. Use Web APIs (`fetch`, Web Crypto).
 - **Timeout.** 10 s by default, configurable via `config.timeout` (1000–10000 ms; values up to 20000 ms require platform feature enablement). Sync hooks ignore `config.timeout` — see `references/functions-hooks.md`. A run that reaches it is cut off, and its log says `Function timed out after <n> s`; work that may not fit belongs in a workflow.
-- **No environment variables or secrets.** Functions receive configuration only through `await req.swell.settings()` — see `references/settings.md`.
+- **No environment variables.** Functions receive configuration through `await req.swell.settings()`, and the developer's own credentials as `req.appSecrets.<NAME>` (`swell app secret set`; empty under `swell app dev`) — see `references/settings.md`. OAuth connections: `req.oauth`, `references/oauth.md`.
 - **A function acts as the app.** `req.swell` carries the installed app's credentials, limited by `permissions` in `swell.json` (`references/permissions.md`), whoever or whatever triggered it.
 
 ## Trigger configuration
@@ -136,3 +136,19 @@ Other causes have their own references: an extension function whose app the merc
 Run `swell app dev` as a background process (one app per session) to stream function execution to your terminal. Trigger model events and hooks via `swell api [post|put|delete] /<collection>` — those are the invocation paths the tunnel actually captures. Routes are **not** tunneled: `swell api [method] /functions/<app_id>/<function_name> --body '{...}'` reaches the deployed worker, so push before testing a route change, or call the local dev URL directly and accept that it skips context initialization (settings, session). Caveat: `req.session` is **`null`** when a route is invoked through `swell api` — the CLI's `$call` path sends no `Swell-Session` header, and only the storefront gateway attaches one. Every `session?.account_id` gate therefore rejects. Simulate one with `-H 'Swell-Session: {"account_id":"..."}'`, or verify customer-scoped auth through the storefront gateway or integration tests.
 
 The test scaffold (`swell create tests`) defines the `SwellError`, `SwellRejection` and `SwellResponse` globals in `test/setup-globals.ts`.
+
+`createMockRequest()` starts with empty `appSecrets` and a null `oauth.callback`. For a connect test, pass `oauth: { start: vi.fn().mockResolvedValue({ state, redirectUri, expiresAt }) }`. For a callback test, pass fixtures directly to the helper:
+
+```ts
+const req = createMockRequest({
+  appSecrets: { CLIENT_SECRET: "test-secret" },
+  oauth: {
+    callback: {
+      name: "connected",
+      params: { code: "test-code" },
+      data: null,
+      redirectUri: "https://example.com/callback",
+    },
+  },
+});
+```
