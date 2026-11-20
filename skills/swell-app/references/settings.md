@@ -23,7 +23,7 @@ Two places hold credentials, by whose they are:
 | Who sets | the developer: `swell app secret set <NAME>` | the merchant in the dashboard, or the app's code with `PUT /settings/<app_id>` |
 | Scope | every install of the app, in every store and environment | one install: one store, one environment |
 | In a function | `req.appSecrets.NAME` | `(await req.swell.settings()).<group>.<field>` |
-| Changes take effect | on the next call, everywhere, without a version | on the next read |
+| Changes take effect | usually on the next call, within a minute across all installs, without a new app version | on the next read |
 
 **App secrets** (`swell app secret set|list|unset`, run in the app directory after the first push):
 
