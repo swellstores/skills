@@ -213,8 +213,10 @@ export default async function (req: SwellRequest) {
 
   const { TIKTOK_APP_ID, TIKTOK_APP_SECRET } = req.appSecrets;
   if (!TIKTOK_APP_ID || !TIKTOK_APP_SECRET) {
+    // The merchant sees last_error; the fix is the developer's, so it goes to the log
     const name = TIKTOK_APP_ID ? 'TIKTOK_APP_SECRET' : 'TIKTOK_APP_ID';
-    return fail(`${name} is not set: run swell app secret set ${name}`);
+    console.error(`${name} is not set: run swell app secret set ${name}`);
+    return fail('app_not_configured');
   }
 
   const res = await fetch(
