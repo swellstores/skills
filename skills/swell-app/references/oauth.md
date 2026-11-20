@@ -51,7 +51,7 @@ The Connect button lives in one of two places:
 | An app component (`references/components.md`), such as the `connect` field in step 3. Works for every app, with or without a frontend | `props.fetch('/functions/<app_id>/tiktok-connect')` | `req.swellContext?.surface === 'admin' && req.swellContext.storeUser` |
 | A page of the app's frontend | its endpoint: `requireStoreUser`, then `backend.functions.call(context.appId, 'tiktok-connect')` (`references/frontend.md`) | nothing more: the frontend checked the store user, and `functions.call` forwards nothing about the viewer, so `req.swellContext` is `null` there |
 
-A function action in a settings file or a view can't start the flow: it can only answer `{ message }`, not open a window.
+A function action in a settings file or a view can't start the flow: it can only answer `{ message }`, not send the merchant to the provider.
 
 The route, for the component:
 
@@ -115,73 +115,55 @@ type Status = {
   connected: boolean;
   connected_at: string | null;
   last_error: string | null;
-  last_error_at: string | null;
 };
 
 export default function Connect(props: ComponentProps<string>) {
   const [status, setStatus] = useState<Status | null>(null);
   const [message, setMessage] = useState('');
+  const [continueUrl, setContinueUrl] = useState('');
 
-  async function readStatus() {
-    const res = await props.fetch('/functions/<app_id>/connection-status');
-    const next: Status | null = res.ok ? await res.json() : null;
-    setStatus(next);
-    return next;
-  }
-
+  // The merchant comes back to a freshly loaded page, so this reads the result
   useEffect(() => {
-    void readStatus();
+    void props
+      .fetch('/functions/<app_id>/connection-status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setStatus);
   }, []);
 
   async function connect() {
-    // Open the window on the click: one opened after an await is blocked
-    const w = window.open('about:blank', '_blank', 'popup,width=520,height=680');
-    const before = { connected_at: status?.connected_at, last_error_at: status?.last_error_at };
-
+    setMessage('');
     const res = await props.fetch('/functions/<app_id>/tiktok-connect', { method: 'POST' });
-    if (!res.ok || !w) {
-      w?.close();
-      setMessage(w ? 'Could not start the connection' : 'Allow popups, then try again');
+    if (!res.ok) {
+      setMessage('Could not start the connection');
       return;
     }
-    w.location.href = (await res.json()).url;
-    setMessage('Finish in the TikTok window');
-
-    // The window ends on the app's page; ask until the callback has written
-    // a result, for as long as the state lives
-    const until = Date.now() + 10 * 60 * 1000;
-    const timer = setInterval(async () => {
-      const next = await readStatus();
-      if (next && next.connected_at !== before.connected_at) {
-        clearInterval(timer);
-        w.close();
-        setMessage('Connected');
-      } else if (next && next.last_error_at !== before.last_error_at) {
-        clearInterval(timer);
-        w.close();
-        setMessage(`Not connected: ${next.last_error}`);
-      } else if (Date.now() > until) {
-        clearInterval(timer);
-        setMessage('');
-      }
-    }, 3000);
+    const { url } = await res.json();
+    setContinueUrl(url);
+    // The whole dashboard tab goes to TikTok and comes back to the app's page
+    window.open(url, '_top');
   }
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: '14px' }}>
       <p>{status?.connected ? `Connected at ${status.connected_at}` : 'Not connected'}</p>
+      {status?.last_error && <p>Last attempt failed: {status.last_error}</p>}
       <button type="button" onClick={() => void connect()}>
         {status?.connected ? 'Reconnect' : 'Connect TikTok'}
       </button>
+      {continueUrl && (
+        <p>
+          <a href={continueUrl} target="_top">Continue to TikTok</a>
+        </p>
+      )}
       {message && <p>{message}</p>}
     </div>
   );
 }
 ```
 
-- The provider page can't run inside the dashboard or the component's frame, so it opens in a window. Open it on the click and set its address after the route answers.
-- The window ends on the app's page in the dashboard (step 5). The frame can't hear from it: the provider's page may cut the link between the windows, the component's frame and the window don't share storage, and the frame can't read the window's address. So the callback writes its result, a token or an error, into settings, and the component asks a status route until the result changes, then closes the window.
-- The other fields of the settings page keep the values they loaded with until the page is reloaded.
+- The provider page can't run inside the dashboard or the component's frame, so the dashboard tab itself goes there (`_top`) and comes back to the app's settings (step 5). The component reads the result from the status route when the page loads again: there is no window to watch and nothing to poll.
+- The component's frame is on another origin, so the browser lets it send the tab elsewhere only right after a click. When the route answers too late, the browser blocks it. The **Continue to TikTok** link then does it with a fresh click.
+- The tab leaves the dashboard, so changes not yet saved elsewhere on the page are lost.
 - `state` is an opaque random id. Swell keeps what it stands for: the store, environment, install, callback and `data`. It expires in 10 minutes and works once.
 - `callback` must name a route function of the app that answers GET (no `route.methods`, or one that includes `get`). `start()` refuses any other with `oauth_callback_invalid`. The function must also handle GET in code: a default export, or a `get` export (`export function get` or `export default { get }`). `start()` can't see the exports, so a callback module with only a `post` export fails on every redirect, after the state is used.
 - `data` is JSON up to 2 KB for values the callback needs and the browser must not see, such as a PKCE `code_verifier` (`oauth_data_too_large` over it).
@@ -193,18 +175,24 @@ export default function Connect(props: ComponentProps<string>) {
 // functions/tiktok-callback.ts
 export const config: SwellConfig = { route: { methods: ['get'] } };
 
-export default async function (req: SwellRequest) {
+export default async function (req: SwellRequest): Promise<SwellOAuthCallbackResult> {
   const callback = req.oauth.callback;
   if (!callback) {
     throw new SwellError('Not an OAuth callback', { status: 400 });
   }
 
-  // The component reads the result from settings (step 4)
+  // Back to the app's settings, where the Connect field reads the result (step 4)
+  const back = (): SwellOAuthCallbackResult => {
+    const url = new URL(req.app.admin_url);
+    url.searchParams.set('tab', 'settings');
+    return { redirect: url.href };
+  };
+
   const fail = async (error: string) => {
     await req.swell.put(`/settings/${req.appId}`, {
       connection: { last_error: error, last_error_at: new Date().toISOString() },
     });
-    return { redirect: req.app.admin_url };
+    return back();
   };
 
   if (callback.params.error || !callback.params.auth_code) {
@@ -247,17 +235,17 @@ export default async function (req: SwellRequest) {
     },
   });
 
-  return { redirect: req.app.admin_url };
+  return back();
 }
 ```
 
-- Swell checks the state (known, not expired, not used, this app's) and that the install is still installed before calling the function. `req.oauth.callback` is `{ params, data, name, redirectUri }` on that call only, and `null` on any other call through Swell: a caller can't fake it.
+- Swell checks the state (known, not expired, not used, this app's) and that the install is still installed before calling the function. `req.oauth.callback` is `{ params, data, name, redirectUri }` on that call only, and `null` on any other call through Swell: no caller of the app's routes can set it.
   - `params`: every parameter the provider sent, as raw strings, from the query string or from the form body when the provider posts the response (`response_mode=form_post`). Swell doesn't interpret them.
   - `data`: what was passed to `start()`.
   - `redirectUri`: the URL `start()` returned. Providers that check it again in the token request (Google, Meta and most OAuth 2.0 providers) need it as `redirect_uri` there. TikTok doesn't.
   - Trust `params` only once the provider has accepted the code exchange: a request sent straight to the function's worker, outside Swell, can carry any `Swell-OAuth` header, but it gets no `req.appSecrets`, so its exchange fails.
 - The callback is always called with GET, whatever method the provider used, so it needs a default export or a `get` export. It can be non-public: Swell calls it internally, not through the storefront gateway. It always runs on Swell's workers, never on a `swell app dev` machine, so it has `req.appSecrets`.
-- Return `{ redirect }` to send the merchant's window to the app's page in the dashboard (`req.app.admin_url`, or a path under it) or to the app's frontend in that store. Any other target is replaced by the app's dashboard page, which is also the default. A callback that fails shows the merchant a page with a link back to the app.
+- Return `{ redirect }` (`SwellOAuthCallbackResult`) to send the merchant's tab to the app's page in the dashboard (`req.app.admin_url`, or a path or query under it, such as `?tab=settings` above) or to the app's frontend in that store. Any other target is replaced by the app's dashboard page, which is also the default. A callback that throws or answers 400 or more shows the merchant a page with a link back to the app.
 - The relay's page answers an expired or reused state with "connect again".
 - **Debugging.** The callback's run is in the function logs like any other call: `swell logs --type function -s tiktok-callback` (add `--env live` for live). Log the provider's error code and message, as above, not `req.oauth.callback` or the provider's answer: they hold the code, your `data` and the token, and function logs are visible to the store's staff.
 
