@@ -48,11 +48,11 @@ Uninstall removes installed *resources*, by config type:
 Uninstall is a **reversible flag, not a delete**: it PUTs `uninstalled: true` to `/client/apps/<app_id>`, and reinstalling flips the flag back and restores the app's `public_id`. While `uninstalled` — or `active: false` — the installed app's credentials stop authenticating, surfacing as `app_uninstalled` / `app_inactive`.
 
 ```bash
-swell app _uninstall <app record id> -s <store> -e <live|test>        # asks for confirmation
-swell app _uninstall <app record id> -s <store> -e <live|test> --yes  # without a terminal
+swell app _uninstall <app record id> -s <store> -e <environment>        # asks for confirmation
+swell app _uninstall <app record id> -s <store> -e <environment> --yes  # without a terminal
 ```
 
-- The leading underscore is part of the command name. The argument is the app's **record id** (24 hexadecimal characters), as a refused push or install prints it, not the `id` in `swell.json`; the command needs no app folder, so it removes another owner's app as well as your own. `-s` defaults to the current store, `-e` to `test`.
+- The leading underscore is part of the command name. The argument is the app's **record id** (24 hexadecimal characters), as a refused push or install prints it, not the `id` in `swell.json`; the command needs no app folder, so it removes another owner's app as well as your own. `-s` defaults to the current store. `-e` takes `live`, `test` or the id of another test environment, as the refusal prints it, and defaults to `test`.
 - Without a terminal it needs `--yes`. It ends with exit code 1 whenever it uninstalls nothing: declined, nothing installed there (`App <id> is not installed in store <store> [<env>]. Nothing to uninstall.`), a development install, or storefronts using the app.
 - It does not remove a **development install**: the store's own app leaves an environment only by being deleted, with `swell app delete` run from its folder.
 - It refuses an app that storefronts in that environment use, as their app or as their theme, and lists them: remove or change those storefronts in the dashboard first.
