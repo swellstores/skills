@@ -23,7 +23,7 @@ swell app install -v 1.0.0 -s other-store-id -e live
 ```
 
 - Installs a version (default: latest) into a store environment (default: live). Store and environment are prompted interactively when omitted; there is no `-y`, so pass `-s` and `-e` explicitly.
-- `-s` and `-e` skip the install confirmation but **not** the development-app prompt: if the target store already carries a development instance of this app (matched by `.swellrc`'s id sent as `source_id`) and the app is not already installed there, the command blocks on `… has a development version of <app>. Do you want to replace it with an installed instance?` (defaults to **no**, no flag bypasses it). Answering yes PUTs `uninstalled: true` on the dev instance first. Unattended installs are only safe into a store with no dev instance, or where the app is already installed.
+- `-s` and `-e` skip the install confirmation. Once the store and environment are known, and before any prompt, the command checks that no other app holds the app's ID there (see "One app per ID in a store environment"); a held ID ends it with exit code 1 and nothing installed. It installs the app the current store owns with the `id` in `swell.json`, never another owner's installed app that shares the ID.
 - The developing store's own test environment is not a valid target — that is where the source app already lives. Installing into the developing store's live environment, or any environment of another logged-in store, is the supported path.
 - An installed app gets its own API keys per store environment and starts with **empty settings values** — defaults from `./settings/` files do not carry over as saved values. Configure the app's settings in the target store after installing.
 
@@ -45,9 +45,45 @@ Uninstall removes installed *resources*, by config type:
 
 **Record data is not deleted.** The installer carries an explicit `TODO: delete related model/content data`: rows in the app's own collections and `$app.<app_id>.*` values already written onto standard records all survive, and become addressable again once the schema is reinstalled. Never treat an uninstall — or the uninstall half of a version update — as a data reset; plan migrations on that basis.
 
-Uninstall is a **reversible flag, not a delete**: `swell app _uninstall [-s <store>] [--env <env>]` (the leading underscore is part of the command name; `--env` defaults to `test`) confirms, then PUTs `uninstalled: true` to `/client/apps/<app_id>`. It errors with `app not installed on store.` or `app already uninstalled on store.`. Reinstalling flips the flag back and restores the app's `public_id`. While `uninstalled` — or `active: false` — the installed app's credentials stop authenticating, surfacing as `app_uninstalled` / `app_inactive`.
+Uninstall is a **reversible flag, not a delete**: it PUTs `uninstalled: true` to `/client/apps/<app_id>`, and reinstalling flips the flag back and restores the app's `public_id`. While `uninstalled` — or `active: false` — the installed app's credentials stop authenticating, surfacing as `app_uninstalled` / `app_inactive`.
 
-Two guards to expect rather than retry through: a theme app with connected storefronts refuses to uninstall (`Cannot uninstall theme app with connected storefronts`), and any install, update, or uninstall attempted while another async app operation is in flight fails with `App is currently processing '<type>'`.
+```bash
+swell app _uninstall <app record id> -s <store> -e <live|test>        # asks for confirmation
+swell app _uninstall <app record id> -s <store> -e <live|test> --yes  # without a terminal
+```
+
+- The leading underscore is part of the command name. The argument is the app's **record id** (24 hexadecimal characters), as a refused push or install prints it, not the `id` in `swell.json`; the command needs no app folder, so it removes another owner's app as well as your own. `-s` defaults to the current store, `-e` to `test`.
+- Without a terminal it needs `--yes`. It ends with exit code 1 whenever it uninstalls nothing: declined, nothing installed there (`App <id> is not installed in store <store> [<env>]. Nothing to uninstall.`), a development install, or storefronts using the app.
+- It does not remove a **development install**: the store's own app leaves an environment only by being deleted, with `swell app delete` run from its folder.
+- It refuses an app that storefronts in that environment use, as their app or as their theme, and lists them: remove or change those storefronts in the dashboard first.
+- The app's settings and data stay in the store, and an app installed in its place does not get them.
+
+Two guards to expect rather than retry through: a theme app with connected storefronts refuses to uninstall (`Cannot uninstall theme app with connected storefronts`), and any install, update, or uninstall attempted while another async app operation is in flight fails with `App is currently processing '<type>'` — wait for the uninstall to finish before installing the next app.
+
+## One app per ID in a store environment
+
+Two different apps can't be installed with the same ID (`private_id`, the `id` in `swell.json`, or a published `public_id`) in one store environment; themes may share an ID with other themes. A disabled app still holds its ID; only uninstalling frees it. Swell refuses the install with the error code `APP_ID_IN_USE`, and the same refusal comes from creating an app whose development install it would block and from uploading files to an app whose development install is refused.
+
+`swell app push` and `swell app install` check this first, before any prompt, upload or deploy — also when no file changed — and stop with exit code 1, with or without a terminal. They print the instruction, then for each app that holds the ID the step that removes it and its page in the dashboard:
+
+```
+App ID "reviews" is already used by "Acme Reviews" (1.2.0) in the Test environment. These apps can't share an ID in one environment. To install this app there, "Acme Reviews" has to be removed from Test first.
+
+To remove "Acme Reviews" from Test, run:
+  swell app _uninstall 6b03f73bef3829679cf0b375 -s my-store -e test
+Dashboard: https://my-store.swell.store/admin/test/apps/6b03f73bef3829679cf0b375
+
+To push this as a new app, choose an unused "id" in swell.json.
+Code: APP_ID_IN_USE
+```
+
+- An installed version names `swell app _uninstall` with the holder's record id, store and environment. The store's own development app names `swell app delete`, run from its folder. An installation of an app that was deleted has no command and no page: the instruction says to contact Swell support with its installation id.
+- The last line comes with a push only: a new `id` in `swell.json` creates a new app.
+- The dashboard page is there for what the command can't do: a development app whose folder is elsewhere, storefronts that use the holder, a delete that is blocked.
+- Push, install and `swell app delete` work on the app the current store owns with the `id` in `swell.json`, never on another owner's installed app with the same ID: install names the app that holds the ID, not a missing version of it.
+- Apps already installed together keep working: pushing, updating and installing a new version of either is not refused.
+
+`@swell/cli` 2.9.42 and earlier don't check first. Their push asks `… has an installed version of <app>. Do you want to replace it with a development instance?` and their install `… has a development version of <app>. Do you want to replace it with an installed instance?`, and answering yes uninstalls that app. They print a refusal that reaches them as `app_id: <instruction>`.
 
 ## Releasing — `swell app release`
 
