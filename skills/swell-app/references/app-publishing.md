@@ -43,20 +43,21 @@ Uninstall removes installed *resources*, by config type:
 | `webhook`, `function` | deletes the record |
 | `file`, `asset`, `theme`, `frontend` | untouched — installed as files only |
 
-**Record data is not deleted.** The installer carries an explicit `TODO: delete related model/content data`: rows in the app's own collections and `$app.<app_id>.*` values already written onto standard records all survive, and become addressable again once the schema is reinstalled. Never treat an uninstall — or the uninstall half of a version update — as a data reset; plan migrations on that basis.
+**Record data is kept unless the uninstall asks to clear it.** By default, rows in the app's own collections, `$app.<app_id>.*` values already written onto standard records and the app's saved settings values all survive, and become addressable again once the app is reinstalled. Two options of an uninstall or an app delete clear them: "Clear app settings" (`clear_settings`) deletes the saved settings, and "Clear app data" (`clear_data`, store owner only) deletes the app's own records and the fields it added to standard records, which can't be undone. Neither applies to a theme. Never treat an uninstall without them — or the uninstall half of a version update — as a data reset; plan migrations on that basis.
 
 Uninstall is a **reversible flag, not a delete**: it PUTs `uninstalled: true` to `/client/apps/<app_id>`, and reinstalling flips the flag back and restores the app's `public_id`. While `uninstalled` — or `active: false` — the installed app's credentials stop authenticating, surfacing as `app_uninstalled` / `app_inactive`.
 
 ```bash
 swell app uninstall <app record id> -s <store> -e <environment>        # asks for confirmation
 swell app uninstall <app record id> -s <store> -e <environment> --yes  # without a terminal
+swell app uninstall <app record id> -s <store> -e <environment> --clear-settings --clear-data
 ```
 
 - Its earlier name, `swell app _uninstall`, still works. The argument is the app's **record id**, as a refused push or install prints it, not the `id` in `swell.json`: 24 hexadecimal characters, or a plain name such as `vercel` for a few early apps. An id that names another app by its `id` is refused. The command needs no app folder, so it removes another owner's app as well as your own. `-s` defaults to the current store. `-e` takes `live`, `test` or the id of another test environment, as the refusal prints it, and defaults to `test`.
 - Without a terminal it needs `--yes`. It ends with exit code 1 whenever it uninstalls nothing: declined, nothing installed there (`App <id> isn't installed in store <store> (<Env>).`), a development install, or storefronts using the app.
 - It does not remove a **development install**: the store's own app leaves an environment only by being deleted, with `swell app delete` run from its folder. A theme of the store is uninstalled in the dashboard instead.
 - It refuses an app that storefronts in that environment use, as their app or as their theme, and lists them: delete those storefronts in the dashboard first.
-- The app's settings and data stay in the store, and an app installed in its place does not get them. Uninstalling a theme deletes the store's copies of it in that environment.
+- The app's settings and data stay in the store unless `--clear-settings` or `--clear-data` is given, and an app installed in its place does not get them either way. The API deletes them after the uninstall answers. `--clear-data` is refused for a user who isn't the store owner, and both flags are refused for a theme. Uninstalling a theme deletes the store's copies of it in that environment.
 
 Two guards to expect rather than retry through: a theme app with connected storefronts refuses to uninstall (`Cannot uninstall theme app with connected storefronts`), and any install, update, or uninstall attempted while another async app operation is in flight fails with `App is currently processing '<type>'` — wait for the uninstall to finish before installing the next app.
 
