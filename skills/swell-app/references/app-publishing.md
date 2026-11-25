@@ -57,7 +57,7 @@ swell app uninstall <app record id> -s <store> -e <environment> --clear-settings
 - Without a terminal it needs `--yes`. It ends with exit code 1 whenever it uninstalls nothing: declined, nothing installed there (`App <id> isn't installed in store <store> (<Env>).`), a development install, or storefronts using the app.
 - It does not remove a **development install**: the store's own app leaves an environment only by being deleted, with `swell app delete` run from its folder. A theme of the store is uninstalled in the dashboard instead.
 - It refuses an app that storefronts in that environment use, as their app or as their theme, and lists them: delete those storefronts in the dashboard first.
-- The app's settings and data stay in the store unless `--clear-settings` or `--clear-data` is given, and an app installed in its place does not get them either way. The API deletes them after the uninstall answers. `--clear-data` is refused for a user who isn't the store owner, and both flags are refused for a theme. Uninstalling a theme deletes the store's copies of it in that environment.
+- The app's settings and data stay in the store unless `--clear-settings` or `--clear-data` is given. An app installed in its place does not get them, except the store's own app with the same `id` through `--replace-app` (see "Replacing an installed app with your own"), which the command names in its last line for an installed version in Test or Live. The API deletes them after the uninstall answers. `--clear-data` is refused for a user who isn't the store owner, and both flags are refused for a theme. Uninstalling a theme deletes the store's copies of it in that environment.
 
 Two guards to expect rather than retry through: a theme app with connected storefronts refuses to uninstall (`Cannot uninstall theme app with connected storefronts`), and any install, update, or uninstall attempted while another async app operation is in flight fails with `App is currently processing '<type>'` — wait for the uninstall to finish before installing the next app.
 
@@ -82,9 +82,65 @@ Code: APP_ID_IN_USE
 
 - An installed app names `swell app uninstall` with the holder's record id, store and environment, also an early app of another owner installed without a version. Several of them share one block: the commands, then the pages. The store's own development app names `swell app delete`, run from its folder, between `swell switch <store>` and `swell switch <current store>` when that store isn't the current one: delete works on the current store's app with the folder's `id`. The refusal then says to retry from the folder of the refused command. A theme of the store gets no command: it is uninstalled in the dashboard, once no storefront uses it. An installation of an app that was deleted has no command and no page: the instruction says to ask Swell support, with its installation id. Next to such an installation the instruction and the CLI name each app instead of saying "it", as the ID is free only once all of them are gone.
 - The line about a new `id` comes with a push only: it creates a separate app.
+- When the app in the folder can replace the holder and you are the store's owner, the uninstall block becomes the replace option (see "Replacing an installed app with your own"):
+
+  ```
+  To replace it with this app and move its settings and data over, run:
+    swell app push --replace-app
+
+  To replace it and start with no data, uninstall it first, then push again:
+    swell app uninstall 6b03f73bef3829679cf0b375 -s my-store -e test
+  ```
+
+  Install names `swell app install --replace-app -s <store> -e <environment>`, and only in the store that owns the app.
 - The dashboard page is there for what the command can't do: a development app whose folder is elsewhere, storefronts that use the holder, a delete that is blocked.
 - Push, install and `swell app delete` work on the app the current store owns with the `id` in `swell.json`, never on another owner's installed app with the same ID: install names the app that holds the ID, not a missing version of it. `swell app install` takes its app from the current store, never from an installed app of another owner or a published app with that ID: to install an app another store owns, make that store the current one with `swell switch` first; a published app is installed from the App Store in the dashboard.
 - Apps already installed together keep working: pushing, updating and installing a new version of either is not refused.
+
+## Replacing an installed app with your own — `--replace-app`
+
+When the app holding the ID is an installed version of another app with the same `id` (typically an App Store app whose open-source version you changed), the store owner can replace it with the app in the folder and keep the merchant's settings and data. The data of a store environment is stored under the app's record id, so a plain push or install of your app starts empty; the flag moves it.
+
+```bash
+swell app push --replace-app                                    # in Test
+swell app push --replace-app --yes                              # without a terminal
+swell app install --replace-app -s <store> -e live -v <version> # in Live, in the store that owns the app
+```
+
+The command reads a plan first, changes nothing, prints it and asks once (`Continue? (y/N)`):
+
+```
+This replaces "Acme Reviews" (1.2.0) with this app in Test:
+  1. Uninstall "Acme Reviews"
+  2. Move its settings and data to this app:
+       reviews              1,204 records
+       fields on Products
+       saved settings
+  3. Push this app
+
+This app doesn't declare (the data stays stored, this app doesn't show it):
+  reviews.legacy_score
+
+Switched off until you select this app in Settings:
+  shipping carrier "Acme shipping"
+
+Doesn't move: this app's secrets, edits to the app's notifications, past events and logs.
+Connections to outside services may have to be made again.
+The app is unavailable in Test until the push ends.
+```
+
+Then it uninstalls the original (keeping its settings and data, as `swell app uninstall` does), creates your app if it doesn't exist, moves the settings and data, pushes **every** file (as `--force`) or installs the version, and checks once more for data written to the original meanwhile. It ends with `✔ Replaced "<name>" (<version>) with this app in <Env>.`
+
+- **What moves:** the original's own collections and their child collections (with their numbering), its child collections and fields on standard models (from its model and content configs, all versions), its saved settings (its values over your defaults, with any keys typed into them) and the merchant's content fields on its collections. Your app's models, content, functions, notifications, webhooks and settings form are installed from your files.
+- **What doesn't move:** the original's app secrets, the merchant's edits to its notifications, events, logs, workflow runs and usage; other apps that link to its models keep pointing at it until their configs are installed again; saved settings that contain its record id (an OAuth redirect URL) need connecting again. The plan names these.
+- **Compatibility is yours.** Data moves as it is. "This app doesn't declare" lists the original's fields your files (for install: the version installed) lack; the data stays stored but your app doesn't show it. A renamed or retyped field needs your own migration, as a new version of the original would.
+- **Shipping, payment and tax settings** the original served are switched off by the uninstall and stay off until the merchant selects your app's in Settings: the plan and the end of the command name them, with the Settings pages. In Live, checkout runs without them until then.
+- The app is absent in that environment until the command ends: its functions, webhooks and jobs don't run.
+- Integration conflicts: the original is left out (it is uninstalled anyway); other apps using the same services are listed in the plan and stay on, unless `--conflicts=disable`.
+- **Refused before anything changes** (exit code 1): nothing to replace (no app with the ID there, and no uninstalled one that left data; it never falls back to a plain push or install); a user who isn't the store owner; your app already has data of its own there; the holder can't be replaced (several apps hold the ID, it holds it as its public ID only, a development app, a deleted app, a theme or a storefront app: the refusal says which); storefronts that use the original (delete them in the dashboard first, as for `swell app uninstall`); `install --replace-app` into a store that doesn't own the app; without a terminal and without `--yes`. A push with a file or directory is refused: the flag pushes the whole app.
+- **An original you already uninstalled:** `--replace-app` finds the uninstalled app with the same `id` that left data, shows the plan and moves the data. A plain push or install in that state prints a hint naming the flag and goes on. Several such apps: the command asks which in a terminal and refuses without one.
+- **If it stops** (a failed step, Ctrl-C, a lost connection): run the same command again. It goes on from where it stopped: after the uninstall it moves the data (asking again), after the move it only pushes or installs, without asking. The failure says which steps are done and what state the original is in. To go back while nothing has moved: delete your app with `swell app delete`, then install the original again from the App Store (in Test your app holds the ID from step 2 on). Once a move has started and can't finish, Swell support moves the data back. A move that the API runs again after a restart is waited for.
+- Not offered: replacing storefront apps and themes, replacing in a store that doesn't own the app (an agency's version in a client's store), the way back to the original, and the dashboard.
 
 `@swell/cli` 2.9.43 and earlier don't check first. Their push asks `… has an installed version of <app>. Do you want to replace it with a development instance?` and their install `… has a development version of <app>. Do you want to replace it with an installed instance?`, and answering yes uninstalls that app. They print a refusal that reaches them as `app_id: <instruction>`.
 
