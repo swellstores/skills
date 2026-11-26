@@ -85,11 +85,11 @@ Or in the dashboard:
   ```
   Error: [APP_ID_IN_USE] "Acme Reviews" v1.2.0 already uses app ID "reviews" in Test.
 
-  To replace it and move its data and settings:
+  To replace it and move its settings and data:
     swell app push --replace-app
-
+  To start with empty data, uninstall it first:
+    swell app uninstall <record id> -s <store> -e test
   To keep both apps, choose an unused "id" in swell.json and push again.
-  To start with empty data, uninstall the original and retry this command.
   ```
 
   Install names `swell app install --replace-app -s <store> -e <environment>`, and only in the store that owns the app. To start your app with no data instead, uninstall the holder first (`swell app uninstall` with its record id, or in the dashboard), then push or install.
@@ -113,26 +113,26 @@ The command reads a plan first, changes nothing, prints it and asks once (`Repla
 Replace "Acme Reviews" v1.2.0 with "My Reviews" v1.0.0
 Uninstalling the original takes both apps offline until the push finishes.
 
-Turns off   shipping carrier "Acme shipping". Select the replacement in Settings
-            afterward.
-Moves       reviews (1,204 records)
+Turns off   shipping carrier "Acme shipping"
+Moves       Records in reviews (1,204)
             App fields on Products
             Saved settings
-Excluded    App secrets, notification edits, past events and logs.
-            External services may need to be reconnected.
+Excluded    App secrets, notification edits, past events and logs
+Afterward   Select "My Reviews" in Settings to restore services.
+            Reconnect external services if needed.
 ```
 
 Then it uninstalls the original (keeping its settings and data, as `swell app uninstall` does), creates your app if it doesn't exist, moves the settings and data, and pushes **every** file (as `--force`) or installs the version. It ends with `✔ Replaced "<name>" with "<your app>" v<version> in <Env>.` and the shipping, payment and tax settings to select again, with their Settings pages.
 
 - **What moves:** the original's own collections and their child collections (with their numbering), its child collections and fields on standard models (from its model and content configs, all versions), its saved settings (its values over your defaults, with any keys typed into them) and the merchant's content fields on its collections. Your app's models, content, functions, notifications, webhooks and settings form are installed from your files.
-- **What doesn't move:** the original's app secrets, the merchant's edits to its notifications, events, logs, workflow runs and usage. The plan also names saved settings that contain its record id (an OAuth redirect URL: update them after the replacement) and other apps whose models link to its models (they keep pointing at it until their configs are installed again).
+- **What doesn't move:** the original's app secrets, the merchant's edits to its notifications, events, logs, workflow runs and usage. The plan also names saved settings that contain its record id (an OAuth redirect URL: review them after the replacement) and other apps whose models link to its models (they keep pointing at it until their configs are installed again).
 - **Compatibility is yours.** Data moves as it is, and fields your app doesn't declare stay stored without being shown. A renamed or retyped field needs your own migration, as a new version of the original would.
 - **Shipping, payment and tax settings** the original served are switched off by the uninstall and stay off until the merchant selects your app's in Settings. In Live, checkout runs without them until then.
 - The app is absent in that environment until the command ends: its functions, webhooks and jobs don't run.
 - **Other apps** using the services your app declares stay on: the command names them at the end. `--conflicts=disable` is refused with `--replace-app`; switch them off in the dashboard.
 - **Refused before anything changes** (exit code 1): nothing to replace (no app with the ID there, and no uninstalled one that left data; it never falls back to a plain push or install); a user who isn't the store owner; your app already has data of its own there (in Test, delete it with `swell app delete` to start it over; in Live, ask Swell support); the holder can't be replaced (several apps hold the ID, it holds it as its public ID only, a development app, a deleted app, a theme or a storefront app: the refusal says which); storefronts that use the original (delete them in the dashboard first, as for `swell app uninstall`); another operation still running on either app (run again in a few minutes); several uninstalled apps with the ID that left data (ask Swell support); `install --replace-app` into a store that doesn't own the app. A push with a file or directory is refused: the flag pushes the whole app.
 - **An original you already uninstalled:** `--replace-app` finds the uninstalled app with the same `id` that left data, shows the plan and moves the data.
-- **If it stops** (a failed step, Ctrl-C, a lost connection): run the same command again. The store records how far it got: after the uninstall it moves the data (asking again), after the move it only pushes or installs, without asking. The failure names the step, whether the original stays uninstalled and which shipping, payment and tax settings are off. When the push or install after the move fails on an error in the app, fix it first: for an install, create a new version and run the command with that version. If a move can't finish, Swell support moves the data back. If configs of the uninstalled original are still installed, the move is refused: Swell support removes them, then run the command again.
+- **If it stops** (a failed step, Ctrl-C, a lost connection): run the same command again. The store records how far it got: after the uninstall it moves the data (asking again), after the move it only pushes or installs, without asking. The failure names the step, whether the original is uninstalled and whether its settings and data have moved. When the push or install after the move fails on an error in the app, fix it first: for an install, create a new version and run the command with that version. If a move can't finish, Swell support moves the data back. If configs of the uninstalled original are still installed, the move is refused: Swell support removes them, then run the command again.
 - Not offered: replacing storefront apps and themes, replacing in a store that doesn't own the app (an agency's version in a client's store), the way back to the original, and the dashboard.
 
 `@swell/cli` 2.9.43 and earlier don't check first. Their push asks `… has an installed version of <app>. Do you want to replace it with a development instance?` and their install `… has a development version of <app>. Do you want to replace it with an installed instance?`, and answering yes uninstalls that app. They print a refusal that reaches them as `app_id: <instruction>`.
