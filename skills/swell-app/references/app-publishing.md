@@ -54,7 +54,7 @@ swell app uninstall <app record id> -s <store> -e <environment> --clear-settings
 ```
 
 - Its earlier name, `swell app _uninstall`, still works. The argument is the app's **record id**, as a refused push or install prints it, not the `id` in `swell.json`: 24 hexadecimal characters, or a plain name such as `vercel` for a few early apps. Given the `id` from `swell.json` instead, it uninstalls nothing and prints the command with the record id of the installed app found (for a development install, `swell app delete`). The command needs no app folder, so it removes another owner's app as well as your own. `-s` defaults to the current store. `-e` takes `live`, `test` or the id of another test environment, as the refusal prints it, and defaults to `test`.
-- Without a terminal it needs `--yes`. It ends with exit code 1 whenever it uninstalls nothing: declined, nothing installed there (`App <id> isn't installed in store <store> (<Env>).`), a development install, or storefronts using the app.
+- Without a terminal it needs `--yes`. It ends with exit code 1 whenever it refuses: nothing installed there (`App <id> isn't installed in store <store> (<Env>).`), a development install, or storefronts using the app. An answer of no at the question ends it with `Uninstall cancelled.` and exit code 0.
 - It does not remove a **development install**: the store's own app leaves an environment only by being deleted, with `swell app delete` run from its folder. A theme of the store is uninstalled in the dashboard instead.
 - It refuses an app that storefronts in that environment use, as their app or as their theme, and lists them: delete those storefronts in the dashboard first.
 - The app's settings and data stay in the store unless `--clear-settings` or `--clear-data` is given. An app installed in its place does not get them, except the store's own app with the same `id` through `--replace-app` (see "Replacing an installed app with your own"). The API deletes them after the uninstall answers. `--clear-data` is refused for a user who isn't the store owner, and both flags are refused for a theme. Uninstalling a theme deletes the store's copies of it in that environment.
@@ -70,12 +70,12 @@ Two different apps can't be installed with the same ID (`private_id`, the `id` i
 ```
 Error: [APP_ID_IN_USE] "Acme Reviews" (1.2.0) already uses app ID "reviews" in Test. Uninstall it to free the ID.
 
-To keep both apps, choose an unused "id" in swell.json and push again.
-
 To uninstall it and keep its settings and data, run:
   swell app uninstall 6b03f73bef3829679cf0b375 -s my-store -e test
 Or in the dashboard:
   https://my-store.swell.store/admin/test/apps/6b03f73bef3829679cf0b375
+
+To keep both apps, choose an unused "id" in swell.json and push again.
 ```
 
 - An installed app names `swell app uninstall` with the holder's record id, store and environment, also an early app of another owner installed without a version. Several of them share one block: the commands, then the pages. The store's own development app names `swell app delete`, run from its folder, between `swell switch <store>` and `swell switch <current store>` when that store isn't the current one: delete works on the current store's app with the folder's `id`. The refusal then says to retry from the folder of the refused command. A theme of the store gets no command: it is uninstalled in the dashboard, once no storefront uses it. An installation of an app that was deleted has no command and no page: the instruction says to ask Swell support, with its installation id. Next to such an installation the instruction and the CLI name each app instead of saying "it", as the ID is free only once all of them are gone.
