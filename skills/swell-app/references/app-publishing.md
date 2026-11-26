@@ -65,10 +65,10 @@ Two guards to expect rather than retry through: a theme app with connected store
 
 Two different apps can't be installed with the same ID (`private_id`, the `id` in `swell.json`, or a published `public_id`) in one store environment; themes may share an ID with other themes. A disabled app still holds its ID; only uninstalling frees it. Swell refuses the install with the error code `APP_ID_IN_USE`, and the same refusal comes from creating an app whose development install it would block and from uploading files to an app whose development install is refused.
 
-`swell app push` and `swell app install` check this first, before any prompt, upload or deploy — also when no file changed — and stop with exit code 1, with or without a terminal. They print the refusal to stderr as it is, each command and URL on a line of its own: the instruction, for a push the way to keep both apps, then the commands and the dashboard page that remove each app holding the ID:
+`swell app push` and `swell app install` check this first, before any prompt, upload or deploy — also when no file changed — and stop with exit code 1, with or without a terminal. They print the refusal to stderr as it is, each command and URL on a line of its own: the error code and the instruction, for a push the way to keep both apps, then the commands and the dashboard page that remove each app holding the ID:
 
 ```
-Error: "Acme Reviews" (1.2.0) already uses app ID "reviews" in Test. Uninstall it to free the ID.
+Error: [APP_ID_IN_USE] "Acme Reviews" (1.2.0) already uses app ID "reviews" in Test. Uninstall it to free the ID.
 
 To keep both apps, choose an unused "id" in swell.json and push again.
 
@@ -76,8 +76,6 @@ To uninstall it and keep its settings and data, run:
   swell app uninstall 6b03f73bef3829679cf0b375 -s my-store -e test
 Or in the dashboard:
   https://my-store.swell.store/admin/test/apps/6b03f73bef3829679cf0b375
-
-Code: APP_ID_IN_USE
 ```
 
 - An installed app names `swell app uninstall` with the holder's record id, store and environment, also an early app of another owner installed without a version. Several of them share one block: the commands, then the pages. The store's own development app names `swell app delete`, run from its folder, between `swell switch <store>` and `swell switch <current store>` when that store isn't the current one: delete works on the current store's app with the folder's `id`. The refusal then says to retry from the folder of the refused command. A theme of the store gets no command: it is uninstalled in the dashboard, once no storefront uses it. An installation of an app that was deleted has no command and no page: the instruction says to ask Swell support, with its installation id. Next to such an installation the instruction and the CLI name each app instead of saying "it", as the ID is free only once all of them are gone.
@@ -85,12 +83,13 @@ Code: APP_ID_IN_USE
 - When the app in the folder can replace the holder and you are the store's owner, the refusal leads with the replace option instead of the uninstall block (see "Replacing an installed app with your own"):
 
   ```
-  Error: "Acme Reviews" (1.2.0) already uses app ID "reviews" in Test.
+  Error: [APP_ID_IN_USE] "Acme Reviews" v1.2.0 already uses app ID "reviews" in Test.
 
-  To replace it with this app and move its settings and data, run:
+  To replace it and move its data and settings:
     swell app push --replace-app
 
   To keep both apps, choose an unused "id" in swell.json and push again.
+  To start with empty data, uninstall the original and retry this command.
   ```
 
   Install names `swell app install --replace-app -s <store> -e <environment>`, and only in the store that owns the app. To start your app with no data instead, uninstall the holder first (`swell app uninstall` with its record id, or in the dashboard), then push or install.
@@ -108,17 +107,22 @@ swell app push --replace-app --yes                              # without a term
 swell app install --replace-app -s <store> -e live -v <version> # in Live, in the store that owns the app
 ```
 
-The command reads a plan first, changes nothing, prints it and asks once (`Continue? (y/N)`). Without a terminal it needs `--yes`, and is refused before it reads anything otherwise.
+The command reads a plan first, changes nothing, prints it and asks once (`Replace "Acme Reviews" in Test? (y/N)`). Without a terminal it needs `--yes`, and is refused before it reads anything otherwise.
 
 ```
-This replaces "Acme Reviews" (1.2.0) with this app in Test.
-"Acme Reviews" is uninstalled first, and neither app works in Test until the push ends.
-The uninstall switches off shipping carrier "Acme shipping".
-Moves to this app: reviews (1,204 records), its fields on Products, saved settings.
-Doesn't move: its secrets, edits to its notifications, past events and logs. Connections to outside services may have to be made again.
+Replace "Acme Reviews" v1.2.0 with "My Reviews" v1.0.0
+Uninstalling the original takes both apps offline until the push finishes.
+
+Turns off   shipping carrier "Acme shipping". Select the replacement in Settings
+            afterward.
+Moves       reviews (1,204 records)
+            App fields on Products
+            Saved settings
+Excluded    App secrets, notification edits, past events and logs.
+            External services may need to be reconnected.
 ```
 
-Then it uninstalls the original (keeping its settings and data, as `swell app uninstall` does), creates your app if it doesn't exist, moves the settings and data, and pushes **every** file (as `--force`) or installs the version. It ends with the shipping, payment and tax settings to select again, with their Settings pages, and `✔ Replaced "<name>" (<version>) with this app in <Env>.`
+Then it uninstalls the original (keeping its settings and data, as `swell app uninstall` does), creates your app if it doesn't exist, moves the settings and data, and pushes **every** file (as `--force`) or installs the version. It ends with `✔ Replaced "<name>" with "<your app>" v<version> in <Env>.` and the shipping, payment and tax settings to select again, with their Settings pages.
 
 - **What moves:** the original's own collections and their child collections (with their numbering), its child collections and fields on standard models (from its model and content configs, all versions), its saved settings (its values over your defaults, with any keys typed into them) and the merchant's content fields on its collections. Your app's models, content, functions, notifications, webhooks and settings form are installed from your files.
 - **What doesn't move:** the original's app secrets, the merchant's edits to its notifications, events, logs, workflow runs and usage. The plan also names saved settings that contain its record id (an OAuth redirect URL: update them after the replacement) and other apps whose models link to its models (they keep pointing at it until their configs are installed again).
