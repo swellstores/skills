@@ -44,6 +44,7 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 | The store's own site for shoppers | Frontend of a `storefront` app |
 | A payment method, shipping rates or tax calculation inside Swell's checkout | Integration extension |
 | Put the app in the live environment or in other stores, or list it in the App Store | Versions and releases — `references/app-publishing.md`. `swell app push` reaches the test environment only |
+| Run your version of an installed app (an App Store app you changed) in its place, with its data | `swell app push --replace-app` / `swell app install --replace-app` — `references/app-publishing.md`, "Replacing an installed app with your own" |
 
 ## Building blocks
 
