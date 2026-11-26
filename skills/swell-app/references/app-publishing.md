@@ -87,7 +87,7 @@ Or in the dashboard:
 
   To replace it and move its settings and data:
     swell app push --replace-app
-  To start with empty data, uninstall it first:
+  To start without its data, uninstall it first:
     swell app uninstall <record id> -s <store> -e test
   To keep both apps, choose an unused "id" in swell.json and push again.
   ```
