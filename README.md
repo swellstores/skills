@@ -1,6 +1,6 @@
 # Swell Skills
 
-Skills that teach AI coding agents to build on [Swell](https://www.swell.is): Swell Apps, the Backend API and the Frontend API.
+Skills that teach AI coding agents to build on [Swell](https://www.swell.is): Swell Apps, storefront themes, storefront extensions, the Backend API and the Frontend API.
 
 They give an agent what the API reference does not: which API fits the job, how to build, deploy and check an app, and the rules you only find by running the code. The skills were checked against the platform's source and tested by building real apps on a live store.
 
@@ -9,6 +9,8 @@ They give an agent what the API reference does not: which API fits the job, how 
 | Skill | Covers |
 | --- | --- |
 | `swell-app` | Building, deploying and publishing [Swell Apps](https://developers.swell.is/apps/overview) with the `swell` CLI: data models, dashboard views and actions, settings, permissions, functions and workflows, webhooks, notifications, payment, shipping and tax extensions, admin field components, and app frontends, including storefronts, with UI built from the Swell UI kit. |
+| `swell-themes` | Storefront [themes](https://developers.swell.is/storefronts/theme-guide): [Wave](https://developers.swell.is/storefronts/wave-app) themes built on `@swell/wave-theme-core` (sections, blocks, templates, groups, design settings, Store text, menus, checks), Proxima / Liquid themes, client themes and the Theme Store, and rebuilding an existing site's design and catalog on Swell. |
+| `swell-storefront-extensions` | What an app adds to storefronts through [storefront extensions](https://developers.swell.is/storefronts/storefront-extensions): embed blocks, data sources, form actions, app pages and product ratings, the public functions behind them, and the theme side. |
 | `swell-backend-api` | Server-side work with the [Backend API](https://developers.swell.is/backend-api/introduction): queries, writes, batches and transactions, events and webhooks, files, orders, payments, subscriptions, products and inventory, accounts, coupons and promotions. |
 | `swell-frontend-api` | Storefront work with the [Frontend API](https://developers.swell.is/frontend-api/introduction): catalog and content, shopper sessions, cart and checkout, payments, customer accounts and subscriptions. |
 
@@ -19,8 +21,10 @@ The agent loads the skills it needs for the task:
 | A Swell App | `swell-app`, with either API skill as needed |
 | An integration on your own server | `swell-backend-api` |
 | A storefront you host yourself | `swell-frontend-api` |
+| A Wave theme, or a rebuild of an existing site on Swell | `swell-themes`, with `swell-backend-api` for catalog imports |
+| An app that adds blocks, data, forms or pages to storefronts | `swell-app` and `swell-storefront-extensions` |
 
-Liquid themes (Proxima) are not covered.
+A rebuild of an existing site starts with one question: recreate it closely, take only its look and feel, or start from a Swell theme. The agent asks it before building.
 
 ## Example
 

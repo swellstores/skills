@@ -1,6 +1,6 @@
 ---
 name: swell-app
-description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends, and their UI built from the Swell UI kit (@swell/swell-ui, <swell-*> elements). Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
+description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends, and their UI built from the Swell UI kit (@swell/swell-ui, <swell-*> elements). Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations, and with swell-storefront-extensions for what the app adds to storefronts. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes themes and swell theme commands (swell-themes), other commerce platforms and generic Cloudflare work."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -19,7 +19,7 @@ Independent integrations and storefronts that connect directly to the APIs, with
 | `admin` | Extends a store: data, dashboard views and actions, server logic, and optionally custom dashboard pages |
 | `integration` | The same blocks, for an app that connects the store to an outside service. It can declare extension slots that plug into Swell's own payment, shipping or tax flows — see "Integration apps and extensions" |
 | `storefront` | The store's own site for shoppers, written in code in `frontend/`; managed hosting by default, with Cloudflare self-hosting supported |
-| `theme` | A Proxima / Liquid theme. Not covered by this skill or by another Swell skill — say so instead of answering from app rules |
+| `theme` | A theme for a storefront app: Wave (React sections on `@swell/wave-theme-core`) or Proxima (Liquid). Use the `swell-themes` skill, not app rules |
 
 ## Choose the building block
 
@@ -41,7 +41,8 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 | Send an email when a record is created or changes | Notification |
 | Let the merchant configure the app, including provider credentials | Settings |
 | A dashboard screen that views and actions cannot express | Frontend of an `admin` or `integration` app |
-| The store's own site for shoppers | Frontend of a `storefront` app |
+| The store's own site for shoppers | Frontend of a `storefront` app; or a theme for Wave, Swell's storefront app with a visual editor (`swell-themes`) |
+| Show the app's data, a form, a widget or pages of its own on the store's storefront | Storefront extensions in `swell.json` — the `swell-storefront-extensions` skill |
 | A payment method, shipping rates or tax calculation inside Swell's checkout | Integration extension |
 | Put the app in the live environment or in other stores, or list it in the App Store | Versions and releases — `references/app-publishing.md`. `swell app push` reaches the test environment only |
 
@@ -174,7 +175,7 @@ Browser UI written in Preact. Each top-level file is one component, of one of tw
 - **Admin content field component**: renders a `type: "component"` field of a content view in place of a built-in input, in a cross-origin iframe on the app's own origin. It can call the app's functions and `/app-api` with a platform-verified caller (`req.swellContext`). A default export is required; the build fails without one. Scaffold it with `swell create component <Name> -y` and read `references/components.md` before writing one.
 - **Checkout payment component**: one whose `config.extension` is `{ id }` of a `payment` extension in `swell.json`, with `targets: [{ id: 'checkout.payment.methods' }]`. Hosted checkout renders it in the same kind of iframe, in the body of the payment method bound to the extension; it returns `{ billing }` from `submit` handlers and calls `call('createIntent', data)`. Scaffold with `swell create component <Name> --extension <id> --target checkout.payment.methods -y` and read `references/payment-extensions.md` before writing one.
 
-Shipping and tax have no component place, and a storefront renders components only when its own page mounts them with `createComponents` (`references/components.md`, "Other pages"). Components are unrelated to `frontend/`; an app may ship both.
+A component that a `storefront.embeds` block names is a storefront component block: it declares no target, and the `swell-storefront-extensions` skill covers it. Shipping and tax have no component place, and a storefront renders components only when its own page mounts them with `createComponents` (`references/components.md`, "Other pages"). Components are unrelated to `frontend/`; an app may ship both.
 
 Build a component's UI from the Swell UI kit (`<swell-button>`, `<swell-input>`, …): with `ui: true` in its `config` the platform loads the kit into the frame with the host's look and theme, so a payment component looks like the checkout around it. Read `references/ui-kit.md` before writing the UI.
 

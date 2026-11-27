@@ -58,6 +58,10 @@ Archived variants stay in list results: pass `archived: { $ne: true }` on any re
 - **Every option that takes part also writes to the store-wide `/attributes` collection.** The attribute's id is the option's `attribute_id`, or its name underscored (`Screen Size` becomes `screen_size`). The option's value names are added to that record and the product's `attributes` are filled in from them. `Color` and `Colour` become two attributes, so normalise option names before an import.
 - **`slug` is unique and derived from `name` when it is not sent.** A second product with the same name is refused with code `UNIQUE` on `slug`. Work out distinct slugs before a bulk import.
 
+## Categories
+
+**Put a product in categories with `categories: [{ parent_id: '<category id>' }]`** on the product; `category_id` sets its primary category and links it the same way. Each entry is a link in `/categories:products`. A category's own product list (`category.products`, the dashboard) reads the links; the `?category=<slug>` filter, which storefront category pages use, reads `category_index`, which the platform derives from them. **Don't write `category_index`**: writing it directly makes `?category=` match while creating no link, so the category's own product list stays empty. To take a product out of a category, `DELETE /categories:products/<link id>`, with the link's id from the product's `categories` (`GET /products/<id>?expand=categories`).
+
 ## Inventory
 
 **A product tracks no stock until `stock_tracking: true` is written on it.** The field has no default. Without it adjustments are still accepted and `stock_level` still changes, but an order takes no stock and `stock_status` stays empty.

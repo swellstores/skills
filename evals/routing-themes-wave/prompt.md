@@ -1,0 +1,1 @@
+Add a promo banner section to our Wave theme: a big headline on a colored band, a button, and photos of six products the merchant picks. Use it on the home page, then check the theme and push it to our store.

@@ -2,7 +2,7 @@
 
 Manual behavioral checks for the revised `swell-app` entrypoint. These complement the automated routing suite: they test choosing and composing resources after the skill is selected. They do not verify platform claims or deployed artifacts.
 
-For each case, start a fresh agent with no review history. Give it the user request below and the path to `skills/swell-app/SKILL.md`. Permit read-only access to the three revised skill folders and let it choose references. Do not supply this file, the assessment criteria, planning notes, platform code, or previously installed copies of the skills. Ask for the architecture, references actually read, and unresolved questions. Do not allow scaffolding, live CLI calls, edits or deployment.
+For each case, start a fresh agent with no review history. Give it the user request below and the path to `skills/swell-app/SKILL.md`. Permit read-only access to the skill folders and let it choose skills and references. Do not supply this file, the assessment criteria, planning notes, platform code, or previously installed copies of the skills. Ask for the architecture, references actually read, and unresolved questions. Do not allow scaffolding, live CLI calls, edits or deployment.
 
 Judge decisions and reference selection, not matching phrases. Record the skill revision, outcome and any demonstrated gaps in the revision project's evidence notes. A pass here does not replace implementation and runtime verification.
 
@@ -35,3 +35,21 @@ Assess: discover that a route needs a public key and that the callback address c
 User request: "Our existing Swell storefront app needs to call a provider from its server handlers with our company's private API secret, which merchants must not receive. We have our own Cloudflare account and want to retain Swell installation, storefront addresses and request context. Propose the hosting and configuration changes and their consequences. Stay read-only."
 
 Assess: retain the Swell app contract while switching the frontend to Cloudflare self-hosting; keep the private value in a runtime secret binding, outside settings, source and browser code. Read the hosting and configuration references. Recognize that app functions do not inherit frontend bindings and that self-hosting has its own caching and context-verification requirements.
+
+## Storefront widget: booking packages
+
+User request: "Our spa app keeps treatment packages in an app collection. Merchants should be able to put a list of packages, with a buy button on each, on any page of their Wave storefront, choosing cards or a compact strip. It must work on every storefront they create, custom domains included. Propose how the app offers this and how the widget calls our backend. Stay read-only."
+
+Assess: a `script` embed block declared in `swell.json` `storefront.embeds`, with a `select` prop for the layout, found through `swell-storefront-extensions` and its `references/embeds.md`. The script registers with `SwellAppBlocks` instead of scanning the page, renders into a shadow root and follows the `--swell-*` properties. Calls go through the app proxy, and the endpoint checks `isStorefrontRequest` and rate-limits on `clientIp`. No list of allowed origins.
+
+## Storefront widget: card entry
+
+User request: "Our gift card app should let shoppers buy a gift card from a form on the merchant's Wave storefront, entering card details through our payment provider's SDK. The provider requires that no other script on the page can read the card fields. Propose how to build the widget. Stay read-only."
+
+Assess: a `component` embed block whose component, a top-level file in `components/` named by the block's `component`, declares no target and calls the backend with `fetch` from its props. Recognize the per-instance cost, the third-party storage caveat and the missing page fonts. Do not choose a `script` block, which would put the card fields in the merchant's page.
+
+## Not a block: ratings on product cards
+
+User request: "Our reviews app should show each product's average rating as stars on every product card in category grids, and the rating should be visible to search engines. Propose how the app gets the stars onto the storefront. Stay read-only."
+
+Assess: no embed block. Declare `storefront.product_rating` naming two public product fields the app keeps current (average and count), optionally with a `product`-scope data source of recent reviews, so every theme renders stars on cards and product pages and the structured data carries them. Explain why not a block: a block per card costs a script mount or a frame each, and app scripts don't render on the server.
