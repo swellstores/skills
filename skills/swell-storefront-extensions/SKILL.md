@@ -8,6 +8,8 @@ allowed-tools: Read, Grep, Glob, Bash
 
 Any Swell app can add features to storefronts by declaring them under `storefront` in its `swell.json`. A storefront that supports extensions reads the declarations of the store's installed, active apps, at the version each store has installed, and merchants use them in its editor. The app stays an ordinary app: **load the `swell-app` skill as well whenever you write or change the app itself**, its models, functions, permissions and `swell.json`, and to push it. This skill covers only the `storefront` declarations and their contracts. An app that only adds storefront extensions uses the default type, `admin`, or `integration` when it connects an outside service. Not `storefront`: that type makes the app a storefront of its own.
 
+Each storefront app decides which extensions it supports; Wave and Proxima are storefront apps like any other.
+
 | Storefront app | Supports |
 | --- | --- |
 | Wave | Every extension below |

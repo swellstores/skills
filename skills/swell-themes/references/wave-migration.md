@@ -1,6 +1,6 @@
 # Rebuilding a site as a Wave theme
 
-The route for rebuilding an existing website as a Wave theme in code. Start with the questions in `SKILL.md` ("Rebuilding an existing site: ask first") and keep the answers in front of you: they decide how far each step goes. For **Recreate it closely**, every step aims at the source; for **Take its look and feel**, take the design and leave out the source's words and photos.
+The route for rebuilding an existing website as a Wave theme in code. For a Shopify store, this route (or Wave's own rebuild) is what Swell recommends, not running the Shopify theme on Proxima. Start with the questions in `SKILL.md` ("Rebuilding an existing site: ask first") and keep the answers in front of you: they decide how far each step goes. For **Recreate it closely**, every step aims at the source; for **Take its look and feel**, take the design and leave out the source's words and photos.
 
 ## 1. Capture the source
 

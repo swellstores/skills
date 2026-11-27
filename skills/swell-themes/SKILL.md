@@ -6,7 +6,11 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Swell themes
 
-A theme gives a storefront its look and its page layouts, and merchants change it in the storefront app's editor. The storefront app runs the theme: it serves the pages, and it decides how its themes are built. A theme is itself a Swell app, with `"type": "theme"` in `swell.json` and `theme.storefront.app` naming the storefront app it is built for.
+A theme gives a storefront its look and its page layouts, and merchants change it in the storefront app's editor.
+
+**A storefront app is an ordinary Swell app** (`"type": "storefront"`) that serves a store's storefront. Wave and Proxima are two that Swell builds, and any developer can build another. Each storefront app decides whether it runs themes, what a theme for it is made of, which editor merchants use, and which storefront extensions it supports. So no rule in this skill holds for every storefront app: the sections, ui-kit, Store text and extension rules here are Wave's, and a theme for another storefront app follows that app's own docs.
+
+A theme is itself a Swell app, with `"type": "theme"` in `swell.json` and `theme.storefront.app` naming the one storefront app it is built for.
 
 ## Which storefront app
 
@@ -14,8 +18,9 @@ A theme gives a storefront its look and its page layouts, and merchants change i
 | --- | --- | --- |
 | **Wave** (`"app": "wave"`) | React and TypeScript sections and blocks, built on `@swell/wave-theme-core` and Wave's ui-kit and rendered on the server. Merchants edit them in Wave's visual editor or with its AI agent. Wave runs every storefront extension: apps' blocks, data, forms, pages and ratings. | `references/wave.md` |
 | **Proxima** | Liquid themes in the structure of Shopify's Online Store 2.0 themes, run as they are. No storefront extensions, no `swell theme check`. | `references/proxima.md` |
+| Another storefront app | Whatever that app defines | That app's docs |
 
-Wave is Swell's own storefront app and the one Swell recommends. Build on Wave unless the user wants to keep running an existing Liquid theme unchanged; Wave can also import a Shopify theme and rebuild it (see "Rebuilding an existing site").
+Swell recommends Wave. **For moving a Shopify store's theme, recommend Wave, not Proxima**: Wave rebuilds it as a Wave storefront (the dashboard's **Upload theme**) or, with this skill, as a theme app in code, with Wave's editor and every storefront extension. Proxima runs the Liquid theme as it is, without storefront extensions; offer it only when the user asks to keep a Liquid theme unchanged.
 
 Not themes, and not this skill: a storefront written in code in the `frontend/` of a `storefront` app is the `swell-app` skill's; a headless site on the Frontend API, such as one started from the Origin or Horizon kits, is the `swell-frontend-api` skill's.
 

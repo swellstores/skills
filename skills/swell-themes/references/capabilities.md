@@ -1,5 +1,7 @@
 # What a Wave storefront can do, and how
 
+This is for Wave. Another storefront app has its own theme rules and supports its own set of storefront extensions (Proxima supports none), so check that app's docs before applying a route below to it.
+
 Before telling a user that something can't be done, find it here. Most features of a modern storefront have a route on Swell: in the theme, in Swell itself, or in an app that adds it to the storefront. Say which route, and that it is possible, even when you aren't building it now.
 
 **Where a feature belongs:**
@@ -13,7 +15,7 @@ Before telling a user that something can't be done, find it here. Most features 
 | Feature | Route |
 | --- | --- |
 | Hero banners, promo tiles, deal tiles, category circles, service tiles | Theme sections. Images come from an `image` field or from the products and categories they show, on Swell's file hosts. |
-| Carousels and sliders | A theme section shows slides in a strip that shoppers swipe or scroll, with CSS scroll-snap, and arrows and dots as links to each slide's `id` (ids from `useId`, `href="#<id>-s2"`). Tried on a Wave storefront: a click moves the strip to that slide, and Wave keeps the ids and links. A link also scrolls the page to the slider (set `scroll-margin-top` on the slides) and adds the slide to the address, and dots can't mark the current slide, since no code runs in the page. **Slides that advance on their own** aren't a theme-section feature: CSS `@keyframes` could move them, but Wave's theme rules, which apply to client themes too, keep content visible without timers or motion, and a timed slider needs a pause control to be accessible. Code in the page comes only from an app's embed block, which needs the app to have a frontend and takes its slides as props (text, URL, number, boolean, select; there is no image prop). |
+| Carousels and sliders | A theme section shows slides in a strip that shoppers swipe or scroll, with CSS scroll-snap, and arrows and dots as links to each slide's `id` (ids from `useId`, `href="#<id>-s2"`). Tried on a Wave storefront: a click moves the strip to that slide, and Wave keeps the ids and links. A link also scrolls the page to the slider (set `scroll-margin-top` on the slides) and adds the slide to the address, and dots can't mark the current slide, since no code runs in the page. **Slides that advance on their own** aren't a theme-section feature: CSS `@keyframes` could move them, but Wave's theme rules, which apply to client themes too, keep content visible without timers or motion, and a timed slider needs a pause control to be accessible. Code in the page comes only from an app's embed block, which needs the app to have a frontend and takes its slides as props (text, URL, number, boolean, select; there is no image prop). A ui-kit `Carousel` (slides in the HTML, arrows, dots, optional autoplay with a pause button) is coming to Wave: once `@swell/wave-theme-core` ships it, use it instead of a hand-built strip. |
 | Mega menu | `NavMenu` renders up to 3 levels; `editor.json` sets the levels, columns and links each menu area takes. Menu items carry no images: a menu with images or promo panels is a header section of your own that renders the `MenuData` of its `menu` field beside images and links from its own list field (or products from a `product_list` field), opening panels with CSS (`:hover`, `:focus-within`) instead of script. Check it at phone width. |
 | Sticky header | The core header stays in view unless the theme declares a `sticky_header` setting and the merchant turns it off. A header of your own: `position: sticky; top: 0` on `&` in its `styles`, since the platform wraps each section and an inner element can't stick past the wrapper. `position: fixed` is allowed only in header-group sections. |
 | Search with suggestions | `SearchBox`; Wave's page script runs the suggestions. Results: the core `search` template or a section with a `{ "from": "search" }` product list. |
@@ -46,7 +48,7 @@ Before telling a user that something can't be done, find it here. Most features 
 
 ## Hard limits of theme code
 
-These are the real limits. Everything else in the table above is a choice of route.
+These are the real limits today. Everything else in the table above is a choice of route. Swell plans a way for themes to run small scripts of their own; until it ships, interactive parts come from ui-kit components or an app's embed block.
 
 - Section and block code renders on the server: no event handlers, no browser globals, no timers, no `script`, `iframe`, `style` or `link` elements, no fetching.
 - Images and other resources load only from `cdn.swell.store`, `cdn.schema.io` and `fonts.gstatic.com`.

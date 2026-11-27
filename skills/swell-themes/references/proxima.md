@@ -1,6 +1,6 @@
 # Proxima and Liquid themes
 
-Proxima is a storefront app by Swell, built with Astro and open source (github.com/swellstores/proxima-app). It runs Liquid themes in the structure of Shopify's Online Store 2.0 themes against the store's Swell catalog, so a store moving to Swell can keep the theme it has. Swell recommends Wave, which can instead import a Shopify theme and rebuild it as a Wave storefront (the dashboard's **Upload theme**, with **Rebuild it with Wave**). Offer that choice when a user brings a Shopify theme.
+Proxima is a storefront app by Swell, built with Astro and open source (github.com/swellstores/proxima-app). It runs Liquid themes in the structure of Shopify's Online Store 2.0 themes against the store's Swell catalog, so a store moving to Swell can keep the theme it has. Proxima is a storefront app like any other, with its own theme format. **For migrating a Shopify theme, Swell recommends Wave, not Proxima**: Wave imports the theme and rebuilds it as a Wave storefront (the dashboard's **Upload theme**, with **Rebuild it with Wave**), or it is rebuilt in code as a Wave theme (`wave-migration.md`). Use Proxima only when the user asks to keep a Liquid theme running unchanged.
 
 What Proxima doesn't have:
 

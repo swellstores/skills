@@ -82,7 +82,7 @@ export default function Stats({ eyebrow, items = [], ...colours }: Props) {
 ### What section code can use
 
 - Imports only from `react` (named `Fragment`, `useId`, `useMemo`, `Children`; types with `import type`) and `ui-kit`.
-- No event handler props (`onClick`), no browser or network globals (`window`, `document`, `fetch`, `setTimeout`…), no dynamic `import()`, no `dangerouslySetInnerHTML`. **Section code never runs in the shopper's browser**: it renders on the server. Wave's one page script handles the cart drawer, the variant picker, search suggestions and menus.
+- No event handler props (`onClick`), no browser or network globals (`window`, `document`, `fetch`, `setTimeout`…), no dynamic `import()`, no `dangerouslySetInnerHTML`. **Section code never runs in the shopper's browser**: it renders on the server. Wave's one page script handles the cart drawer, the variant picker, search suggestions and menus. Swell plans a way for themes to run scripts of their own; until it ships, interactive parts come from ui-kit components or an app's embed block (`capabilities.md`).
 - Elements: standard HTML content elements and a subset of SVG. `script`, `iframe`, `style`, `link`, `meta`, `object`, `embed`, `template`, `dialog` and SVG `use` are refused.
 - `style` is an object literal; colors through tokens (`var(--uk-color-accent)`) or `sectionColours`.
 - **JSX text, and `alt`, `title` or `placeholder` strings, of more than three words are refused.** Shopper-facing words come from fields or Store text.

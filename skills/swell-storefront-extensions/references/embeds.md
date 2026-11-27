@@ -1,6 +1,21 @@
 # Embed blocks — `storefront.embeds`
 
-An embed block is a widget a merchant places on a page, like a section. The app declares its blocks and the script that renders them; the storefront loads the script only on pages that place one of the app's blocks.
+An embed block is a widget a merchant places on a page, like a section: a booking calendar, a packages list, a gift card form. The app declares its blocks and the script that renders them; the storefront loads the script only on pages that place one of the app's blocks. Nothing is set up per store: every store that installs the app gets its blocks on every storefront that supports them.
+
+## Choose: a script block, a component block, or no block
+
+| The feature | Build |
+| --- | --- |
+| Interactive UI that shows store or app data and lets shoppers act (book, add to cart, subscribe, check a balance) | `script` block (the default) |
+| The same widget several times on a page, or page-wide UI: a chat launcher, a sticky bar, an overlay | `script` block |
+| Card details, passwords or other sensitive input; a third-party SDK that must not share the page; state the page must never see | `component` block |
+| A value on every product card (a rating, a badge), or content search engines must index | **No block**: a data source the theme renders, or `product_rating` (`data-and-pages.md`) |
+| A form whose logic stays on the server | **No block**: an action (`actions.md`) |
+
+- **`script`**: one script per app, loaded once in the page, renders into each block's element. It matches the theme through CSS custom properties, each extra instance costs a function call, and it can open overlays. The merchant trusts it with the whole page, so it stays inside its own elements.
+- **`component`**: an App Component in a frame on the app installation's own origin. The page can't see into it and it can't see the page. Each instance is a separate document plus a config request, so use one or two per page. It can't use the page's fonts, and its cookies and storage are third-party (Safari partitions them).
+
+When unsure, choose `script`.
 
 ```sh
 swell create block packages -y                                      # script block: frontend/public/embed.js, "integrity": "auto"
@@ -82,9 +97,9 @@ Loaded at most once per page, on pages that hold one of its script blocks or may
 });
 ```
 
-- `mount` runs for every placed element of the block, now and added later (the cart drawer). Load order doesn't matter.
+- `mount` runs for every placed element of the block, now and added later (the cart drawer). Load order doesn't matter. **Don't search the page or run a `MutationObserver`** to find elements: register and let the storefront mount them, or blocks render twice or miss the cart drawer.
 - `context`: `props`, `app`, `block`, `storefront` (`{storeId, storefrontId, currency?, mode: 'live' | 'preview'}`), `proxy` (`/.swell/apps/<app>`), `page` (`{type, id?}`; the record's id on a product, category, content page or blog post; `{type: "cart"}` in the drawer).
-- Touch only your own elements: render into a shadow root, no global CSS, no globals but `SwellAppBlocks`. Keep the script small and load heavy parts on interaction.
+- Touch only your own elements: render into a shadow root (styles in `adoptedStyleSheets`), no global CSS, no globals but `SwellAppBlocks`, no reading other parts of the page. Every shopper downloads the script: keep it small and load heavy parts (a checkout SDK, a calendar) when the shopper interacts.
 - Theme values reach the block as CSS custom properties (use each with a fallback): `--swell-color-text`, `--swell-color-muted`, `--swell-color-background`, `--swell-color-surface`, `--swell-color-accent`, `--swell-color-on-accent`, `--swell-color-border`, `--swell-font-body`, `--swell-font-heading`, `--swell-radius`, `--swell-space`.
 - Swell caches frontend files by URL: a changed script needs a new URL, which `"integrity": "auto"` handles.
 
@@ -92,9 +107,19 @@ Loaded at most once per page, on pages that hold one of its script blocks or may
 
 ## Component blocks
 
-`"render": "component"` runs one of the app's components in a frame on the app's installation origin: the page can't see inside, and the component can't see the page. Use it for sensitive input such as card details, or state the page must not see, and only for a few instances per page. The block declares its `props` in `swell.json`; the component gets their values as `params`, the theme tokens in `context.tokens`, and calls the app with `props.fetch`. An app whose blocks are all component blocks needs no `script`. Components are the `swell-app` skill's `references/components.md`.
+`"render": "component"` runs one of the app's components in a frame on the app's installation origin. The component is a top-level file in `components/` named by the block's `component`, and **declares no target**: the storefront finds it by name.
+
+```tsx
+import type { ComponentProps } from '@swell/apps-sdk/components';
+export const config = { description: 'Gift card form' };
+export default function GiftCardForm({ params, context, fetch }: ComponentProps) { /* … */ }
+```
+
+The block declares its `props` in `swell.json`; the component gets their values as `params`, the storefront and the theme tokens in `context` (`context.tokens`), and calls the app with `fetch`, which carries a storefront component token. An app whose blocks are all component blocks needs no `script`. Components are the `swell-app` skill's `references/components.md`.
 
 ## Calling the app
+
+**Never keep a list of allowed origins.** Merchants add storefronts, preview hosts and custom domains at any time, and an origin list refuses each new one. Swell tells the app which store and storefront a request came from.
 
 A script block calls the app through the app proxy at `context.proxy`, on the storefront's own origin: no CORS. Swell forwards `/.swell/apps/<app>/<path>` to the app frontend's `/app-api/storefront/<path>` with a signed `Swell-Context` header, the method, query and body, and only the headers `accept`, `accept-language`, `content-type`, `if-none-match`, `idempotency-key` and `x-app-authorization`. Cookies are never forwarded.
 
@@ -108,7 +133,7 @@ export async function GET(request: Request) {
 }
 ```
 
-The context proves the request came through one of the store's storefronts. `accountId` says who is signed in (absent for a guest), not what they may see: check that it owns any private data you return, and rate-limit, since storefront pages are public. A self-hosted frontend also passes `appId` to `verifySwellContext` (the `swell-app` skill's `references/frontend.md`). A component block calls with `props.fetch`, which on a storefront carries a token the gateway turns into the same context; that differs from a component mounted on another page with `createComponents`, whose calls are anonymous (`components.md`).
+The context proves the request came through one of the store's storefronts, not who the shopper is: storefront pages are public. `accountId` says who is signed in (absent for a guest), not what they may see: check that it owns any private data you return. **Rate-limit on `context.clientIp`** (`@swell/apps-sdk` 2.1.5 has it): behind the proxy the request's own address is Swell's, the same for every shopper. To send the app's own credential, such as a token the app issued its signed-in customer, use `X-App-Authorization`; `Authorization` is read as a Swell key and never reaches the app. A self-hosted frontend also passes `appId` to `verifySwellContext` (the `swell-app` skill's `references/frontend.md`). `public` route functions stay reachable at `/functions/<app_id>/<name>` on the store's addresses. A component block calls with `props.fetch`, which on a storefront carries a token the gateway turns into the same context; that differs from a component mounted on another page with `createComponents`, whose calls are anonymous (`components.md`).
 
 ## Limits
 
@@ -122,3 +147,13 @@ The context proves the request came through one of the store's storefronts. `acc
 | Saved settings per placed block | 4,096 bytes of JSON |
 
 Another storefront app can host embed blocks with the Apps SDK; an app's declaration and block code are the same on every storefront.
+
+## Errors
+
+| Symptom | Cause |
+| --- | --- |
+| The app's blocks are missing from the editor's **Add section › Apps** | The declaration broke a rule, so the storefront dropped every block of the app (push and the editor name the rule), or the app isn't installed and active on that store |
+| A placed block shows only its fallback on the site | The app is uninstalled or disabled, the page type isn't in `pages`, or the script failed: check the console |
+| `Refused to connect` or `Refused to load the image` in the console | A third-party origin missing from `connect` or `img` |
+| 403 from the app's own endpoint on a new storefront or domain | The endpoint checks origins instead of `isStorefrontRequest` |
+| A block renders twice, or not after the cart drawer opens | The script finds elements itself instead of registering with `SwellAppBlocks` |
