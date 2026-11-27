@@ -1,6 +1,6 @@
 ---
 name: swell-app
-description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends, and their UI built from the Swell UI kit (@swell/swell-ui, <swell-*> elements). Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes Proxima / Liquid themes, swell theme commands, other commerce platforms and generic Cloudflare work."
+description: "Use this skill to build, modify, deploy, publish or debug Swell apps with the swell CLI. Covers admin, integration and code-based storefront apps: models, dashboard views and actions, functions and workflows, settings, notifications, webhooks, checkout extensions, components for admin content fields and frontends, and their UI built from the Swell UI kit (@swell/swell-ui, <swell-*> elements). Frontends use managed Swell hosting or self-hosting in the developer's Cloudflare account. Apply for swell.json, app resource directories, app-lifecycle CLI commands, app namespaces and model triggers, or @swell/apps-sdk runtime setup inside an app. Pair with swell-backend-api or swell-frontend-api for data and commerce operations, and with swell-storefront-extensions for what the app adds to storefronts. Independent API consumers without the Swell app lifecycle use the relevant API skill directly. Excludes themes and swell theme commands (swell-themes), other commerce platforms and generic Cloudflare work."
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -19,7 +19,7 @@ Independent integrations and storefronts that connect directly to the APIs, with
 | `admin` | Extends a store: data, dashboard views and actions, server logic, and optionally custom dashboard pages |
 | `integration` | The same blocks, for an app that connects the store to an outside service. It can declare extension slots that plug into Swell's own payment, shipping or tax flows — see "Integration apps and extensions" |
 | `storefront` | The store's own site for shoppers, written in code in `frontend/`; managed hosting by default, with Cloudflare self-hosting supported |
-| `theme` | A Proxima / Liquid theme. Not covered by this skill or by another Swell skill — say so instead of answering from app rules |
+| `theme` | A theme for a storefront app: Wave (React sections on `@swell/wave-theme-core`) or Proxima (Liquid). Use the `swell-themes` skill, not app rules |
 
 ## Choose the building block
 
@@ -41,7 +41,8 @@ An app is assembled from the blocks below. Start from the need, pick the smalles
 | Send an email when a record is created or changes | Notification |
 | Let the merchant configure the app, including provider credentials | Settings |
 | A dashboard screen that views and actions cannot express | Frontend of an `admin` or `integration` app |
-| The store's own site for shoppers | Frontend of a `storefront` app |
+| The store's own site for shoppers | Frontend of a `storefront` app; or a theme for Wave, Swell's storefront app with a visual editor (`swell-themes`) |
+| Show the app's data, a form, a widget or pages of its own on the store's storefront | Storefront extensions in `swell.json` — the `swell-storefront-extensions` skill |
 | A payment method, shipping rates or tax calculation inside Swell's checkout | Integration extension |
 | Put the app in the live environment or in other stores, or list it in the App Store | Versions and releases — `references/app-publishing.md`. `swell app push` reaches the test environment only |
 

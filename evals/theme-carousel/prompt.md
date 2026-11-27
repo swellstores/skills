@@ -1,0 +1,1 @@
+The home page of the site we're moving to our Wave theme has a hero carousel with arrows, dots and slides that change every five seconds, and a row of product carousels with arrows. Can we have those in our Wave theme? Don't build anything yet.

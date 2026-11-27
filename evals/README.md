@@ -1,6 +1,6 @@
 # Eval suite
 
-Behavioral tests for the `swell` plugin's three skills, run with `claude plugin eval`.
+Behavioral tests for the `swell` plugin's skills, run with `claude plugin eval`.
 
 ```bash
 claude plugin eval .                 # whole suite against this plugin
@@ -62,7 +62,9 @@ false positives.
 | `routing-app-function-orders` | an app cron function that aggregates orders fires `swell-app` and `swell-backend-api` |
 | `routing-storefront-app-checkout` | cart and checkout in a storefront app fire `swell-app` and `swell-frontend-api` |
 | `routing-standalone-storefront-no-app` | an independently hosted swell-js storefront fires `swell-frontend-api` and NOT `swell-app` |
-| `routing-theme-negative` | a Proxima **theme** question does NOT fire `swell-app` |
+| `routing-theme-negative` | a Proxima **theme** question fires `swell-themes` and does NOT fire `swell-app` |
+| `routing-themes-wave` | a section in a Wave theme fires `swell-themes` |
+| `routing-storefront-extension` | an app's data and form on a Wave storefront fire `swell-storefront-extensions` and `swell-app` |
 | `routing-other-platform-negative` | a Shopify question mentioning Swell fires no Swell skill |
 
 **Regression** (`--tag regression`) — the corrections from the source-verification pass, written as
@@ -77,6 +79,8 @@ assertions. Each one is a mistake an agent makes without the skill:
 | `product-import-stock-tracking` | `stock_tracking` must be set or stock never decrements |
 | `webhook-not-firing` | `enabled` defaults to false; there is no signing secret to set |
 | `component-ui-kit` | a component matches its host through the kit the platform loads with `ui: true`, not bundled or hand-copied styles |
+| `theme-rebuild-fidelity` | a site rebuild asks how close to go before building, and never calls a close copy impossible |
+| `theme-carousel` | carousels with arrows and swiping are built without script; timed slides need an app's embed block, not `setInterval` in a section |
 
 ## Conventions
 

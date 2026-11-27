@@ -1,0 +1,1 @@
+Our Swell app keeps loyalty points for each customer. On our Wave storefront, show signed-in customers their points on the account page, and add a form on product pages where shoppers can ask us to match a lower price they found elsewhere. Requests should be saved in the app.

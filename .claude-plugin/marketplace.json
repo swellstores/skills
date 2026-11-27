@@ -8,12 +8,14 @@
   "plugins": [
     {
       "name": "swell",
-      "description": "Swell development for AI agents: apps, the Backend API and the Frontend API",
+      "description": "Swell development for AI agents: apps, themes, storefront extensions, the Backend API and the Frontend API",
       "version": "0.12.0",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/swell-app",
+        "./skills/swell-themes",
+        "./skills/swell-storefront-extensions",
         "./skills/swell-backend-api",
         "./skills/swell-frontend-api"
       ]

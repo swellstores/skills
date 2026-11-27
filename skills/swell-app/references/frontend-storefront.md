@@ -7,7 +7,8 @@ The store's own site, written in code: the `frontend/` of a `storefront` app. Sw
 | Situation | Where it belongs |
 | --- | --- |
 | A storefront written in code, installed as a Swell app, with managed hosting or Cloudflare self-hosting | A `storefront` app with a frontend — this reference |
-| A Liquid theme, `swell theme *` commands, the dashboard theme editor | Theme authoring — not covered by this skill |
+| A theme for Wave or Proxima, `swell theme *` commands, editing a theme in a storefront app's editor | Theme authoring — the `swell-themes` skill |
+| An app's blocks, data, forms or pages on a Wave storefront | Storefront extensions — the `swell-storefront-extensions` skill |
 | An independent storefront connecting directly to the API, without Swell's app lifecycle and supplied context, on Cloudflare or elsewhere | The `swell-frontend-api` skill |
 | Pages for store users inside the dashboard | An `admin` or `integration` app — `references/frontend-dashboard.md` |
 
